@@ -82,6 +82,8 @@
     // the broom in the chef's hands: placed in the world every frame (bristles on the
     // floor in front of him, handle up to his chest), and both arms reach for the handle
     var BROOM_LEN = 1.85;                 // game units (the chef is 2.4 = 1.8 m)
+    var GRIP_TOP = 0.14, GRIP_LOW = 0.55; // where the hands hold the handle (distance from its top end)
+    var PALM = 0.07;                      // the middle of the palm, past the wrist bone
     var held = new T.Group(); held.visible = false; root.add(held);
     loadBroom(function(src){
       var a = fit(src.clone(true), BROOM_LEN); a.traverse(function(m){ if (m.isMesh){ m.castShadow = true; m.receiveShadow = true; } });
@@ -89,7 +91,43 @@
       var b = fit(src.clone(true), BROOM_LEN); b.traverse(function(m){ if (m.isMesh){ m.castShadow = true; m.receiveShadow = true; m.frustumCulled = false; } });
       held.add(b);
     });
-    var holding = false;
+    // where the broom is: 'closet' (leaning in the corner), 'hand', 'falling' or 'floor'
+    var broomAt = 'closet', holding = false;
+    function setBroom(where){
+      broomAt = where; holding = where === 'hand';
+      standing.visible = where === 'closet'; held.visible = where !== 'closet';
+    }
+    // dropping it: it tips over around the bristles and stays lying where it fell
+    var fall = null;   // { tip, h, a, w, bounces }
+    var A_END = Math.PI / 2 + 0.014, HEAD_LIFT = 0.05;   // lying almost flat, the bristle head under it
+    function dropBroom(){
+      var u = V(0, 1, 0).applyQuaternion(held.quaternion), h = V(u.x, 0, u.z);
+      var chef = ctx.getChef();
+      if (chef){   // it tips over to his right side, not onto his feet
+        var th = chef.rotation.y;
+        h.normalize().multiplyScalar(0.4).add(V(-Math.cos(th), 0, Math.sin(th)));
+      }
+      h.normalize();
+      var tip = held.position.clone();
+      tip.y = chef ? chef.position.y - (ctx.getChefLift ? ctx.getChefLift() : 0) : 0;
+      fall = { tip: tip, h: h, a: Math.min(Math.acos(Math.max(-1, Math.min(1, u.y))), 1.2), w: 0.4, bounces: 0 };
+      setBroom('falling');
+    }
+    function stepFall(dt){
+      var f = fall;
+      f.w += 7.5 * Math.sin(Math.max(0.05, f.a)) * dt;   // falls faster the further it leans
+      f.a += f.w * dt;
+      if (f.a >= A_END){
+        f.a = A_END;
+        if (f.bounces < 2 && f.w > 0.6){ f.w = -f.w * 0.28; f.bounces++; }   // a little bounce
+        else { f.w = 0; setBroom('floor'); }
+      }
+      var y = UP.clone().multiplyScalar(Math.cos(f.a)).addScaledVector(f.h, Math.sin(f.a));
+      var x = V().crossVectors(UP, f.h).normalize(), z = V().crossVectors(x, y);
+      held.quaternion.setFromRotationMatrix(basisM.makeBasis(x, y, z));
+      held.position.copy(f.tip); held.position.y += HEAD_LIFT * Math.sin(f.a);
+    }
+    function broomCenter(){ return held.position.clone().addScaledVector(V(0, 1, 0).applyQuaternion(held.quaternion), BROOM_LEN * 0.5); }
 
     // ---------- holding pose: two-bone IK for both arms ------------------------------
     var V = function(x, y, z){ return new T.Vector3(x || 0, y || 0, z || 0); };
@@ -103,9 +141,10 @@
       var q = new T.Quaternion().setFromUnitVectors(from, to.clone().normalize());
       setWorldQuat(bone, q.multiply(wquat(bone)));
     }
-    // upper arm -> forearm -> hand reaching `target`, the elbow bending towards `pole`
-    function reach(upper, lower, hand, target, pole){
-      var s = wpos(upper), L1 = s.distanceTo(wpos(lower)), L2 = wpos(lower).distanceTo(wpos(hand));
+    // upper arm -> forearm -> hand: the palm (`extra` past the wrist) reaching `target`,
+    // the elbow bending towards `pole`
+    function reach(upper, lower, hand, target, pole, extra){
+      var s = wpos(upper), L1 = s.distanceTo(wpos(lower)), L2 = wpos(lower).distanceTo(wpos(hand)) + (extra || 0);
       var toT = target.clone().sub(s), d = Math.max(0.05, Math.min(toT.length(), (L1 + L2) * 0.999)), dir = toT.normalize();
       var a = Math.acos(Math.max(-1, Math.min(1, (L1 * L1 + d * d - L2 * L2) / (2 * L1 * d))));
       var p = pole.clone().sub(dir.clone().multiplyScalar(pole.dot(dir))).normalize();
@@ -144,19 +183,32 @@
     }
     function posePlayer(dt, stroke, lift, twist){
       var chef = ctx.getChef(), b = chef && findBones(chef);
-      if (!b){ held.visible = false; return; }
-      held.visible = holding;
-      if (!holding) return;
+      held.visible = broomAt !== 'closet';
+      if (!b || !holding) return;
       chef.updateMatrixWorld(true);
       // the upper body turns a little with each stroke
       if (twist) setWorldQuat(b.spine, new T.Quaternion().setFromAxisAngle(UP, twist).multiply(wquat(b.spine)));
       var p = broomPose(chef, stroke, lift, sweep ? sweep.toward : null);
-      placeBroom(p);
       var dir = p.top.clone().sub(p.tip).normalize();
-      var upperHand = p.top.clone().addScaledVector(dir, -0.14);    // left hand near the top
-      var lowerHand = p.top.clone().addScaledVector(dir, -0.55);    // right hand further down
-      reach(b.lA, b.lF, b.lH, upperHand, p.r.clone().multiplyScalar(-0.8).addScaledVector(UP, -0.6));
-      reach(b.rA, b.rF, b.rH, lowerHand, p.r.clone().multiplyScalar(0.8).addScaledVector(UP, -0.6));
+      var upperHand = p.top.clone().addScaledVector(dir, -GRIP_TOP);    // left hand near the top
+      var lowerHand = p.top.clone().addScaledVector(dir, -GRIP_LOW);    // right hand further down
+      // the arms reach for where the palms should be (a bit past the wrist bone)
+      reach(b.lA, b.lF, b.lH, upperHand.clone().addScaledVector(dir, 0), p.r.clone().multiplyScalar(-0.8).addScaledVector(UP, -0.6), PALM);
+      reach(b.rA, b.rF, b.rH, lowerHand, p.r.clone().multiplyScalar(0.8).addScaledVector(UP, -0.6), PALM);
+      // then the broom goes exactly through both palms, wherever the arms ended up,
+      // so it always lies in the hands
+      var up = palm(b.lF, b.lH), lo = palm(b.rF, b.rH), d = up.clone().sub(lo);
+      if (d.length() > 0.1){
+        var axis = d.normalize();
+        p.top = up.clone().addScaledVector(axis, GRIP_TOP);
+        p.tip = p.top.clone().addScaledVector(axis, -BROOM_LEN);
+      }
+      placeBroom(p);
+    }
+    // the middle of the palm: a little past the wrist, along the forearm
+    function palm(fore, hand){
+      var w = wpos(hand), dirF = w.clone().sub(wpos(fore)).normalize();
+      return w.addScaledVector(dirF, PALM);
     }
 
     // ---------- stains -----------------------------------------------------------
@@ -232,11 +284,13 @@
 
     // ---------- things you can use with E ---------------------------------------------
     function interactables(){
-      var list = [{
-        pos: broomSpot, reach: USE_REACH,
-        label: holding ? 'Put the broom back' : 'Pick up broom',
-        use: function(){ holding = !holding; held.visible = holding; standing.visible = !holding; }
-      }];
+      var list = [];
+      if (broomAt === 'closet') list.push({ pos: broomSpot, reach: USE_REACH, label: 'Pick up broom', use: function(){ setBroom('hand'); } });
+      if (broomAt === 'hand') list.push({ pos: broomSpot, reach: USE_REACH, label: 'Put the broom back', use: function(){ setBroom('closet'); } });
+      if (broomAt === 'floor'){
+        var c = broomCenter(); c.y = 0;
+        list.push({ pos: c, reach: USE_REACH, label: 'Pick up broom', use: function(){ setBroom('hand'); } });
+      }
       var door = ctx.getDoor && ctx.getDoor();
       if (door && door.center){
         list.push({ pos: door.center, reach: 2.2, label: door.target > 0.5 ? 'Close door' : 'Open door',
@@ -259,13 +313,15 @@
       return best;
     }
     function interact(){
-      if (sweep) return;
+      if (sweep || broomAt === 'falling') return;
       var it = findFocus();
       if (it) it.use();
+      else if (holding) dropBroom();   // drop it right here
     }
 
     // ---------- every frame ---------------------------------------------------------------
     function update(dt, time){
+      if (broomAt === 'falling') stepFall(Math.min(dt, 0.05));
       // new stains now and then
       spawnIn -= dt;
       if (spawnIn <= 0){
@@ -311,7 +367,8 @@
       dot.classList.toggle('hit', !!(holding && aimed));
       if (focused) setHint(keyHint('E', focused.label));
       else if (aimed && holding) setHint(MOUSE_SVG + '<span>Sweep</span>');
-      else if (aimed) setHint('<span>Get a broom from the cleaning closet</span>', true);
+      else if (aimed) setHint('<span>Get a broom' + (broomAt === 'closet' ? ' from the cleaning closet' : '') + '</span>', true);
+      else if (holding && !sweep) setHint(keyHint('E', 'Drop broom'), true);
       else setHint('');
     }
 
@@ -323,7 +380,7 @@
       interact: interact, update: update, afterAnimation: afterAnimation,
       isHolding: function(){ return holding; }, stainCount: function(){ return stains.length; },
       // for tests: hold the broom anywhere, a stain right here, and sweeping without the mouse
-      debugHold: function(){ holding = true; held.visible = true; standing.visible = false; },
+      debugHold: function(){ setBroom('hand'); },
       debugStainAt: function(x, z){ var A = STAIN.area; STAIN.area = { x0: x, x1: x, z0: z, z1: z }; spawnStain(); STAIN.area = A; },
       debugSweep: function(){
         var chef = ctx.getChef(), s = null, best = 1e9;
