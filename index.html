@@ -815,7 +815,6 @@
             var cx = spot[0] + p[0], cz = spot[1] + p[1];
             ch.position.set(cx, 0, cz);
             ch.rotation.y = p[2];
-            if (decor) decor.dressChair(ch, chairSpots.length);
             scene.add(ch);
             chairSpots.push({ x: cx, z: cz, rot: p[2], size: cSize,
                               table: { x: spot[0], z: spot[1], halfX: tSize.x / 2, halfZ: tSize.z / 2, top: tSize.y } });
