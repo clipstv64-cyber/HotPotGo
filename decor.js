@@ -21,14 +21,20 @@
     var gltf = new T.GLTFLoader();
     if (window.MeshoptDecoder) gltf.setMeshoptDecoder(MeshoptDecoder);
     var modelCache = {};
+    var optionalModels = {};
     function loadModel(name){
       if (!modelCache[name]){
         modelCache[name] = fetch('models/d_' + name + '.glb')
           .then(function(r){ if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); })
           .then(function(buf){ return new Promise(function(res, rej){ gltf.parse(buf, '', function(g){ res(g.scene); }, rej); }); })
-          .catch(function(e){ console.error('Could not load model ' + name + ':', e); return null; });
+          .catch(function(e){ if (!optionalModels[name]) console.error('Could not load model ' + name + ':', e); return null; });
       }
       return modelCache[name];
+    }
+    // runs fn only if the model file exists (for models that are not made yet)
+    function ifModel(name, fn){
+      optionalModels[name] = true;
+      loadModel(name).then(function(src){ if (src) fn(); });
     }
     // Places a model scaled to a real size: size = { h } (height), { w } (width) or { d } (depth).
     // The returned group is the anchor: by default the model stands on it, centred;
@@ -133,6 +139,133 @@
       place('trophies', { w: 0.34 }, null, x, top, 1.2, -Math.PI / 2 + 0.2, { cast: true });
       place('dogfigure', { h: 0.22 }, null, x, top, 3.6, -Math.PI / 2 - 0.5, { cast: true });
     }
+
+    // ---------- back rooms behind the kitchen: corridor, office, storeroom, cleaning closet ----
+    (function(){
+      var B = ctx.BACKROOMS;
+      if (!B) return;
+      var x0 = B.x0, x1 = B.x1, zm = B.zMid, z1 = B.z1, z0 = -10;
+      var texLoader = new T.TextureLoader(), aniso = Math.min(8, ctx.renderer.capabilities.getMaxAnisotropy());
+      function tex(url, normal){
+        var t = texLoader.load(url); if (!normal) t.encoding = T.sRGBEncoding;
+        t.wrapS = t.wrapT = T.RepeatWrapping; t.anisotropy = aniso; return t;
+      }
+      // materials: the plaster wall and ceiling textures of the guest room, the kitchen's
+      // slate floor and tiles, its dark planks as the office floor
+      var plasterTex = tex('textures/wall_color.jpg'), plasterNrm = tex('textures/wall_normal.jpg', true);
+      [plasterTex, plasterNrm].forEach(function(t){ t.wrapT = T.ClampToEdgeWrapping; });
+      var M = {
+        plaster: { mat: std({ map: plasterTex, normalMap: plasterNrm, roughness: 0.85, color: new T.Color().setScalar(0.7), side: T.DoubleSide }), tu: 5, tv: H },
+        tile: { mat: std({ map: tex('textures/k_wall.webp'), roughness: 0.4, color: new T.Color().setScalar(0.78), side: T.DoubleSide }), tu: 1.2, tv: 1.2 },
+        slate: { mat: std({ map: tex('textures/k_floor.webp'), roughness: 0.55, color: new T.Color().setScalar(0.9) }), tu: 1.6, tv: 1.6 },
+        planks: { mat: std({ map: tex('textures/k_wood.webp'), roughness: 0.8, color: new T.Color().setScalar(0.85) }), tu: 2.0, tv: 2.0 },
+        ceiling: { mat: std({ map: tex('textures/ceil_color.jpg'), normalMap: tex('textures/ceil_normal.jpg', true), roughness: 0.9, color: new T.Color(1.17, 1.08, 1.25) }), tu: 5, tv: 5 }
+      };
+      function std(o){ return new T.MeshStandardMaterial(o); }
+      // a flat rectangle with its texture repeating every tu x tv metres (u0 / v0 continue the pattern)
+      function quad(m, w, h, u0, v0){
+        var g = new T.PlaneGeometry(w, h), uv = g.attributes.uv;
+        for (var i = 0; i < uv.count; i++) uv.setXY(i, (u0 + uv.getX(i) * w) / m.tu, (v0 + uv.getY(i) * h) / m.tv);
+        var mesh = new T.Mesh(g, m.mat); mesh.receiveShadow = true; mesh.castShadow = true; root.add(mesh); return mesh;
+      }
+      // a wall along x (at z) or along z (at x) from a to b, with openings [centre, width, height]
+      function wall(along, at, a, b, m, doors){
+        var pieces = [[a, b, 0, H]];
+        (doors || []).forEach(function(d){
+          var d0 = d[0] - d[1] / 2, d1 = d[0] + d[1] / 2, next = [];
+          pieces.forEach(function(p){
+            if (p[2] > 0 || d1 <= p[0] || d0 >= p[1]){ next.push(p); return; }
+            if (d0 > p[0]) next.push([p[0], d0, 0, H]);
+            next.push([d0, d1, d[2], H]);                    // above the opening
+            if (d1 < p[1]) next.push([d1, p[1], 0, H]);
+          });
+          pieces = next;
+        });
+        pieces.forEach(function(p){
+          var q = quad(m, p[1] - p[0], p[3] - p[2], p[0], p[2]), c = (p[0] + p[1]) / 2, cy = (p[2] + p[3]) / 2;
+          if (along === 'x'){ q.position.set(c, cy, at); }
+          else { q.position.set(at, cy, c); q.rotation.y = Math.PI / 2; }
+          if (p[2] === 0){
+            if (along === 'x') addBox(c, at, p[1] - p[0], 0.12, H); else addBox(at, c, 0.12, p[1] - p[0], H);
+          }
+        });
+      }
+      function floor(m, ax, bx, az, bz, y, down){
+        var q = quad(m, bx - ax, bz - az, ax, az);
+        q.rotation.x = down ? Math.PI / 2 : -Math.PI / 2; q.position.set((ax + bx) / 2, y, (az + bz) / 2);
+        q.castShadow = false;
+        return q;
+      }
+      var xo = 6.5, xs = 9.3;                                 // room dividers: office | storeroom | closet
+      var doorO = (x0 + xo) / 2, doorS = (xo + xs) / 2, doorC = (xs + x1) / 2;
+      // floors and ceilings
+      floor(M.slate, x0, x1, zm, z0 + 0.0001, 0.002);         // corridor
+      floor(M.planks, x0, xo, z1, zm, 0.002);                 // office
+      floor(M.slate, xo, xs, z1, zm, 0.002);                  // storeroom
+      floor(M.slate, xs, x1, z1, zm, 0.002);                  // closet
+      floor(M.ceiling, x0, x1, z1, z0, H - 0.002, true);
+      // walls
+      var kd = B.door;
+      wall('x', z0 - 0.01, x0, x1, M.plaster, [[kd.x, kd.w, kd.h]]);          // corridor side of the kitchen wall
+      wall('z', x0, z1, z0, M.plaster);                                          // west end
+      wall('z', x1, z1, z0, M.plaster);                                          // east end
+      wall('x', zm, x0, x1, M.plaster, [[doorO, 1.0, 2.4], [doorS, 1.0, 2.4], [doorC, 1.0, 2.4]]);
+      wall('z', xo, z1, zm, M.plaster);                                          // office | storeroom
+      wall('z', xs, z1, zm, M.plaster);                                          // storeroom | closet
+      wall('x', z1, x0, x1, M.plaster);                                          // far wall
+      // the cleaning closet gets tiles in front of its plaster walls
+      wall('x', z1 + 0.005, xs + 0.005, x1 - 0.005, M.tile);
+      wall('z', x1 - 0.005, z1 + 0.005, zm - 0.005, M.tile);
+      // ceiling lamps (Meshy) with their light
+      [[(x0 + x1) / 2 - 1.5, (z0 + zm) / 2, 'lamp_enamel'], [doorO, (zm + z1) / 2, 'lamp_drum'],
+       [doorS, (zm + z1) / 2, 'lamp_enamel'], [doorC, (zm + z1) / 2, 'lamp_enamel']].forEach(function(p){
+        place(p[2], { w: 0.42 }, null, p[0], H, p[1], 0, { anchor: 'top', done: function(h){
+          h.traverse(function(m){ if (m.isMesh && m.material){ m.material = m.material.clone(); m.material.emissive = new T.Color(1, 0.8, 0.55); m.material.emissiveIntensity = 0.18; if (m.material.map) m.material.emissiveMap = m.material.map; } });
+        } });
+        var l = new T.PointLight(0xffd29a, 0.9, 6, 2); l.position.set(p[0], H - 0.7, p[1]); root.add(l);
+      });
+
+      // office: desk with the old PC against the far wall, chair, filing cabinet, bookshelf
+      place('office_desk', { w: 1.5 }, null, doorO, 0, z1 + 0.03, 0, { back: true, cast: true });
+      addBox(doorO, z1 + 0.4, 1.5, 0.8, 0.8);
+      place('office_chair', { h: 1.05 }, null, doorO + 0.1, 0, z1 + 1.35, Math.PI + 0.3, { cast: true });
+      addBox(doorO + 0.1, z1 + 1.35, 0.55, 0.55, 0.5);
+      place('filing_cabinet', { h: 1.35 }, null, x0 + 0.03, 0, zm - 1.1, Math.PI / 2, { back: true, cast: true });
+      addBox(x0 + 0.35, zm - 1.1, 0.7, 0.5, 1.35);
+      place('office_shelf', { h: 1.8 }, null, xo - 0.03, 0, z1 + 1.9, -Math.PI / 2, { back: true, cast: true });
+      addBox(xo - 0.2, z1 + 1.9, 0.4, 1.0, 1.8);
+      // storeroom: big rack at the back, sacks, boxes, a pallet of water
+      place('storage_rack', { w: 1.7 }, null, doorS, 0, z1 + 0.03, 0, { back: true, cast: true });
+      addBox(doorS, z1 + 0.35, 1.7, 0.7, 2.2);
+      place('boxes', { h: 1.2 }, null, xs - 0.03, 0, zm - 1.0, -Math.PI / 2, { back: true, cast: true });
+      addBox(xs - 0.45, zm - 1.0, 0.9, 0.9, 1.2);
+      // these appear as soon as their Meshy models exist (models/d_<name>.glb)
+      ifModel('sacks', function(){
+        place('sacks', { w: 1.0 }, null, xo + 0.03, 0, z1 + 1.9, Math.PI / 2, { back: true, cast: true });
+        addBox(xo + 0.55, z1 + 1.9, 1.0, 1.0, 0.9);
+      });
+      ifModel('water_pallet', function(){
+        place('water_pallet', { w: 0.9 }, null, xs - 0.55, 0, z1 + 1.55, -0.2, { cast: true });
+        addBox(xs - 0.55, z1 + 1.55, 0.9, 0.9, 0.8);
+      });
+      // cleaning closet: shelf with supplies, utility sink, mop bucket, brooms
+      ifModel('cleaning_shelf', function(){
+        place('cleaning_shelf', { w: 1.1 }, null, doorC, 0, z1 + 0.03, 0, { back: true, cast: true });
+        addBox(doorC, z1 + 0.25, 1.1, 0.5, 1.8);
+      });
+      ifModel('utility_sink', function(){
+        place('utility_sink', { w: 0.75 }, null, x1 - 0.03, 0, zm - 1.4, -Math.PI / 2, { back: true, cast: true });
+        addBox(x1 - 0.3, zm - 1.4, 0.6, 0.8, 0.9);
+      });
+      ifModel('mop_bucket', function(){
+        place('mop_bucket', { h: 1.2 }, null, xs + 0.45, 0, z1 + 1.2, 0.6, { cast: true });
+        addBox(xs + 0.45, z1 + 1.2, 0.55, 0.55, 0.5);
+      });
+      ifModel('brooms', function(){
+        place('brooms', { h: 1.5 }, null, xs + 0.03, 0, zm - 0.7, Math.PI / 2, { back: true, cast: true });
+        addBox(xs + 0.2, zm - 0.7, 0.35, 0.5, 1.5);
+      });
+    })();
 
     // ---------- tables: condiment caddy, candle in a bottle on two of them ------
     function dressTable(table, spot, size, i){

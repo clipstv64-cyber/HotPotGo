@@ -31,6 +31,10 @@
   var WALL_PANELS = 4;
   // the partition wall: across the room at this X, pieces from z to z
   // (the gap between them is the way through)
+  // back rooms behind the kitchen (built in decor.js): a corridor from x0 to x1 between
+  // z = -10 and zMid, three small rooms from zMid to z1; the doorway from the kitchen is
+  // in the kitchen's back wall (z = -10) at door.x
+  var BACKROOMS = { x0: 3.9, x1: 11.6, zMid: -12.2, z1: -16.2, door: { x: 6.6, w: 1.2, h: 2.6 } };
   var PARTITION = { x: 3.8, thickness: 0.2, pieces: [[5.8, 10], [-10, -5.8]],
                     door: { z: -7.9, w: 1.4, h: 2.9 } };   // kitchen door in the wall piece at -Z (centre, width, height)      // wall pieces side by side along each 20-long wall
   var WOMAN_GLB_URL = "models/woman.glb";
@@ -341,8 +345,8 @@
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
     // cover the whole room so the furniture near the walls casts shadows too
-    sun.shadow.camera.left = -14; sun.shadow.camera.right = 14;
-    sun.shadow.camera.top = 14; sun.shadow.camera.bottom = -14;
+    sun.shadow.camera.left = -18; sun.shadow.camera.right = 18;   // includes the back rooms
+    sun.shadow.camera.top = 18; sun.shadow.camera.bottom = -18;
     sun.shadow.camera.far = 60;
     scene.add(sun);
     scene.add(new THREE.HemisphereLight(0xfff4e0, 0x6b5240, GFX.hemi));
@@ -384,8 +388,22 @@
       map: wallColor, normalMap: wallNormal, roughness: 0.85, metalness: 0,
       color: new THREE.Color().setScalar(WALL_BRIGHTNESS)
     });
+    // back wall (faces +Z) in pieces around the doorway to the back rooms
+    (function(){
+      var BD = BACKROOMS.door, d0 = BD.x - BD.w / 2, d1 = BD.x + BD.w / 2;
+      [[-10, d0, 0, WALL_HEIGHT], [d1, 10, 0, WALL_HEIGHT], [d0, d1, BD.h, WALL_HEIGHT]].forEach(function(p){
+        var w = p[1] - p[0], h = p[3] - p[2], geo = new THREE.PlaneGeometry(w, h), uv = geo.attributes.uv;
+        for (var i = 0; i < uv.count; i++) uv.setXY(i, (p[0] + 10 + uv.getX(i) * w) / 20, (p[2] + uv.getY(i) * h) / WALL_HEIGHT);
+        var m = new THREE.Mesh(geo, wallMat);
+        m.position.set((p[0] + p[1]) / 2, (p[2] + p[3]) / 2, -10); m.receiveShadow = true; scene.add(m);
+      });
+      // the walls you can't walk through now that the map reaches into the back rooms
+      addBox(-3.1, -10.05, 13.8, 0.1, WALL_HEIGHT);                          // guest room back wall
+      addBox((3.9 + d0) / 2, -10.05, d0 - 3.9, 0.1, WALL_HEIGHT);            // kitchen back wall left of the doorway
+      addBox((d1 + BACKROOMS.x1) / 2, -10.05, BACKROOMS.x1 - d1, 0.1, WALL_HEIGHT);
+      addBox(10.05, 0, 0.1, 20, WALL_HEIGHT);                                // kitchen side wall
+    })();
     [
-      { x: 0, z: -10, ry: 0 },             // back wall, faces +Z
       { x: 0, z: 10, ry: Math.PI },        // front wall, faces -Z
       { x: -10, z: 0, ry: Math.PI / 2 },   // left wall, faces +X
       { x: 10, z: 0, ry: -Math.PI / 2 }    // right wall, faces -X
@@ -455,7 +473,7 @@
 
     // furnishing of the guest room (wallpaper, pictures, lamps, odds and ends ...)
     if (window.HotPotDecor){
-      try { decor = HotPotDecor.build({ scene: scene, renderer: renderer, addBox: addBox, WALL_HEIGHT: WALL_HEIGHT, PARTITION: PARTITION }); }
+      try { decor = HotPotDecor.build({ scene: scene, renderer: renderer, addBox: addBox, WALL_HEIGHT: WALL_HEIGHT, PARTITION: PARTITION, BACKROOMS: BACKROOMS }); }
       catch (e){ console.error('Furnishing the guest room failed:', e); }
     }
 
@@ -617,7 +635,13 @@
       var ce = kPlane(len, 20, M.wood, 2.0, KX0, -10);
       ce.rotation.x = Math.PI / 2; ce.position.set(cx, WALL_HEIGHT - o, 0);
       kWallStrip(20, 0, WALL_HEIGHT, -10, function(m, cy){ m.position.set(10 - o, cy, 0); m.rotation.y = -Math.PI / 2; });
-      kWallStrip(len, 0, WALL_HEIGHT, KX0, function(m, cy){ m.position.set(cx, cy, -10 + o); });
+      // back wall of the kitchen with the doorway to the back rooms
+      (function(){
+        var BD = BACKROOMS.door, d0 = BD.x - BD.w / 2, d1 = BD.x + BD.w / 2;
+        [[KX0, d0, 0, WALL_HEIGHT], [d1, 10, 0, WALL_HEIGHT], [d0, d1, BD.h, WALL_HEIGHT]].forEach(function(p){
+          kWallStrip(p[1] - p[0], p[2], p[3], p[0], function(m, cy){ m.position.set((p[0] + p[1]) / 2, cy, -10 + o); });
+        });
+      })();
       kWallStrip(len, 0, WALL_HEIGHT, KX0, function(m, cy){ m.position.set(cx, cy, 10 - o); m.rotation.y = Math.PI; });
       // the kitchen side of the partition (around the door; the bar fills the opening)
       var D = PARTITION.door, px = KX0 + o;
@@ -2541,8 +2565,9 @@
       // and keeps sliding to a halt in the last direction he was walking
       if (walkWeight > 0){
         model.position.addScaledVector(lastMoveDir, STRIDE_SPEED * animRate * walkWeight * delta);
-        model.position.x = Math.max(-GROUND_HALF, Math.min(GROUND_HALF, model.position.x));
-        model.position.z = Math.max(-GROUND_HALF, Math.min(GROUND_HALF, model.position.z));
+        // the outer edge of the map (walls inside it are collision boxes)
+        model.position.x = Math.max(-GROUND_HALF, Math.min(BACKROOMS.x1 - 0.35, model.position.x));
+        model.position.z = Math.max(BACKROOMS.z1 + 0.35, Math.min(GROUND_HALF, model.position.z));
         resolveCollisions(model.position, jumpY);
       }
 
