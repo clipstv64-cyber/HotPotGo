@@ -1,2 +1,2 @@
-# Zeilenenden immer LF lassen (verhindert Änderungen an den großen Asset-Dateien)
+# Always keep LF line endings (avoids rewriting the big asset files)
 * text=auto eol=lf

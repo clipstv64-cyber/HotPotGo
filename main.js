@@ -1,18 +1,18 @@
-// Electron-Hauptprozess: öffnet Hot Pot Go in einem eigenen Fenster
+// Electron main process: opens Hot Pot Go in its own window
 const { app, BrowserWindow, Menu, protocol, net } = require('electron');
 const path = require('path');
 const { pathToFileURL } = require('url');
 
-// Auf PCs mit zwei Grafikkarten (z. B. Intel + NVIDIA) die leistungsstarke nehmen
+// On PCs with two graphics cards (e.g. Intel + NVIDIA) use the powerful one
 app.commandLine.appendSwitch('force_high_performance_gpu');
 
-// Eigenes Protokoll app:// – damit kann das Spiel seine Dateien (models/, textures/)
-// per fetch() laden, was mit file:// nicht geht.
+// Own app:// protocol so the game can load its files (models/, textures/)
+// with fetch(), which does not work with file://.
 protocol.registerSchemesAsPrivileged([
   { scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true } },
 ]);
 
-const served = { ok: [], failed: [] };   // für den Selbsttest
+const served = { ok: [], failed: [] };   // for the self-test
 
 function serveAppFiles() {
   protocol.handle('app', async (request) => {
@@ -46,7 +46,7 @@ function createWindow() {
 
   win.loadURL('app://game/index.html');
 
-  // F11 = Vollbild, F12 = Entwicklerwerkzeuge (nur im Entwicklungsmodus)
+  // F11 = full screen, F12 = developer tools (development only)
   win.webContents.on('before-input-event', (event, input) => {
     if (input.type !== 'keyDown') return;
     if (input.key === 'F11') {
@@ -58,18 +58,18 @@ function createWindow() {
     }
   });
 
-  // Keine externen Seiten im Spielfenster öffnen
+  // Never open external pages in the game window
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('will-navigate', (event) => event.preventDefault());
 
-  // Im Entwicklungsmodus: Fehler aus dem Spiel im Terminal anzeigen
+  // In development: show errors from the game in the terminal
   if (!app.isPackaged) {
     win.webContents.on('console-message', (e) => {
-      if (e.level === 'error' || e.level === 'warning') console.log(`[spiel:${e.level}] ${e.message}`);
+      if (e.level === 'error' || e.level === 'warning') console.log(`[game:${e.level}] ${e.message}`);
     });
   }
 
-  // Selbsttest (HOTPOT_SELFTEST=1): nach dem Laden zählen, was geladen wurde, dann beenden
+  // Self-test (HOTPOT_SELFTEST=1): after loading, count what was loaded, then quit
   if (process.env.HOTPOT_SELFTEST) {
     win.webContents.once('did-finish-load', () => {
       setTimeout(async () => {
@@ -78,7 +78,7 @@ function createWindow() {
           textures: served.ok.filter((p) => p.startsWith('/textures/')).length,
           failed: served.failed,
         };
-        // Leistung: Bilder pro Sekunde, Zeichenaufrufe und Dreiecke pro Bild, benutzte Grafikkarte
+        // Performance: frames per second, draw calls and triangles per frame, graphics card in use
         result.perf = await win.webContents.executeJavaScript(`new Promise((done) => {
           const P = WebGL2RenderingContext.prototype, s = { calls: 0, tris: 0 };
           const wrap = (name, countArg, instArg) => { const f = P[name]; P[name] = function (...a) {
@@ -91,14 +91,14 @@ function createWindow() {
                    trisPerFrame: Math.round(s.tris / frames), gpu: dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : '?' }); } };
           requestAnimationFrame(tick);
         })`);
-        console.log('[selbsttest] ' + JSON.stringify(result));
-        // Ansichten: HOTPOT_SELFTEST_VIEWS='[[x,z,blickrichtung,neigung], ...]' und HOTPOT_SELFTEST_DIR
+        console.log('[selftest] ' + JSON.stringify(result));
+        // Views: HOTPOT_SELFTEST_VIEWS='[[x, z, yaw, pitch], ...]' and HOTPOT_SELFTEST_DIR
         if (process.env.HOTPOT_SELFTEST_VIEWS && process.env.HOTPOT_SELFTEST_DIR) {
           const views = JSON.parse(process.env.HOTPOT_SELFTEST_VIEWS);
           for (let i = 0; i < views.length; i++) {
             await win.webContents.executeJavaScript(`window.__hotpotView(${views[i].join(',')})`);
             await new Promise((r) => setTimeout(r, 900));
-            console.log(`[ansicht ${i + 1}] ` + JSON.stringify(await win.webContents.executeJavaScript('window.__hotpotCam && window.__hotpotCam()')));
+            console.log(`[view ${i + 1}] ` + JSON.stringify(await win.webContents.executeJavaScript('window.__hotpotCam && window.__hotpotCam()')));
             const img = await win.webContents.capturePage();
             require('fs').writeFileSync(path.join(process.env.HOTPOT_SELFTEST_DIR, `view${i + 1}.png`), img.toPNG());
           }

@@ -1,13 +1,16 @@
-# Abhängigkeiten und Builds (später für Electron/Steam)
+# Dependencies and builds (Electron / Steam)
 node_modules/
 dist/
 out/
 build/
 
-# Lokale Claude-Einstellungen
+# Local Claude settings
 .claude/settings.local.json
 
-# System-Dateien
+# System files
 Thumbs.db
 Desktop.ini
 .DS_Store
+
+# Raw Meshy downloads (large; the optimised versions are in models/d_*.glb)
+art/meshy/

@@ -1,9 +1,9 @@
-// Verkleinert übergroße Texturen in .glb-Modellen.
-// Nur Texturen, die größer als MAX sind, werden um FACTOR verkleinert
-// (8192 -> 2048, 4096 -> 1024 bei Faktor 4). Geometrie bleibt unverändert.
+// Shrinks oversized textures in .glb models.
+// Only models whose largest texture is above MAX are shrunk, all their
+// textures by FACTOR (8192 -> 2048, 4096 -> 1024 with factor 4). Geometry stays as it is.
 //
-//   node scripts/shrink-textures.mjs models/k_stool.glb [weitere.glb ...]
-//   Optionen per Umgebungsvariable: SHRINK_FACTOR (4), SHRINK_MAX (2048), SHRINK_QUALITY (90)
+//   node scripts/shrink-textures.mjs models/k_stool.glb [more.glb ...]
+//   options via environment variables: SHRINK_FACTOR (4), SHRINK_MAX (2048), SHRINK_QUALITY (90)
 import { NodeIO } from '@gltf-transform/core';
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
 import { MeshoptDecoder, MeshoptEncoder } from 'meshoptimizer';
@@ -21,17 +21,17 @@ const io = new NodeIO()
   .registerDependencies({ 'meshopt.decoder': MeshoptDecoder, 'meshopt.encoder': MeshoptEncoder });
 
 const files = process.argv.slice(2);
-if (!files.length) { console.error('Bitte .glb-Dateien angeben.'); process.exit(1); }
+if (!files.length) { console.error('Please name .glb files.'); process.exit(1); }
 
 for (const file of files) {
   const before = fs.statSync(file).size;
   const doc = await io.read(file);
-  // Alle Texturen eines Modells werden gleich behandelt: verkleinert wird,
-  // sobald die größte über MAX liegt (so passen Farbe, Normal- und Rauheitskarte zusammen).
+  // All textures of a model are treated alike: they are shrunk once the largest
+  // is above MAX (so colour, normal and roughness maps stay matched).
   const textures = doc.getRoot().listTextures();
   const metas = await Promise.all(textures.map((t) => sharp(Buffer.from(t.getImage())).metadata()));
   const largest = Math.max(...metas.map((m) => Math.max(m.width, m.height)));
-  if (largest <= MAX) { console.log(`${file}: größte Textur ${largest}px – unverändert`); continue; }
+  if (largest <= MAX) { console.log(`${file}: largest texture ${largest}px – unchanged`); continue; }
 
   for (let i = 0; i < textures.length; i++) {
     const t = textures[i], m = metas[i];
