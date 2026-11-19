@@ -78,6 +78,7 @@ function createWindow() {
           textures: served.ok.filter((p) => p.startsWith('/textures/')).length,
           failed: served.failed,
         };
+        if (!process.env.HOTPOT_SELFTEST_NOPERF)
         // Performance: frames per second, draw calls and triangles per frame, graphics card in use
         result.perf = await win.webContents.executeJavaScript(`new Promise((done) => {
           const P = WebGL2RenderingContext.prototype, s = { calls: 0, tris: 0 };
@@ -92,6 +93,23 @@ function createWindow() {
           requestAnimationFrame(tick);
         })`);
         console.log('[selftest] ' + JSON.stringify(result));
+        // Steps: HOTPOT_SELFTEST_STEPS='[{ js, step, wait, shot }, ...]' - run JavaScript in the game, advance the
+        // frozen game clock by `step` seconds, wait `wait` ms, save a screenshot as <shot>.png in HOTPOT_SELFTEST_DIR
+        if (process.env.HOTPOT_SELFTEST_STEPS && process.env.HOTPOT_SELFTEST_DIR) {
+          const steps = JSON.parse(process.env.HOTPOT_SELFTEST_STEPS);
+          for (const st of steps) {
+            if (st.js) await win.webContents.executeJavaScript(st.js);
+            if (st.step) {
+              await win.webContents.executeJavaScript(`new Promise((done) => { const c = window.__hotpotClock; c.frozen = true; c.pending += ${Number(st.step)};
+                const tick = () => (c.pending > 0 ? requestAnimationFrame(tick) : requestAnimationFrame(() => requestAnimationFrame(done))); tick(); })`);
+            }
+            if (st.wait) await new Promise((r) => setTimeout(r, st.wait));
+            if (st.shot) {
+              const img = await win.webContents.capturePage();
+              require('fs').writeFileSync(path.join(process.env.HOTPOT_SELFTEST_DIR, st.shot + '.png'), img.toPNG());
+            }
+          }
+        }
         // Views: HOTPOT_SELFTEST_VIEWS='[[x, z, yaw, pitch], ...]' and HOTPOT_SELFTEST_DIR
         if (process.env.HOTPOT_SELFTEST_VIEWS && process.env.HOTPOT_SELFTEST_DIR) {
           const views = JSON.parse(process.env.HOTPOT_SELFTEST_VIEWS);

@@ -190,6 +190,8 @@
     if (model){ model.position.x = x; model.position.z = z; }
     lookYaw = yaw || 0; lookPitch = pitch || 0;
   };
+  window.__hotpotClock = { frozen: false, pending: 0, time: 0 };
+  window.__hotpotKeys = function(k, down){ if (k === 'jump') jumpRequested = true; else keys[k] = !!down; };   // for tests: hold a movement key, or jump
   window.__hotpotCam = function(){
     return { pos: camera.position.toArray().map(function(v){ return +v.toFixed(2); }), yaw: +lookYaw.toFixed(2), pitch: +lookPitch.toFixed(2),
              chef: model ? model.position.toArray().map(function(v){ return +v.toFixed(2); }) : null };
@@ -483,6 +485,7 @@
         gameplay = HotPotGameplay.build({ scene: scene, camera: camera, canvas: renderer.domElement, obstacles: obstacles, BACKROOMS: BACKROOMS,
           getChef: function(){ return model; },
           getChefLift: function(){ return modelBaseY; },   // model origin above its feet
+          bounds: { x0: -GROUND_HALF, x1: BACKROOMS.x1, z0: BACKROOMS.z1, z1: GROUND_HALF },   // the outer edge of the map
           getDoor: function(){ return window.kitchenDoors && kitchenDoors.kitchenDoor; } });
         window.__hotpotGameplay = gameplay;   // for tests
       } catch (e){ console.error('Setting up the gameplay failed:', e); }
@@ -2539,6 +2542,9 @@
   function animate(){
     requestAnimationFrame(animate);
     var delta = Math.min(clock.getDelta(), 0.1);
+    // for tests: frozen game time, advanced in exact steps (window.__hotpotClock.pending seconds)
+    var tc = window.__hotpotClock;
+    if (tc && tc.frozen){ delta = Math.min(tc.pending, 1 / 60); tc.pending = Math.max(0, tc.pending - delta); if (tc.pending < 1e-6) tc.pending = 0; tc.time += delta; }
     var animRate = 1;
     if (window.kitchenDoors && kitchenDoors.kitchenDoor && kitchenDoors.kitchenDoor.tick) kitchenDoors.kitchenDoor.tick(delta);
     if (decor) decor.update(delta, clock.elapsedTime);
@@ -2641,10 +2647,15 @@
       // the head bobs and sways with every step; smooth its offset from the
       // body (in the body's own frame, so turning and jumping still follow
       // instantly) so the view doesn't shake while walking
+      // (what the broom pose adds to the head's position is not smoothed: the view
+      // follows it directly, or the camera would end up inside the face)
+      var poseShift = gameplay && gameplay.headShift ? gameplay.headShift() : null;
+      if (poseShift) eye.sub(poseShift);
       var rel = eye.sub(model.position).applyAxisAngle(UP_AXIS, -model.rotation.y);
       if (!camHeadOffset) camHeadOffset = rel.clone();
       else camHeadOffset.lerp(rel, 1 - Math.exp(-CAM_SMOOTH * delta));
       eye = camHeadOffset.clone().applyAxisAngle(UP_AXIS, model.rotation.y).add(model.position);
+      if (poseShift) eye.add(poseShift);
       eye.y += CAM_UP;
       var fwd = CAM_FORWARD + LEAN_FORWARD * Math.max(0, -lookPitch) / MAX_PITCH;
       eye.x += -Math.sin(lookYaw) * fwd;
@@ -2655,8 +2666,11 @@
     }
     // for tests: look at the chef from outside ({ from: [x, y, z], to: [x, y, z] })
     if (window.__hotpotCamOverride){
-      var co = window.__hotpotCamOverride;
-      camera.position.fromArray(co.from); camera.lookAt(new THREE.Vector3().fromArray(co.to));
+      var co = window.__hotpotCamOverride, cFrom = new THREE.Vector3().fromArray(co.from), cTo = new THREE.Vector3().fromArray(co.to);
+      if (co.rel && model){   // relative to the chef: x = his right, y = up, z = his front
+        [cFrom, cTo].forEach(function(v){ v.set(-v.x, v.y, v.z).applyAxisAngle(UP_AXIS, model.rotation.y).add(model.position); });
+      }
+      camera.position.copy(cFrom); camera.lookAt(cTo);
     }
     renderer.render(scene, camera);
   }
