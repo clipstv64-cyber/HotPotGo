@@ -3,6 +3,9 @@ const { app, BrowserWindow, Menu, protocol, net } = require('electron');
 const path = require('path');
 const { pathToFileURL } = require('url');
 
+// Auf PCs mit zwei Grafikkarten (z. B. Intel + NVIDIA) die leistungsstarke nehmen
+app.commandLine.appendSwitch('force_high_performance_gpu');
+
 // Eigenes Protokoll app:// – damit kann das Spiel seine Dateien (models/, textures/)
 // per fetch() laden, was mit file:// nicht geht.
 protocol.registerSchemesAsPrivileged([
@@ -75,6 +78,19 @@ function createWindow() {
           textures: served.ok.filter((p) => p.startsWith('/textures/')).length,
           failed: served.failed,
         };
+        // Leistung: Bilder pro Sekunde, Zeichenaufrufe und Dreiecke pro Bild, benutzte Grafikkarte
+        result.perf = await win.webContents.executeJavaScript(`new Promise((done) => {
+          const P = WebGL2RenderingContext.prototype, s = { calls: 0, tris: 0 };
+          const wrap = (name, countArg, instArg) => { const f = P[name]; P[name] = function (...a) {
+            s.calls++; s.tris += (a[countArg] / 3) * (instArg !== undefined ? a[instArg] : 1); return f.apply(this, a); }; };
+          wrap('drawElements', 1); wrap('drawArrays', 2); wrap('drawElementsInstanced', 1, 4); wrap('drawArraysInstanced', 2, 3);
+          let frames = 0; const t0 = performance.now();
+          const tick = () => { frames++; if (performance.now() - t0 < 4000) requestAnimationFrame(tick); else {
+            const gl = document.createElement('canvas').getContext('webgl2'), dbg = gl.getExtension('WEBGL_debug_renderer_info');
+            done({ fps: Math.round(frames / ((performance.now() - t0) / 1000)), callsPerFrame: Math.round(s.calls / frames),
+                   trisPerFrame: Math.round(s.tris / frames), gpu: dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : '?' }); } };
+          requestAnimationFrame(tick);
+        })`);
         console.log('[selbsttest] ' + JSON.stringify(result));
         if (process.env.HOTPOT_SELFTEST_SHOT) {
           const img = await win.webContents.capturePage();
