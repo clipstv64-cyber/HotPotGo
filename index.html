@@ -16,6 +16,7 @@
 <script>window.__KTEX = {"wall":"textures/k_wall.webp","floor":"textures/k_floor.webp","wood":"textures/k_wood.webp"};</script>
 <script src="vendor/three/meshopt_decoder.js"></script>
 <script src="decor.js"></script>
+<script src="gameplay.js"></script>
 <script>
 (function(){
   "use strict";
@@ -183,6 +184,7 @@
 
   var scene, camera, renderer, clock;
   var decor = null;          // furnishing of the guest room (decor.js)
+  var gameplay = null;       // stains, broom and interaction hints (gameplay.js)
   // for tests: put the chef somewhere and make him look in a direction
   window.__hotpotView = function(x, z, yaw, pitch){
     if (model){ model.position.x = x; model.position.z = z; }
@@ -239,7 +241,7 @@
     var k = e.key.toLowerCase();
     if (k in keys) keys[k] = true;
     if (e.key === 'Shift') shiftDown = true;
-    if (k === 'e' && !e.repeat) toggleNearDoor();
+    if (k === 'e' && !e.repeat){ if (gameplay) gameplay.interact(); else toggleNearDoor(); }
     if (e.code === 'Space' || e.key === ' '){
       e.preventDefault(); // don't scroll the page
       if (!e.repeat) jumpRequested = true;
@@ -475,6 +477,14 @@
     if (window.HotPotDecor){
       try { decor = HotPotDecor.build({ scene: scene, renderer: renderer, addBox: addBox, WALL_HEIGHT: WALL_HEIGHT, PARTITION: PARTITION, BACKROOMS: BACKROOMS }); }
       catch (e){ console.error('Furnishing the guest room failed:', e); }
+    }
+    if (window.HotPotGameplay){
+      try {
+        gameplay = HotPotGameplay.build({ scene: scene, camera: camera, canvas: renderer.domElement, obstacles: obstacles, BACKROOMS: BACKROOMS,
+          getChef: function(){ return model; },
+          getDoor: function(){ return window.kitchenDoors && kitchenDoors.kitchenDoor; } });
+        window.__hotpotGameplay = gameplay;   // for tests
+      } catch (e){ console.error('Setting up the gameplay failed:', e); }
     }
 
     // restaurant seating on one side of the room: tables with 4 chairs each
@@ -2531,6 +2541,7 @@
     var animRate = 1;
     if (window.kitchenDoors && kitchenDoors.kitchenDoor && kitchenDoors.kitchenDoor.tick) kitchenDoors.kitchenDoor.tick(delta);
     if (decor) decor.update(delta, clock.elapsedTime);
+    if (gameplay) gameplay.update(delta, clock.elapsedTime);
 
     if (model){
       // desired direction from the keys, relative to where the camera looks

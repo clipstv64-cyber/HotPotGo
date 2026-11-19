@@ -21,6 +21,7 @@
       "main.js",
       "index.html",
       "decor.js",
+      "gameplay.js",
       "models/**/*",
       "textures/**/*",
       "vendor/**/*"

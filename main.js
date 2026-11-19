@@ -96,7 +96,9 @@ function createWindow() {
         if (process.env.HOTPOT_SELFTEST_VIEWS && process.env.HOTPOT_SELFTEST_DIR) {
           const views = JSON.parse(process.env.HOTPOT_SELFTEST_VIEWS);
           for (let i = 0; i < views.length; i++) {
-            await win.webContents.executeJavaScript(`window.__hotpotView(${views[i].join(',')})`);
+            const [vx, vz, yaw, pitch, action] = views[i];   // optional action: JavaScript to run in the game first
+            await win.webContents.executeJavaScript(`window.__hotpotView(${vx},${vz},${yaw},${pitch || 0})`);
+            if (action) await win.webContents.executeJavaScript(action);
             await new Promise((r) => setTimeout(r, 900));
             console.log(`[view ${i + 1}] ` + JSON.stringify(await win.webContents.executeJavaScript('window.__hotpotCam && window.__hotpotCam()')));
             const img = await win.webContents.capturePage();
