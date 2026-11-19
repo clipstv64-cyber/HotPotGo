@@ -92,12 +92,74 @@
         .then(function(buf){ gltf.parse(buf, '', function(g){ done(g.scene); }, function(e){ console.error('Could not load the broom:', e); }); })
         .catch(function(e){ console.error('Could not load the broom:', e); });
     }
+    // reads vertex i of a mesh; packed (quantized) models store whole numbers that stand
+    // for fractions, which three.js r128 does not convert by itself
+    function vertexOf(pos, i, v){
+      v.fromBufferAttribute(pos, i);
+      if (pos.normalized){
+        var a = pos.array;
+        v.multiplyScalar(1 / (a instanceof Int16Array ? 32767 : a instanceof Uint16Array ? 65535 : a instanceof Int8Array ? 127 : a instanceof Uint8Array ? 255 : 1));
+      }
+      return v;
+    }
     // scales a model to a height and stands it on its own origin
     function fit(obj, height){
       var bb = new T.Box3().setFromObject(obj), s = bb.getSize(new T.Vector3()), c = bb.getCenter(new T.Vector3());
       var k = height / s.y; obj.scale.setScalar(k);
       obj.position.set(-c.x * k, -bb.min.y * k, -c.z * k);
       return obj;
+    }
+    // The underside of the bristle head: a slightly uneven disc just inside the shell's
+    // lower edge, painted with cut straw ends in the model's own colours.
+    var PLUG_AT = [0.03, 0.09], PLUG_Y = 0.045;   // the slice of the head it is fitted to, and its height
+    function strawEnds(model){
+      // how wide the shell is down there (its inner bristles, not the stray ones)
+      var rs = [], v = V(), cx = 0, cz = 0, n = 0, map = null;
+      held.updateMatrixWorld(true);
+      var inv = new T.Matrix4().copy(held.matrixWorld).invert();
+      model.traverse(function(m){
+        if (!m.isMesh) return;
+        map = map || m.material.map;
+        var pos = m.geometry.attributes.position, mat = new T.Matrix4().multiplyMatrices(inv, m.matrixWorld);
+        for (var i = 0; i < pos.count; i++){
+          vertexOf(pos, i, v).applyMatrix4(mat);
+          if (v.y > PLUG_AT[0] && v.y < PLUG_AT[1]){ rs.push([v.x, v.z]); cx += v.x; cz += v.z; n++; }
+        }
+      });
+      if (n < 12) return null;
+      cx /= n; cz /= n;
+      var radii = rs.map(function(p){ return Math.hypot(p[0] - cx, p[1] - cz); }).sort(function(a, b){ return a - b; });
+      var R = radii[Math.floor(radii.length * 0.35)];
+      // the model's average colour, for straw that matches
+      var col = [196, 158, 84];
+      try {
+        var c0 = document.createElement('canvas'); c0.width = c0.height = 16;
+        var g0 = c0.getContext('2d'); g0.drawImage(map.image, 0, 0, 16, 16);
+        var px = g0.getImageData(0, 0, 16, 16).data, sum = [0, 0, 0];
+        for (var i = 0; i < px.length; i += 4){ sum[0] += px[i]; sum[1] += px[i + 1]; sum[2] += px[i + 2]; }
+        col = sum.map(function(x){ return x / (px.length / 4); });
+      } catch (e) { /* keep the default straw colour */ }
+      function shade(k){ return 'rgb(' + col.map(function(x){ return Math.round(clamp(x * k, 0, 255)); }).join(',') + ')'; }
+      var cv = document.createElement('canvas'); cv.width = cv.height = 256;
+      var g = cv.getContext('2d');
+      g.fillStyle = shade(0.58); g.fillRect(0, 0, 256, 256);
+      for (var d = 0; d < 1500; d++){   // each straw's cut end: a small light dot with a dark middle
+        var x = Math.random() * 256, y = Math.random() * 256, rr = 2.2 + Math.random() * 2.6;
+        g.fillStyle = shade(0.78 + Math.random() * 0.3);
+        g.beginPath(); g.arc(x, y, rr, 0, Math.PI * 2); g.fill();
+        g.fillStyle = shade(0.62);
+        g.beginPath(); g.arc(x, y, rr * 0.35, 0, Math.PI * 2); g.fill();
+      }
+      var tex = new T.CanvasTexture(cv); tex.encoding = T.sRGBEncoding;
+      var geo = new T.CircleGeometry(1, 28), pos = geo.attributes.position;
+      geo.rotateX(-Math.PI / 2);
+      for (var j = 1; j < pos.count; j++) pos.setY(j, Math.random() * 0.02);   // the rim a little ragged
+      geo.computeVertexNormals();
+      var disc = new T.Mesh(geo, new T.MeshStandardMaterial({ map: tex, roughness: 1, metalness: 0, side: T.DoubleSide }));
+      disc.scale.set(R * 0.97, 1, R * 0.97); disc.position.set(cx, PLUG_Y, cz);
+      disc.castShadow = false; disc.receiveShadow = true; disc.frustumCulled = false;
+      disc.name = 'straw ends';
+      return disc;
     }
     var B = ctx.BACKROOMS;
     var BROOM_LEN = 1.8;                    // game units (the chef with his hat is 2.4)
@@ -116,7 +178,7 @@
       hand: [0.03, 0.34],                   // upper (left) hand, from the middle between the shoulders [right, front]
       handY: [-0.2, 0.06],                  // ... and how far below / above the shoulders it may go
       tip: [0.4, 1.68],                     // bristles on the floor, from the chef [right, front]
-      floor: 0.03,                          // height of the broom's lower end when the bristles rest on the floor
+      press: 0.4,                           // resting on the floor, the bristles are pressed in by this share of their overhang
       carry: 0.14                           // lifted this much while walking or turning
     };
     // the broom in its place: leaning in the corner of the cleaning closet
@@ -130,6 +192,10 @@
       standing.add(a);
       var b = fit(src.clone(true), BROOM_LEN); b.traverse(function(m){ if (m.isMesh){ m.castShadow = true; m.receiveShadow = true; m.frustumCulled = false; } });
       held.add(b);
+      measureBroom();
+      // the model's bristle head is only a hollow shell: close it with the cut straw ends
+      var plug = strawEnds(b);
+      if (plug){ held.add(plug); standing.add(plug.clone()); }
     });
     // where the broom is: 'closet', 'taking' (on its way into the hands), 'hand',
     // 'storing' (on its way back to the closet), 'falling' or 'floor'
@@ -171,9 +237,46 @@
     // Let go, it first drops to the floor (if it was lifted) and tips over around its
     // bristles: from the way it was leaning it swings round to a free side, so it does
     // not land on the chef, and stays lying where it fell.
-    var fall = null;   // { tip, vy, a, a0, w, az0, dAz, roll, bounces }
-    var A_END = Math.PI / 2 + 0.014, HEAD_LIFT = 0.05;   // lying almost flat, the bristle head under it
+    var fall = null;   // { tip, sink, vy, a, a0, w, az0, dAz, roll, bounces }
+    var A_END = Math.PI / 2 + 0.1;   // how far it tips: lying on its bristle head and the end of the handle (measured below)
     var basisM = new T.Matrix4();
+    // The broom's outline: for each slice of its length, how far it reaches to either side
+    // along its own X and Z. From it: how high its origin has to be, in any position, so
+    // that no part of it is under the floor.
+    var outline = null, SLICES = 36;
+    function measureBroom(){
+      var ax = new Array(SLICES).fill(0), az = new Array(SLICES).fill(0), v = V();
+      held.updateMatrixWorld(true);
+      var inv = new T.Matrix4().copy(held.matrixWorld).invert();
+      held.traverse(function(m){
+        if (!m.isMesh) return;
+        var pos = m.geometry.attributes.position, mat = new T.Matrix4().multiplyMatrices(inv, m.matrixWorld);
+        for (var i = 0; i < pos.count; i++){
+          vertexOf(pos, i, v).applyMatrix4(mat);
+          var k = clamp(Math.floor(v.y / BROOM_LEN * SLICES), 0, SLICES - 1);
+          ax[k] = Math.max(ax[k], Math.abs(v.x)); az[k] = Math.max(az[k], Math.abs(v.z));
+        }
+      });
+      // the plain handle has hardly any vertices: slices without one are as thick as the handle
+      for (var k = 0; k < SLICES; k++){ ax[k] = Math.max(ax[k], HANDLE_R); az[k] = Math.max(az[k], HANDLE_R); }
+      outline = { ax: ax, az: az };
+      // lying down: it tips until the end of the handle touches the floor too
+      for (var a = Math.PI / 2; a < Math.PI / 2 + 0.6; a += 0.002){
+        groundLift(fallQuat(a, 0));
+        if (groundLift.slice >= SLICES - 2){ A_END = a; break; }
+      }
+    }
+    var gX = V(), gY = V(), gZ = V();
+    function groundLift(q){
+      if (!outline) return 0.05;
+      gX.set(1, 0, 0).applyQuaternion(q); gY.set(0, 1, 0).applyQuaternion(q); gZ.set(0, 0, 1).applyQuaternion(q);
+      var best = -1e9, step = BROOM_LEN / SLICES;
+      for (var k = 0; k < SLICES; k++){
+        var h = Math.hypot(outline.ax[k] * gX.y, outline.az[k] * gZ.y) - Math.min(k * step * gY.y, (k + 1) * step * gY.y);
+        if (h > best){ best = h; groundLift.slice = k; }
+      }
+      return best;
+    }
     function fallQuat(a, az){
       var h = V(Math.sin(az), 0, Math.cos(az));
       var y = UP.clone().multiplyScalar(Math.cos(a)).addScaledVector(h, Math.sin(a));
@@ -194,8 +297,11 @@
         if (bl < least){ least = bl; h1 = h; }
       }
       var az0 = Math.atan2(h0.x, h0.z);
-      tip.y = Math.max(0, tip.y - HEAD_LIFT * Math.sin(a0));
-      fall = { tip: tip, vy: 0, a: a0, a0: a0, w: 0.5, az0: az0, dAz: angle(Math.atan2(h1.x, h1.z) - az0), bounces: 0 };
+      // tip.y: how high its lowest point is above the floor; sink: how deep the bristles
+      // were pressed into the floor while holding it (they come out as it falls)
+      var low = tip.y - groundLift(held.quaternion);
+      tip.y = Math.max(0, low);
+      fall = { tip: tip, sink: Math.min(0, low), vy: 0, a: a0, a0: a0, w: 0.5, az0: az0, dAz: angle(Math.atan2(h1.x, h1.z) - az0), bounces: 0 };
       fall.roll = fallQuat(a0, az0).invert().multiply(held.quaternion);   // keeps it from jumping at the start
       setBroom('falling');
     }
@@ -211,7 +317,7 @@
       }
       var p = smooth((f.a - f.a0) / (A_END - f.a0));
       held.quaternion.copy(fallQuat(f.a, f.az0 + f.dAz * p)).multiply(f.roll.clone().slerp(IDENT, p));
-      held.position.copy(f.tip); held.position.y += HEAD_LIFT * Math.sin(f.a);
+      held.position.copy(f.tip); held.position.y += groundLift(held.quaternion) + f.sink * (1 - p);
     }
 
     // ---------- holding pose: two-bone IK for both arms ------------------------------
@@ -459,7 +565,7 @@
     // k: 0 = the broom is at its place, 1 = in the hands; arms: how much the arms and the
     // upper body are in the holding pose; yaw: the broom follows his turns a little late
     // headShift: how far the pose moves the head away from where the animation has it
-    var hold = { k: 0, arms: 0, yaw: 0, prev: null, prevYaw: 0, speed: 0, turn: 0, carry: 0, az: 0, sweepW: 0, err: 0, trim: 0, headShift: V() };
+    var hold = { k: 0, arms: 0, yaw: 0, prev: null, prevYaw: 0, speed: 0, turn: 0, carry: 0, az: 0, sweepW: 0, err: 0, trim: 0, rest: 0.1, headShift: V() };
     var anim = { stroke: 0, lift: 0, twist: 0 };   // sweeping strokes (set in update)
     function broomQuat(dir, side){
       var x = side.clone().addScaledVector(dir, -side.dot(dir)).normalize(), z = V().crossVectors(x, dir);
@@ -537,7 +643,7 @@
         S.addScaledVector(rl, anim.stroke * sweep.width).addScaledVector(fl, -anim.stroke * sweep.width * 0.3);
         P.lerp(S, sw); lift += anim.lift;
       }
-      P.y = floorY + POSE.floor + lift;
+      P.y = floorY + hold.rest + lift;
       // The handle has a fixed length, so the upper hand's height follows from how far
       // out the bristles are. They only go as far as the hand's height allows and as both
       // arms can reach (the further out, the lower the hands).
@@ -597,6 +703,8 @@
       if (b.lGrip) twistForearm(b.lF, b.lGrip);
       if (b.rGrip) twistForearm(b.rF, b.rGrip);
       if (inHands){ held.position.copy(tip); held.quaternion.copy(q); }
+      // how high its lower end is when the bristles rest on the floor (for the next frame)
+      if (broomAt === 'hand') hold.rest = groundLift(q) * (1 - POSE.press);
       // fade between the animation's pose and the holding pose
       var w = smooth(hold.arms);
       b.rig.forEach(function(e){
@@ -904,7 +1012,26 @@
         }
         return { count: bad.length, sample: bad.slice(0, 12), handIdx: m.skeleton.bones.indexOf(g.hand), segs: g.segs.map(function(s){ return s.index; }) };
       },
-      debugTrim: function(){ return hold.trim; }
+      debugTrim: function(){ return hold.trim; },
+      // the broom model: its meshes, materials and outline (largest radius per slice of its length)
+      debugBroom: function(){
+        var out = { meshes: [], profile: [], aEnd: +A_END.toFixed(3), rest: +hold.rest.toFixed(3) }, N = 36, bins = new Array(N).fill(0);
+        held.updateMatrixWorld(true);
+        var inv = new T.Matrix4().copy(held.matrixWorld).invert();
+        held.traverse(function(m){
+          if (!m.isMesh) return;
+          var pos = m.geometry.attributes.position, mat = new T.Matrix4().multiplyMatrices(inv, m.matrixWorld), v = V();
+          out.meshes.push({ name: m.name, verts: pos.count, tris: (m.geometry.index ? m.geometry.index.count : pos.count) / 3, side: m.material.side,
+                            transparent: m.material.transparent, alphaTest: m.material.alphaTest, normalized: !!pos.normalized, type: pos.array.constructor.name });
+          for (var i = 0; i < pos.count; i++){
+            vertexOf(pos, i, v).applyMatrix4(mat);
+            var k = clamp(Math.floor(v.y / BROOM_LEN * N), 0, N - 1);
+            bins[k] = Math.max(bins[k], Math.hypot(v.x, v.z));
+          }
+        });
+        out.profile = bins.map(function(r){ return +r.toFixed(3); });
+        return out;
+      }
     };
   }
 
