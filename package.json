@@ -20,10 +20,12 @@
     "files": [
       "main.js",
       "index.html",
-      "assets/**/*",
+      "models/**/*",
+      "textures/**/*",
       "vendor/**/*"
     ],
     "asar": true,
+    "electronLanguages": ["de", "en-US"],
     "win": {
       "target": "dir"
     }
