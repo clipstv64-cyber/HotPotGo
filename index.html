@@ -15,6 +15,7 @@
 <script>window.__KPARTS = {"bar":["models/k_bar.glb"],"barroof":["models/k_barroof.glb"],"barpost":["models/k_barpost.glb"],"stool":["models/k_stool.glb"],"kitchendoor":["models/k_kitchendoor.glb"],"sidecounter":["models/k_sidecounter.glb"],"range":["models/k_range.glb"],"hood":["models/k_hood.glb"],"cooler":["models/k_cooler.glb"],"shelfjars":["models/k_shelfjars.glb"],"sink":["models/k_sink.glb"],"shelfveg":["models/k_shelfveg.glb"],"wallshelf":["models/k_wallshelf.glb"],"potrail":["models/k_potrail.glb"],"island":["models/k_island.glb"],"block":["models/k_block.glb"],"condiments":["models/k_condiments.glb"],"stockpot":["models/k_stockpot.glb"],"lantern":["models/k_lantern.glb"],"sidecounter_lo":["models/k_sidecounter_lo.glb"],"range_lo":["models/k_range_lo.glb"],"hood_lo":["models/k_hood_lo.glb"],"cooler_lo":["models/k_cooler_lo.glb"],"shelfjars_lo":["models/k_shelfjars_lo.glb"],"sink_lo":["models/k_sink_lo.glb"],"shelfveg_lo":["models/k_shelfveg_lo.glb"],"wallshelf_lo":["models/k_wallshelf_lo.glb"],"potrail_lo":["models/k_potrail_lo.glb"],"island_lo":["models/k_island_lo.glb"],"block_lo":["models/k_block_lo.glb"],"condiments_lo":["models/k_condiments_lo.glb"],"stockpot_lo":["models/k_stockpot_lo.glb"],"lantern_lo":["models/k_lantern_lo.glb"],"stool_lo":["models/k_stool_lo.glb"]};</script>
 <script>window.__KTEX = {"wall":"textures/k_wall.webp","floor":"textures/k_floor.webp","wood":"textures/k_wood.webp"};</script>
 <script src="vendor/three/meshopt_decoder.js"></script>
+<script src="decor.js"></script>
 <script>
 (function(){
   "use strict";
@@ -177,6 +178,16 @@
   }
 
   var scene, camera, renderer, clock;
+  var decor = null;          // Einrichtung des Gastraums (decor.js)
+  // für Tests: Koch an eine Stelle setzen und in eine Richtung schauen lassen
+  window.__hotpotView = function(x, z, yaw, pitch){
+    if (model){ model.position.x = x; model.position.z = z; }
+    lookYaw = yaw || 0; lookPitch = pitch || 0;
+  };
+  window.__hotpotCam = function(){
+    return { pos: camera.position.toArray().map(function(v){ return +v.toFixed(2); }), yaw: +lookYaw.toFixed(2), pitch: +lookPitch.toFixed(2),
+             chef: model ? model.position.toArray().map(function(v){ return +v.toFixed(2); }) : null };
+  };
   // first-person view
   var EYE_HEIGHT = 2.0;            // camera height above the chef's feet
   var LOOK_SENSITIVITY = 0.0025;   // radians per pixel of mouse movement
@@ -441,6 +452,12 @@
     ceiling.rotation.x = Math.PI / 2; // faces down
     ceiling.position.y = WALL_HEIGHT;
     scene.add(ceiling);
+
+    // Einrichtung des Gastraums (Tapete, Bilder, Lampen, Krimskrams ...)
+    if (window.HotPotDecor){
+      try { decor = HotPotDecor.build({ scene: scene, renderer: renderer, addBox: addBox, WALL_HEIGHT: WALL_HEIGHT, PARTITION: PARTITION }); }
+      catch (e){ console.error('Einrichtung fehlgeschlagen:', e); }
+    }
 
     // restaurant seating on one side of the room: tables with 4 chairs each
     // (from the Meshy table/chair models, simplified and scaled to real size)
@@ -787,8 +804,9 @@
 
     loadFurniture(TABLE_GLB_URL, TABLE_HEIGHT, function(table, tSize){
       loadFurniture(CHAIR_GLB_URL, CHAIR_HEIGHT, function(chair, cSize){
-        TABLE_SPOTS.forEach(function(spot){
+        TABLE_SPOTS.forEach(function(spot, ti){
           var t = table.clone(); t.position.set(spot[0], 0, spot[1]); scene.add(t);
+          if (decor) decor.dressTable(t, spot, tSize, ti);
           addBox(spot[0], spot[1], tSize.x, tSize.z, tSize.y);
           // two chairs on each long side, facing the table (chair front is +Z)
           var dz = tSize.z / 2 + cSize.z / 2 - CHAIR_TUCK, dx = tSize.x / 4;
@@ -797,6 +815,7 @@
             var cx = spot[0] + p[0], cz = spot[1] + p[1];
             ch.position.set(cx, 0, cz);
             ch.rotation.y = p[2];
+            if (decor) decor.dressChair(ch, chairSpots.length);
             scene.add(ch);
             chairSpots.push({ x: cx, z: cz, rot: p[2], size: cSize,
                               table: { x: spot[0], z: spot[1], halfX: tSize.x / 2, halfZ: tSize.z / 2, top: tSize.y } });
@@ -2488,6 +2507,7 @@
     var delta = Math.min(clock.getDelta(), 0.1);
     var animRate = 1;
     if (window.kitchenDoors && kitchenDoors.kuechentuer && kitchenDoors.kuechentuer.tick) kitchenDoors.kuechentuer.tick(delta);
+    if (decor) decor.update(delta, clock.elapsedTime);
 
     if (model){
       // desired direction from the keys, relative to where the camera looks

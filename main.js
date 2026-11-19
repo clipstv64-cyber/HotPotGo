@@ -92,6 +92,17 @@ function createWindow() {
           requestAnimationFrame(tick);
         })`);
         console.log('[selbsttest] ' + JSON.stringify(result));
+        // Ansichten: HOTPOT_SELFTEST_VIEWS='[[x,z,blickrichtung,neigung], ...]' und HOTPOT_SELFTEST_DIR
+        if (process.env.HOTPOT_SELFTEST_VIEWS && process.env.HOTPOT_SELFTEST_DIR) {
+          const views = JSON.parse(process.env.HOTPOT_SELFTEST_VIEWS);
+          for (let i = 0; i < views.length; i++) {
+            await win.webContents.executeJavaScript(`window.__hotpotView(${views[i].join(',')})`);
+            await new Promise((r) => setTimeout(r, 900));
+            console.log(`[ansicht ${i + 1}] ` + JSON.stringify(await win.webContents.executeJavaScript('window.__hotpotCam && window.__hotpotCam()')));
+            const img = await win.webContents.capturePage();
+            require('fs').writeFileSync(path.join(process.env.HOTPOT_SELFTEST_DIR, `view${i + 1}.png`), img.toPNG());
+          }
+        }
         if (process.env.HOTPOT_SELFTEST_SHOT) {
           const img = await win.webContents.capturePage();
           require('fs').writeFileSync(process.env.HOTPOT_SELFTEST_SHOT, img.toPNG());
