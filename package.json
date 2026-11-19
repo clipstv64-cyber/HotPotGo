@@ -1,0 +1,36 @@
+{
+  "name": "hot-pot-go",
+  "productName": "Hot Pot Go",
+  "version": "0.1.0",
+  "description": "Hot Pot Go – Koch auf der Map",
+  "author": "Marija",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "vendor": "node scripts/copy-vendor.js",
+    "start": "electron .",
+    "dist": "electron-builder --win dir"
+  },
+  "build": {
+    "appId": "com.hotpotgo.game",
+    "productName": "Hot Pot Go",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "index.html",
+      "assets/**/*",
+      "vendor/**/*"
+    ],
+    "asar": true,
+    "win": {
+      "target": "dir"
+    }
+  },
+  "devDependencies": {
+    "electron": "^45.4.1",
+    "electron-builder": "^26.18.0",
+    "three": "^0.128.0"
+  }
+}
