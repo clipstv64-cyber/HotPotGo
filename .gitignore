@@ -1,0 +1,13 @@
+# Abhängigkeiten und Builds (später für Electron/Steam)
+node_modules/
+dist/
+out/
+build/
+
+# Lokale Claude-Einstellungen
+.claude/settings.local.json
+
+# System-Dateien
+Thumbs.db
+Desktop.ini
+.DS_Store

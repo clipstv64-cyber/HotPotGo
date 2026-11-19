@@ -1,0 +1,2 @@
+# Zeilenenden immer LF lassen (verhindert Änderungen an den großen Asset-Dateien)
+* text=auto eol=lf
