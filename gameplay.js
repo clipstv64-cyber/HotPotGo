@@ -17,9 +17,10 @@
     max: 6,                   // at most this many at once
     size: [0.7, 1.15],        // metres across
     area: { x0: -9.2, x1: 2.2, z0: -9.2, z1: 9.2 },   // guest room floor
-    reach: 3.2                // how far away you can sweep (from the chef)
+    reach: 2.8                // how far away you can sweep (from the chef)
   };
-  var SWEEP_TIME = 1.3;       // seconds per sweep
+  var SWEEP_TIME = 2.0;       // seconds per sweep
+  var STROKES = 4;            // back-and-forth strokes per sweep
   var USE_REACH = 1.6;        // how close you need to be to pick up / put back the broom
 
   function build(ctx){
@@ -78,26 +79,85 @@
     var B = ctx.BACKROOMS;
     var broomSpot = new T.Vector3(B.x1 - 0.32, 0, B.z1 + 0.42);   // leaning in the corner of the cleaning closet
     var standing = new T.Group(); standing.position.copy(broomSpot); standing.rotation.set(0.12, 0.6, -0.16); root.add(standing);
-    // the broom in hand hangs from the camera: the grip at the lower right of the view,
-    // the bristles reaching forward and down to the floor in front of you
-    var inHand = new T.Group(); inHand.visible = false; camera.add(inHand);
-    var handPos = new T.Vector3(0.3, -0.3, -0.45);
-    var handQ = new T.Quaternion().setFromUnitVectors(new T.Vector3(0, 1, 0), new T.Vector3(0.18, 0.5, 0.85).normalize());
-    var rollAxis = new T.Vector3(0, 0, 1), tmpQ = new T.Quaternion();
-    function poseHand(roll, dx, dy){
-      inHand.quaternion.copy(tmpQ.setFromAxisAngle(rollAxis, roll)).multiply(handQ);
-      inHand.position.set(handPos.x + (dx || 0), handPos.y + (dy || 0), handPos.z);
-    }
-    poseHand(0);
+    // the broom in the chef's hands: placed in the world every frame (bristles on the
+    // floor in front of him, handle up to his chest), and both arms reach for the handle
+    var BROOM_LEN = 1.85;                 // game units (the chef is 2.4 = 1.8 m)
+    var held = new T.Group(); held.visible = false; root.add(held);
     loadBroom(function(src){
-      var a = fit(src.clone(true), 1.45); a.traverse(function(m){ if (m.isMesh){ m.castShadow = true; m.receiveShadow = true; } });
+      var a = fit(src.clone(true), BROOM_LEN); a.traverse(function(m){ if (m.isMesh){ m.castShadow = true; m.receiveShadow = true; } });
       standing.add(a);
-      var b = fit(src.clone(true), 1.3);
-      b.position.y -= 1.05;   // hold it near the top of the handle
-      b.traverse(function(m){ if (m.isMesh){ m.castShadow = false; m.receiveShadow = false; m.frustumCulled = false; } });
-      inHand.add(b);
+      var b = fit(src.clone(true), BROOM_LEN); b.traverse(function(m){ if (m.isMesh){ m.castShadow = true; m.receiveShadow = true; m.frustumCulled = false; } });
+      held.add(b);
     });
     var holding = false;
+
+    // ---------- holding pose: two-bone IK for both arms ------------------------------
+    var V = function(x, y, z){ return new T.Vector3(x || 0, y || 0, z || 0); };
+    var UP = V(0, 1, 0);
+    function wpos(o){ var v = V(); o.getWorldPosition(v); return v; }
+    function wquat(o){ var q = new T.Quaternion(); o.getWorldQuaternion(q); return q; }
+    function setWorldQuat(o, q){ o.quaternion.copy(wquat(o.parent).invert().multiply(q)); o.updateMatrixWorld(true); }
+    // turns a bone so the direction from it to its child points along `to` (world)
+    function aim(bone, child, to){
+      var from = wpos(child).sub(wpos(bone)).normalize();
+      var q = new T.Quaternion().setFromUnitVectors(from, to.clone().normalize());
+      setWorldQuat(bone, q.multiply(wquat(bone)));
+    }
+    // upper arm -> forearm -> hand reaching `target`, the elbow bending towards `pole`
+    function reach(upper, lower, hand, target, pole){
+      var s = wpos(upper), L1 = s.distanceTo(wpos(lower)), L2 = wpos(lower).distanceTo(wpos(hand));
+      var toT = target.clone().sub(s), d = Math.max(0.05, Math.min(toT.length(), (L1 + L2) * 0.999)), dir = toT.normalize();
+      var a = Math.acos(Math.max(-1, Math.min(1, (L1 * L1 + d * d - L2 * L2) / (2 * L1 * d))));
+      var p = pole.clone().sub(dir.clone().multiplyScalar(pole.dot(dir))).normalize();
+      aim(upper, lower, dir.clone().multiplyScalar(Math.cos(a)).add(p.multiplyScalar(Math.sin(a))));
+      aim(lower, hand, target.clone().sub(wpos(lower)));
+    }
+    var bones = null;
+    function findBones(chef){
+      if (bones && bones.root === chef) return bones;
+      var g = function(n){ return chef.getObjectByName(n); };
+      bones = { root: chef, spine: g('Spine'), rA: g('RightArm'), rF: g('RightForeArm'), rH: g('RightHand'),
+                lA: g('LeftArm'), lF: g('LeftForeArm'), lH: g('LeftHand') };
+      if (!bones.rA || !bones.lA || !bones.spine) bones = null;
+      return bones;
+    }
+    var hold = { blend: 0, sweepW: 0, target: V() };
+    // where the broom is: bristles `tip` on the floor, handle `top` at chest height
+    function broomPose(chef, stroke, lift, toward){
+      var th = chef.rotation.y, f = V(Math.sin(th), 0, Math.cos(th)), r = V(-Math.cos(th), 0, Math.sin(th));
+      var base = chef.position, floorY = base.y - (ctx.getChefLift ? ctx.getChefLift() : 0);
+      var tip = base.clone().addScaledVector(f, 1.4).addScaledVector(r, 0.3);
+      if (toward) tip.lerp(toward, hold.sweepW);                  // over the stain while sweeping
+      tip.addScaledVector(r, 0.42 * stroke); tip.y = floorY + 0.02 + lift;
+      var top = base.clone().addScaledVector(f, 0.55).addScaledVector(r, 0.14 - 0.1 * stroke);
+      top.y = base.y + 1.6;
+      top = tip.clone().add(top.sub(tip).normalize().multiplyScalar(BROOM_LEN));
+      return { tip: tip, top: top, f: f, r: r };
+    }
+    var basisM = new T.Matrix4();
+    function placeBroom(p){
+      var y = p.top.clone().sub(p.tip).normalize();
+      var x = p.r.clone().sub(y.clone().multiplyScalar(p.r.dot(y))).normalize();
+      var z = V().crossVectors(x, y);
+      held.quaternion.setFromRotationMatrix(basisM.makeBasis(x, y, z));
+      held.position.copy(p.tip);
+    }
+    function posePlayer(dt, stroke, lift, twist){
+      var chef = ctx.getChef(), b = chef && findBones(chef);
+      if (!b){ held.visible = false; return; }
+      held.visible = holding;
+      if (!holding) return;
+      chef.updateMatrixWorld(true);
+      // the upper body turns a little with each stroke
+      if (twist) setWorldQuat(b.spine, new T.Quaternion().setFromAxisAngle(UP, twist).multiply(wquat(b.spine)));
+      var p = broomPose(chef, stroke, lift, sweep ? sweep.toward : null);
+      placeBroom(p);
+      var dir = p.top.clone().sub(p.tip).normalize();
+      var upperHand = p.top.clone().addScaledVector(dir, -0.14);    // left hand near the top
+      var lowerHand = p.top.clone().addScaledVector(dir, -0.55);    // right hand further down
+      reach(b.lA, b.lF, b.lH, upperHand, p.r.clone().multiplyScalar(-0.8).addScaledVector(UP, -0.6));
+      reach(b.rA, b.rF, b.rH, lowerHand, p.r.clone().multiplyScalar(0.8).addScaledVector(UP, -0.6));
+    }
 
     // ---------- stains -----------------------------------------------------------
     var stainTex = new T.TextureLoader().load('textures/stains.png');
@@ -152,13 +212,19 @@
     }
 
     // ---------- sweeping ------------------------------------------------------------
-    var sweep = null;   // { stain, t }
+    var sweep = null;   // { stain, t, toward }
+    function startSweep(s){
+      var chef = ctx.getChef(), to = V(s.x, 0, s.z);
+      // the bristles go over the stain, but never further than the arms reach
+      var d = V(to.x - chef.position.x, 0, to.z - chef.position.z), maxD = 1.6;
+      if (d.length() > maxD) to = chef.position.clone().add(d.setLength(maxD));
+      sweep = { stain: s, t: 0, toward: to };
+      s.fade = 0;
+    }
     function trySweep(){
       if (!holding || sweep) return;
       var s = aimedStain();
-      if (!s) return;
-      sweep = { stain: s, t: 0 };
-      s.fade = 0;
+      if (s) startSweep(s);
     }
     window.addEventListener('mousedown', function(e){
       if (e.button === 0 && document.pointerLockElement === canvas) trySweep();
@@ -169,7 +235,7 @@
       var list = [{
         pos: broomSpot, reach: USE_REACH,
         label: holding ? 'Put the broom back' : 'Pick up broom',
-        use: function(){ holding = !holding; inHand.visible = holding; standing.visible = !holding; }
+        use: function(){ holding = !holding; held.visible = holding; standing.visible = !holding; }
       }];
       var door = ctx.getDoor && ctx.getDoor();
       if (door && door.center){
@@ -219,15 +285,23 @@
         }
         s.mesh.scale.setScalar(Math.max(0.01, k));
       }
-      // broom animation while sweeping
+      // sweeping: strokes left and right over the stain, the bristles lifted a little on
+      // the way back; the stain gets fainter with every stroke
       if (sweep){
         sweep.t += dt;
-        var p = Math.min(1, sweep.t / SWEEP_TIME), osc = Math.sin(p * Math.PI * 5), env = Math.sin(p * Math.PI);
-        poseHand(osc * 0.38 * env, -0.12 * env + osc * 0.1 * env, -0.06 * env);   // swings left and right
-        sweep.stain.fade = Math.min(1, p * 1.1);
-        if (p >= 1){ sweep = null; poseHand(0); }
-      } else if (holding){
-        poseHand(Math.sin(time * 1.6) * 0.015);   // a gentle sway while walking around with it
+        var p = Math.min(1, sweep.t / SWEEP_TIME);
+        var env = Math.min(1, p / 0.12, (1 - p) / 0.12);              // move over / back
+        hold.sweepW = Math.max(0, env);
+        var phase = p * Math.PI * 2 * STROKES;
+        anim.stroke = Math.sin(phase) * env;
+        anim.lift = Math.max(0, Math.cos(phase)) * 0.07 * env;
+        anim.twist = Math.sin(phase) * 0.14 * env;
+        var strokesDone = Math.floor(p * STROKES * 2) / (STROKES * 2);
+        sweep.stain.fade = Math.min(1, Math.max(sweep.stain.fade, strokesDone * 1.05));
+        if (p >= 1){ sweep.stain.fade = 1; sweep = null; hold.sweepW = 0; }
+      } else {
+        anim.stroke = Math.sin(time * 1.3) * 0.04;   // a gentle sway while walking around with it
+        anim.lift = 0; anim.twist = 0;
       }
       // hint and aim dot
       var aimed = sweep ? null : aimedStain();
@@ -241,15 +315,20 @@
       else setHint('');
     }
 
+    // after the character animation: put the broom in the chef's hands
+    var anim = { stroke: 0, lift: 0, twist: 0 };
+    function afterAnimation(dt){ posePlayer(dt, anim.stroke, anim.lift, anim.twist); }
+
     return {
-      interact: interact, update: update,
+      interact: interact, update: update, afterAnimation: afterAnimation,
       isHolding: function(){ return holding; }, stainCount: function(){ return stains.length; },
-      // for tests: a stain right here, and sweeping without the mouse
+      // for tests: hold the broom anywhere, a stain right here, and sweeping without the mouse
+      debugHold: function(){ holding = true; held.visible = true; standing.visible = false; },
       debugStainAt: function(x, z){ var A = STAIN.area; STAIN.area = { x0: x, x1: x, z0: z, z1: z }; spawnStain(); STAIN.area = A; },
       debugSweep: function(){
         var chef = ctx.getChef(), s = null, best = 1e9;
         stains.forEach(function(st){ var d = Math.hypot(st.x - chef.position.x, st.z - chef.position.z); if (st.fade < 0 && d < best){ best = d; s = st; } });
-        if (!holding || !s) return false; sweep = { stain: s, t: 0 }; s.fade = 0; return true;
+        if (!holding || !s) return false; startSweep(s); return true;
       }
     };
   }

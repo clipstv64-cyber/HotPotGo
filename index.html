@@ -482,6 +482,7 @@
       try {
         gameplay = HotPotGameplay.build({ scene: scene, camera: camera, canvas: renderer.domElement, obstacles: obstacles, BACKROOMS: BACKROOMS,
           getChef: function(){ return model; },
+          getChefLift: function(){ return modelBaseY; },   // model origin above its feet
           getDoor: function(){ return window.kitchenDoors && kitchenDoors.kitchenDoor; } });
         window.__hotpotGameplay = gameplay;   // for tests
       } catch (e){ console.error('Setting up the gameplay failed:', e); }
@@ -2628,6 +2629,8 @@
       jumpAction.setEffectiveWeight(jumpWeight);
       mixer.update(delta);
     }
+    // the broom in the chef's hands (arms posed after the animation)
+    if (gameplay && gameplay.afterAnimation) gameplay.afterAnimation(delta);
 
     // the camera sits where the eyes are and follows the body, also when
     // jumping; if the model isn't loaded yet, use a fixed eye height
@@ -2649,6 +2652,11 @@
       camera.position.copy(eye);
     } else if (model){
       camera.position.set(model.position.x, jumpY + EYE_HEIGHT, model.position.z);
+    }
+    // for tests: look at the chef from outside ({ from: [x, y, z], to: [x, y, z] })
+    if (window.__hotpotCamOverride){
+      var co = window.__hotpotCamOverride;
+      camera.position.fromArray(co.from); camera.lookAt(new THREE.Vector3().fromArray(co.to));
     }
     renderer.render(scene, camera);
   }
