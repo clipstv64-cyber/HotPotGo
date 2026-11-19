@@ -25,14 +25,21 @@
       "vendor/**/*"
     ],
     "asar": true,
-    "electronLanguages": ["de", "en-US"],
+    "electronLanguages": [
+      "de",
+      "en-US"
+    ],
     "win": {
       "target": "dir"
     }
   },
   "devDependencies": {
+    "@gltf-transform/core": "^4.5.1",
+    "@gltf-transform/extensions": "^4.5.1",
     "electron": "^45.4.1",
     "electron-builder": "^26.18.0",
+    "meshoptimizer": "^1.3.0",
+    "sharp": "^0.35.5",
     "three": "^0.128.0"
   }
 }
