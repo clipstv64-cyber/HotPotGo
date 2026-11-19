@@ -150,12 +150,14 @@
         var t = texLoader.load(url); if (!normal) t.encoding = T.sRGBEncoding;
         t.wrapS = t.wrapT = T.RepeatWrapping; t.anisotropy = aniso; return t;
       }
-      // materials: the plaster wall and ceiling textures of the guest room, the kitchen's
-      // slate floor and tiles, its dark planks as the office floor
-      var plasterTex = tex('textures/wall_color.jpg'), plasterNrm = tex('textures/wall_normal.jpg', true);
-      [plasterTex, plasterNrm].forEach(function(t){ t.wrapT = T.ClampToEdgeWrapping; });
+      // materials: the plaster walls and the ceiling of the guest room, the kitchen's
+      // slate floor and tiles, its dark planks as the office floor and for skirting boards / door frames
+      var plasterTex = tex('textures/plaster.webp'), plasterNrm = tex('textures/plaster_n.webp', true);
+      [plasterTex, plasterNrm].forEach(function(t){ t.wrapS = t.wrapT = T.MirroredRepeatWrapping; });
+      var woodTex = tex('textures/k_wood.webp');
+      var trim = std({ map: woodTex, roughness: 0.6, color: new T.Color().setScalar(0.55) });
       var M = {
-        plaster: { mat: std({ map: plasterTex, normalMap: plasterNrm, roughness: 0.85, color: new T.Color().setScalar(0.7), side: T.DoubleSide }), tu: 5, tv: H },
+        plaster: { mat: std({ map: plasterTex, normalMap: plasterNrm, normalScale: new T.Vector2(0.8, 0.8), roughness: 0.9, color: new T.Color().setScalar(0.7), side: T.DoubleSide }), tu: 1.6, tv: 1.6 },
         tile: { mat: std({ map: tex('textures/k_wall.webp'), roughness: 0.4, color: new T.Color().setScalar(0.78), side: T.DoubleSide }), tu: 1.2, tv: 1.2 },
         slate: { mat: std({ map: tex('textures/k_floor.webp'), roughness: 0.55, color: new T.Color().setScalar(0.9) }), tu: 1.6, tv: 1.6 },
         planks: { mat: std({ map: tex('textures/k_wood.webp'), roughness: 0.8, color: new T.Color().setScalar(0.85) }), tu: 2.0, tv: 2.0 },
@@ -187,9 +189,35 @@
           else { q.position.set(at, cy, c); q.rotation.y = Math.PI / 2; }
           if (p[2] === 0){
             if (along === 'x') addBox(c, at, p[1] - p[0], 0.12, H); else addBox(at, c, 0.12, p[1] - p[0], H);
+            if (m !== M.tile) skirt(along, at, p[0], p[1], 0);   // skirting board on both sides
           }
         });
+        // a wooden frame around each opening, as deep as a real wall, so the wall looks solid
+        (doors || []).forEach(function(d){
+          var d0 = d[0] - d[1] / 2, d1 = d[0] + d[1] / 2, fw = 0.09, fd = 0.26;
+          [[d0 - fw / 2, d[2] / 2 + fw / 2, fw, d[2] + fw], [d1 + fw / 2, d[2] / 2 + fw / 2, fw, d[2] + fw], [d[0], d[2] + fw / 2, d[1] + 2 * fw, fw]].forEach(function(f){
+            var b = along === 'x' ? new T.BoxGeometry(f[2], f[3], fd) : new T.BoxGeometry(fd, f[3], f[2]);
+            var mesh = new T.Mesh(b, trim); mesh.castShadow = mesh.receiveShadow = true;
+            if (along === 'x') mesh.position.set(f[0], f[1], at); else mesh.position.set(at, f[1], f[0]);
+            root.add(mesh);
+          });
+        });
       }
+      // skirting board along a wall from a to b; side 0 = both sides of a free-standing wall,
+      // +1 / -1 = only on that side (for outer walls)
+      function skirt(along, at, a, b, side){
+        var len = b - a, c = (a + b) / 2, d = side ? 0.025 : 0.05, off = side * 0.0125;
+        var g = along === 'x' ? new T.BoxGeometry(len, 0.12, d) : new T.BoxGeometry(d, 0.12, len);
+        var mesh = new T.Mesh(g, trim); mesh.receiveShadow = true;
+        if (along === 'x') mesh.position.set(c, 0.06, at + off); else mesh.position.set(at + off, 0.06, c);
+        root.add(mesh);
+      }
+      // skirting boards in the guest room (outer walls and the guest side of the partition)
+      var KDOOR0 = PART.door.z - PART.door.w / 2, KDOOR1 = PART.door.z + PART.door.w / 2;
+      skirt('x', -10, -10, X1, 1);                                     // back wall
+      skirt('x', 10, -10, -2.05, -1); skirt('x', 10, -0.55, X1, -1);   // front wall, around the entrance door
+      skirt('z', -10, -10, 10, 1);                                     // left wall
+      skirt('z', X1, -10, KDOOR0 - 0.16, -1); skirt('z', X1, KDOOR1 + 0.16, PART.pieces[1][1], -1); skirt('z', X1, PART.pieces[0][0], 10, -1);
       function floor(m, ax, bx, az, bz, y, down){
         var q = quad(m, bx - ax, bz - az, ax, az);
         q.rotation.x = down ? Math.PI / 2 : -Math.PI / 2; q.position.set((ax + bx) / 2, y, (az + bz) / 2);

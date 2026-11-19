@@ -24,11 +24,11 @@
   var FLOOR_COLOR_URL = "textures/floor_color.jpg";
   var FLOOR_NORMAL_URL = "textures/floor_normal.jpg";
   var FLOOR_REPEAT = 7; // texture repeats across the 20x20 ground
-  var WALL_COLOR_URL = "textures/wall_color.jpg";
-  var WALL_NORMAL_URL = "textures/wall_normal.jpg";
+  var PLASTER_URL = "textures/plaster.webp";
+  var PLASTER_NORMAL_URL = "textures/plaster_n.webp";
+  var PLASTER_TILE = 1.6;   // metres per repeat of the plaster texture
   var GFX = { exposure: 1.0, ambient: 0.25, sun: 1.3, hemi: 0.45 };   // lighting / tone mapping
   var WALL_HEIGHT = 4;      // a bit over 1.5x the chef
-  var WALL_PANELS = 4;
   // the partition wall: across the room at this X, pieces from z to z
   // (the gap between them is the way through)
   // back rooms behind the kitchen (built in decor.js): a corridor from x0 to x1 between
@@ -372,20 +372,20 @@
     ground.receiveShadow = true;
     scene.add(ground);
 
-    // four walls around the floor with the kitchen-wall texture (baked from
-    // the Meshy wall model: plaster with a wooden skirting board). They face
-    // inward only, so the camera can look in when it is outside a wall.
-    var wallColor = texLoader.load(WALL_COLOR_URL);
-    var wallNormal = texLoader.load(WALL_NORMAL_URL);
+    // four walls around the floor: old painted plaster (ChatGPT texture with a
+    // normal map made from it), repeating every PLASTER_TILE metres; skirting
+    // boards and door frames come from decor.js. The walls face inward only,
+    // so the camera can look in when it is outside a wall.
+    var wallColor = texLoader.load(PLASTER_URL);
+    var wallNormal = texLoader.load(PLASTER_NORMAL_URL);
     wallColor.encoding = THREE.sRGBEncoding;
     [wallColor, wallNormal].forEach(function(t){
-      t.wrapS = THREE.RepeatWrapping;
-      t.wrapT = THREE.ClampToEdgeWrapping;
-      t.repeat.set(WALL_PANELS, 1);
+      t.wrapS = t.wrapT = THREE.MirroredRepeatWrapping;   // hides the seams of the generated texture
+      t.repeat.set(20 / PLASTER_TILE, WALL_HEIGHT / PLASTER_TILE);
       t.anisotropy = renderer.capabilities.getMaxAnisotropy();
     });
     var wallMat = new THREE.MeshStandardMaterial({
-      map: wallColor, normalMap: wallNormal, roughness: 0.85, metalness: 0,
+      map: wallColor, normalMap: wallNormal, normalScale: new THREE.Vector2(0.8, 0.8), roughness: 0.9, metalness: 0,
       color: new THREE.Color().setScalar(WALL_BRIGHTNESS)
     });
     // back wall (faces +Z) in pieces around the doorway to the back rooms
