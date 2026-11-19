@@ -44,7 +44,7 @@ function createWindow() {
     },
   });
 
-  win.loadURL('app://game/index.html');
+  win.loadURL('app://game/index.html' + (process.env.HOTPOT_QUERY || ''));   // query: test settings only
 
   // F11 = full screen, F12 = developer tools (development only)
   win.webContents.on('before-input-event', (event, input) => {

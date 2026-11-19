@@ -23,6 +23,8 @@
   var STROKES = 4;            // back-and-forth strokes per sweep
   var USE_REACH = 1.6;        // how close you need to be to pick up / put back the broom
 
+  var TEST = new URLSearchParams(location.search);   // test settings (self-test only)
+
   function build(ctx){
     var scene = ctx.scene, camera = ctx.camera, canvas = ctx.canvas;
     var root = new T.Group(); root.name = 'gameplay'; scene.add(root);
@@ -84,6 +86,11 @@
     var BROOM_LEN = 1.85;                 // game units (the chef is 2.4 = 1.8 m)
     var GRIP_TOP = 0.14, GRIP_LOW = 0.55; // where the hands hold the handle (distance from its top end)
     var PALM = 0.07;                      // the middle of the palm, past the wrist bone
+    var HANDLE_R = 0.022;                 // handle radius (game units)
+    var THUMB_FOLLOW = 0.5;               // how much the thumb goes along with the first finger segment
+    var KNUCKLE_AT = 0.6;                 // knuckles as a share of the hand length (from the wrist)
+    var JOINT_BLEND = 0.35;               // skin blend at each finger joint (share of the finger length)
+    var FOREARM_TWIST = 0.7;              // share of the wrist twist taken by the forearm
     var held = new T.Group(); held.visible = false; root.add(held);
     loadBroom(function(src){
       var a = fit(src.clone(true), BROOM_LEN); a.traverse(function(m){ if (m.isMesh){ m.castShadow = true; m.receiveShadow = true; } });
@@ -157,8 +164,180 @@
       var g = function(n){ return chef.getObjectByName(n); };
       bones = { root: chef, spine: g('Spine'), rA: g('RightArm'), rF: g('RightForeArm'), rH: g('RightHand'),
                 lA: g('LeftArm'), lF: g('LeftForeArm'), lH: g('LeftHand') };
-      if (!bones.rA || !bones.lA || !bones.spine) bones = null;
+      if (!bones.rA || !bones.lA || !bones.spine) { bones = null; return null; }
+      bones.lGrip = makeGrip(chef, 'Left'); bones.rGrip = makeGrip(chef, 'Right');
       return bones;
+    }
+
+    // The chef's rig has no finger bones (the fingers are part of the hand), so for
+    // gripping each hand gets an extra "finger" bone at the knuckles: the finger
+    // vertices are moved over to it, and turning it closes the fingers around the handle.
+    // Returns the hand's frame in its own bone space: finger direction, palm direction,
+    // the knuckle line, and the point in the middle of the closed fist.
+    var AX = ['getX', 'getY', 'getZ', 'getW'], SX = ['setX', 'setY', 'setZ', 'setW'];
+    function gc(a, i, k){ return a[AX[k]](i); }
+    function sc(a, i, k, v){ a[SX[k]](i, v); }
+    function makeGrip(chef, side){
+      var mesh = null;
+      chef.traverse(function(o){ if (!mesh && o.isSkinnedMesh) mesh = o; });
+      if (!mesh) return null;
+      var sk = mesh.skeleton, hi = sk.bones.findIndex(function(b){ return b.name === side + 'Hand'; });
+      if (hi < 0) return null;
+      var hand = sk.bones[hi], geo = mesh.geometry, pos = geo.attributes.position;
+      var si = geo.attributes.skinIndex, sw = geo.attributes.skinWeight;
+      var toLocal = new T.Matrix4().multiplyMatrices(sk.boneInverses[hi], mesh.bindMatrix);
+      var v = V(), idx = [], local = [];
+      for (var i = 0; i < si.count; i++){
+        var w = 0;
+        for (var k = 0; k < 4; k++) if (gc(si, i, k) === hi) w += gc(sw, i, k);
+        if (w > 0.5){ idx.push(i); local.push(v.fromBufferAttribute(pos, i).applyMatrix4(toLocal).clone()); }
+      }
+      if (!idx.length) return null;
+      // finger direction: from the wrist toward the centre of the hand
+      var c = V(); local.forEach(function(p){ c.add(p); });
+      var finger = c.divideScalar(local.length).normalize();
+      var maxT = 0; local.forEach(function(p){ maxT = Math.max(maxT, p.dot(finger)); });
+      // palm direction: the side the fingers are already bent toward (the fingertips
+      // lie off the finger axis on the palm side)
+      var tipC = V(), n = 0;
+      local.forEach(function(p){ if (p.dot(finger) > maxT * 0.8){ tipC.add(p); n++; } });
+      tipC.divideScalar(Math.max(1, n));
+      var palm = tipC.sub(finger.clone().multiplyScalar(tipC.dot(finger)));
+      // the thumb side is the other way: if the bend is too small to tell, use the
+      // direction of least thickness
+      palm.normalize();
+      var knuckles = V().crossVectors(finger, palm).normalize();
+      palm = V().crossVectors(knuckles, finger).normalize();
+      var t0 = maxT * (+TEST.get('t0') || KNUCKLE_AT);   // where the knuckles are along the hand
+      // palm surface: how far the hand reaches toward the palm around the knuckles
+      var surf = 0;
+      local.forEach(function(p){ var t = p.dot(finger); if (t > t0 * 0.6 && t < t0 * 1.1) surf = Math.max(surf, p.dot(palm)); });
+      // three finger segments (knuckle, middle and end joints), chained like real finger bones
+      var L = maxT - t0, joints = [t0, t0 + L * 0.38, t0 + L * 0.68];
+      var segs = [], parent = hand, prevPivot = V();
+      joints.forEach(function(tj, n){
+        var fb = new T.Bone(); fb.name = side + 'GripFinger' + n;
+        var pv = finger.clone().multiplyScalar(tj);
+        fb.position.copy(pv).sub(prevPivot); parent.add(fb);
+        sk.bones.push(fb);
+        sk.boneInverses.push(new T.Matrix4().makeTranslation(-pv.x, -pv.y, -pv.z).multiply(sk.boneInverses[hi]));
+        segs.push({ bone: fb, index: sk.bones.length - 1, t: tj });
+        parent = fb; prevPivot = pv;
+      });
+      sk.boneMatrices = new Float32Array(sk.bones.length * 16);
+      if (sk.boneTexture){ sk.boneTexture.dispose(); sk.boneTexture = null; }
+      var pivot = finger.clone().multiplyScalar(t0);
+      // each finger vertex moves to the segment it lies in; around each joint it is
+      // blended with the segment before it, so the skin bends smoothly
+      // the thumb stays with the hand: it lies beside the four fingers along the knuckle
+      // line, and turning it around the fingers' knuckles would tear the skin
+      var kMin = 1e9, kMax = -1e9;
+      local.forEach(function(p){ if (p.dot(finger) > maxT * 0.85){ var k = p.dot(knuckles); kMin = Math.min(kMin, k); kMax = Math.max(kMax, k); } });
+      var kPad = (kMax - kMin) * 0.08;
+      var isThumb = local.map(function(p){ var k = p.dot(knuckles); return k < kMin - kPad || k > kMax + kPad; });
+      var ramp = L * (+TEST.get('ramp') || JOINT_BLEND);
+      idx.forEach(function(i, j){
+        var t = local[j].dot(finger);
+        if (t <= t0) return;
+        if (isThumb[j]){   // the thumb follows the first finger segment part of the way
+          var tf = +TEST.get('thumb') || THUMB_FOLLOW;
+          if (tf <= 0) return;
+          var sl = [0, 1, 2, 3], hk0 = sl.find(function(k){ return gc(si, i, k) === hi; }), fr = sl.find(function(k){ return gc(sw, i, k) === 0; });
+          if (fr === undefined) return;
+          var hw0 = gc(sw, i, hk0); sc(sw, i, hk0, hw0 * (1 - tf)); sc(si, i, fr, segs[0].index); sc(sw, i, fr, hw0 * tf);
+          return;
+        }
+        var n = 0; while (n < 2 && t > joints[n + 1]) n++;
+        var s = Math.min(1, (t - joints[n]) / ramp);
+        var prev = n === 0 ? hi : segs[n - 1].index, cur = segs[n].index;
+        var slots = [0, 1, 2, 3], hk = slots.find(function(k){ return gc(si, i, k) === hi; });
+        var hw = gc(sw, i, hk);
+        if (s >= 1){ sc(si, i, hk, cur); return; }
+        var free = slots.find(function(k){ return gc(sw, i, k) === 0; });
+        if (free === undefined){ sc(si, i, hk, s > 0.5 ? cur : prev); return; }
+        sc(si, i, hk, prev); sc(sw, i, hk, hw * (1 - s));
+        sc(si, i, free, cur); sc(sw, i, free, hw * s);
+      });
+      si.needsUpdate = true; sw.needsUpdate = true;
+      // Where the handle lies in the fist and how far the fingers close: the handle runs
+      // along the knuckle line, so looking along it everything is 2D (finger / palm
+      // directions). For several curl amounts the closed hand is worked out, and the handle
+      // circle is put where the hand surrounds it best without any vertex inside it.
+      var scale = V(); hand.getWorldScale(scale);
+      var r = HANDLE_R / scale.x;
+      var pts = idx.map(function(i, j){
+        var t = local[j].dot(finger), n = -1;
+        if (t > t0 && !isThumb[j]){ n = 0; while (n < 2 && t > joints[n + 1]) n++; }
+        return { u: t, w: local[j].dot(palm), k: local[j].dot(knuckles), n: n };
+      });
+      var kMid = 0, kn = 0; pts.forEach(function(p){ if (p.n >= 0){ kMid += p.k; kn++; } }); kMid /= Math.max(1, kn);
+      function curled(curl, split){
+        return pts.map(function(p){
+          var u = p.u, w = p.w;
+          for (var m = p.n; m >= 0; m--){   // innermost joint first, then the ones before it
+            var a = curl * split[m], cu = joints[m], du = u - cu, cs = Math.cos(a), sn = Math.sin(a);
+            u = cu + du * cs - w * sn; w = du * sn + w * cs;   // finger -> palm is the positive turn
+          }
+          return [u, w];
+        });
+      }
+      var best = null, reachOut = r * 2.4, rHit = r * 0.92;   // the handle is a little thinner on its flat sides
+      var SPLITS = [[0.4, 0.33, 0.27], [0.34, 0.36, 0.3], [0.45, 0.35, 0.2], [0.3, 0.4, 0.3]];
+      SPLITS.forEach(function(split){ [1.8, 2.2, 2.6, 3.0, 3.4, 3.8].forEach(function(curl){
+        var P = curled(curl, split);
+        for (var cu = t0 * 0.2; cu <= maxT; cu += (maxT - t0 * 0.2) / 40){
+          for (var cw = 0; cw <= surf + r * 5; cw += (surf + r * 5) / 40){
+            var minD = 1e9, sect = 0, hits = 0;
+            for (var q = 0; q < P.length; q++){
+              var du = P[q][0] - cu, dw = P[q][1] - cw, d = Math.sqrt(du * du + dw * dw);
+              if (d < minD) minD = d;
+              if (d < rHit) break;
+              if (d < reachOut){ sect |= 1 << (Math.floor((Math.atan2(dw, du) + Math.PI) / (2 * Math.PI) * 16) % 16); hits++; }
+            }
+            if (minD < rHit) continue;
+            var cov = 0; for (var bit = 0; bit < 16; bit++) if (sect & (1 << bit)) cov++;
+            var score = cov * 10 - (minD - r) / r * 3 + Math.min(hits, 200) * 0.01;
+            if (!best || score > best.score) best = { score: score, curl: curl, split: split, cu: cu, cw: cw, cov: cov, gap: (minD - r) * scale.x };
+          }
+        }
+      }); });
+      var center = finger.clone().multiplyScalar(best.cu).addScaledVector(palm, best.cw).addScaledVector(knuckles, kMid);
+      return { pivot: pivot, surf: surf, rLocal: r, hand: hand, segs: segs, finger: finger, palm: palm, knuckles: knuckles,
+               center: center, curl: 0, curlTotal: best.curl, split: best.split, thumbs: isThumb.filter(Boolean).length, fit: best, mesh: mesh, idx: idx };
+    }
+
+    // turns the hand so its knuckle line runs along the handle and its palm faces it,
+    // keeping the fingers in line with the forearm as well as possible; `side` picks
+    // which way along the handle the knuckle line points (so the palm faces the handle)
+    var basisA = new T.Matrix4(), basisB = new T.Matrix4();
+    function orientHand(g, fore, D, towardHandle){
+      var hand = g.hand, fw = wpos(hand).sub(wpos(fore)).normalize();
+      var best = null;
+      [1, -1].forEach(function(s){
+        var k = D.clone().multiplyScalar(s);
+        var f = fw.clone().sub(k.clone().multiplyScalar(fw.dot(k))).normalize();
+        var p = V().crossVectors(k, f);   // palm = knuckles x finger
+        var score = p.dot(towardHandle);
+        if (!best || score > best.score) best = { score: score, k: k, f: f, p: p };
+      });
+      basisA.makeBasis(best.f, best.p, best.k);                 // world
+      basisB.makeBasis(g.finger, g.palm, g.knuckles);           // hand space
+      var q = new T.Quaternion().setFromRotationMatrix(basisA.multiply(basisB.transpose()));
+      // most of the twist around the forearm goes into the forearm itself (like a real
+      // forearm turns), so the wrist does not get wrung like a sweet wrapper
+      var rel = wquat(fore).invert().multiply(q), ax = hand.position.clone().normalize();
+      var proj = ax.clone().multiplyScalar(V(rel.x, rel.y, rel.z).dot(ax));
+      var twist = new T.Quaternion(proj.x, proj.y, proj.z, rel.w).normalize();
+      var part = new T.Quaternion().slerp(twist, FOREARM_TWIST);
+      fore.quaternion.multiply(part); fore.updateMatrixWorld(true);
+      setWorldQuat(hand, q);
+    }
+    function gripPoint(g){ return g.hand.localToWorld(g.center.clone()); }
+    function closeFingers(g, amount){
+      if (!g) return;
+      g.curl += (amount - g.curl) * 0.35;
+      g.segs.forEach(function(sg, n){ sg.bone.quaternion.setFromAxisAngle(g.knuckles, g.curl * g.curlTotal * g.split[n]); });
+      g.hand.updateMatrixWorld(true);
     }
     var hold = { blend: 0, sweepW: 0, target: V() };
     // where the broom is: bristles `tip` on the floor, handle `top` at chest height
@@ -184,7 +363,8 @@
     function posePlayer(dt, stroke, lift, twist){
       var chef = ctx.getChef(), b = chef && findBones(chef);
       held.visible = broomAt !== 'closet';
-      if (!b || !holding) return;
+      if (!b) return;
+      if (!holding){ closeFingers(b.lGrip, 0); closeFingers(b.rGrip, 0); return; }
       chef.updateMatrixWorld(true);
       // the upper body turns a little with each stroke
       if (twist) setWorldQuat(b.spine, new T.Quaternion().setFromAxisAngle(UP, twist).multiply(wquat(b.spine)));
@@ -192,23 +372,31 @@
       var dir = p.top.clone().sub(p.tip).normalize();
       var upperHand = p.top.clone().addScaledVector(dir, -GRIP_TOP);    // left hand near the top
       var lowerHand = p.top.clone().addScaledVector(dir, -GRIP_LOW);    // right hand further down
-      // the arms reach for where the palms should be (a bit past the wrist bone)
-      reach(b.lA, b.lF, b.lH, upperHand.clone().addScaledVector(dir, 0), p.r.clone().multiplyScalar(-0.8).addScaledVector(UP, -0.6), PALM);
+      // the arms reach for the handle (the fist lies a bit past the wrist bone)
+      reach(b.lA, b.lF, b.lH, upperHand, p.r.clone().multiplyScalar(-0.8).addScaledVector(UP, -0.6), PALM);
       reach(b.rA, b.rF, b.rH, lowerHand, p.r.clone().multiplyScalar(0.8).addScaledVector(UP, -0.6), PALM);
-      // then the broom goes exactly through both palms, wherever the arms ended up,
-      // so it always lies in the hands
-      var up = palm(b.lF, b.lH), lo = palm(b.rF, b.rH), d = up.clone().sub(lo);
-      if (d.length() > 0.1){
-        var axis = d.normalize();
-        p.top = up.clone().addScaledVector(axis, GRIP_TOP);
-        p.tip = p.top.clone().addScaledVector(axis, -BROOM_LEN);
+      if (!b.lGrip || !b.rGrip){ placeBroom(p); return; }
+      // the hands turn so the handle runs across the palms, the fingers close around it,
+      // and the broom is set exactly through the middle of both fists (twice, since the
+      // hands' turn depends on the handle's direction)
+      var D = dir.clone();
+      for (var it = 0; it < 3; it++){
+        orientHand(b.lGrip, b.lF, D, lineDir(wpos(b.lH), p.tip, D));
+        orientHand(b.rGrip, b.rF, D, lineDir(wpos(b.rH), p.tip, D));
+        var up = gripPoint(b.lGrip), lo = gripPoint(b.rGrip), d = up.clone().sub(lo);
+        if (d.length() < 0.1) break;
+        D = d.normalize();
+        p.top = up.clone().addScaledVector(D, GRIP_TOP);
+        p.tip = p.top.clone().addScaledVector(D, -BROOM_LEN);
       }
+      closeFingers(b.lGrip, 1); closeFingers(b.rGrip, 1);
       placeBroom(p);
     }
-    // the middle of the palm: a little past the wrist, along the forearm
-    function palm(fore, hand){
-      var w = wpos(hand), dirF = w.clone().sub(wpos(fore)).normalize();
-      return w.addScaledVector(dirF, PALM);
+    // direction from a point to the nearest point of the line through `a` along `D`
+    function lineDir(from, a, D){
+      var q = a.clone().addScaledVector(D, from.clone().sub(a).dot(D));
+      var v = q.sub(from);
+      return v.lengthSq() > 1e-8 ? v.normalize() : V(0, 0, 1);
     }
 
     // ---------- stains -----------------------------------------------------------
@@ -386,6 +574,80 @@
         var chef = ctx.getChef(), s = null, best = 1e9;
         stains.forEach(function(st){ var d = Math.hypot(st.x - chef.position.x, st.z - chef.position.z); if (st.fade < 0 && d < best){ best = d; s = st; } });
         if (!holding || !s) return false; startSweep(s); return true;
+      },
+      // how well each hand encloses the handle: the hand's vertices near the grip point
+      // (within 5 cm along and around the handle) binned by their angle around the handle
+      // axis into 12 sectors, and the closest one to the axis (below the handle radius =
+      // a finger cuts into the handle); fit = what the grip solver found
+      debugGrip: function(){
+        var b = bones; if (!b || !b.lGrip) return null;
+        var y = V(0, 1, 0).applyQuaternion(held.quaternion), base = held.position;
+        var ref = V(1, 0, 0).applyQuaternion(held.quaternion), ref2 = V().crossVectors(y, ref);
+        function stat(g){
+          var gp = gripPoint(g), along0 = gp.clone().sub(base).dot(y), v = V(), sectors = new Array(12).fill(0), minD = 9, near = 0;
+          g.idx.forEach(function(i){
+            g.mesh.boneTransform(i, v); v.applyMatrix4(g.mesh.matrixWorld);
+            var rel = v.clone().sub(base), a = rel.dot(y);
+            if (Math.abs(a - along0) > 0.05) return;
+            var radial = rel.sub(y.clone().multiplyScalar(a)), d = radial.length();
+            if (d > 0.05) return;
+            near++; minD = Math.min(minD, d);
+            sectors[Math.floor(((Math.atan2(radial.dot(ref2), radial.dot(ref)) + Math.PI) / (2 * Math.PI)) * 12) % 12]++;
+          });
+          return { covered: sectors.filter(function(s){ return s > 0; }).length + '/12', near: near, minDist: +minD.toFixed(3) };
+        }
+        return { left: stat(b.lGrip), right: stat(b.rGrip), fitL: b.lGrip.fit, fitR: b.rGrip.fit, handleR: HANDLE_R };
+      },
+      // camera close to a hand: mode 'along' looks down the handle, 'side' looks across it
+      // from the palm side (front), 'back' from the back of the hand
+      debugLookAtHand: function(side, mode, dist){
+        var g = side === 'L' ? bones.lGrip : bones.rGrip, c = gripPoint(g);
+        var D = V(0, 1, 0).applyQuaternion(held.quaternion);
+        var q = wquat(g.hand), palmW = g.palm.clone().applyQuaternion(q).normalize();
+        var dir = mode === 'along' ? D.clone() : mode === 'back' ? palmW.clone() : palmW.clone().negate();
+        if (mode === 'side') dir = V().crossVectors(D, palmW).normalize();
+        var from = c.clone().addScaledVector(dir, dist || 0.35);
+        window.__hotpotCamOverride = { from: from.toArray(), to: c.toArray() };
+      },
+      // triangles of a hand that get stretched by the grip (edge length now vs in the bind pose)
+      debugStretch: function(side){
+        var g = side === 'L' ? bones.lGrip : bones.rGrip, m = g.mesh, geo = m.geometry, ix = geo.index, pos = geo.attributes.position;
+        var si = geo.attributes.skinIndex, sw = geo.attributes.skinWeight;
+        var inHand = {}; g.idx.forEach(function(i){ inHand[i] = 1; });
+        m.skeleton.update();
+        var cache = {}, a = V(), bnd = V(), bnd2 = V();
+        function sk(i){ if (!cache[i]){ cache[i] = V(); m.boneTransform(i, cache[i]); } return cache[i]; }
+        var bad = [], seen = {};
+        for (var f = 0; f < ix.count; f += 3){
+          var tri = [ix.getX(f), ix.getX(f + 1), ix.getX(f + 2)];
+          if (!tri.some(function(i){ return inHand[i]; })) continue;
+          for (var e = 0; e < 3; e++){
+            var p = tri[e], q = tri[(e + 1) % 3];
+            var l0 = bnd.fromBufferAttribute(pos, p).distanceTo(bnd2.fromBufferAttribute(pos, q)), l1 = sk(p).distanceTo(sk(q));
+            if (l0 > 1e-6 && l1 / l0 > 2.5){
+              [p, q].forEach(function(i){ if (seen[i]) return; seen[i] = 1;
+                bad.push({ i: i, inHand: !!inHand[i], ratio: +(l1 / l0).toFixed(1), si: [si.getX(i), si.getY(i), si.getZ(i), si.getW(i)], sw: [sw.getX(i), sw.getY(i), sw.getZ(i), sw.getW(i)].map(function(x){ return +x.toFixed(2); }) }); });
+            }
+          }
+        }
+        return { count: bad.length, sample: bad.slice(0, 12), handIdx: m.skeleton.bones.indexOf(g.hand), segs: g.segs.map(function(s){ return s.index; }) };
+      },
+      // vertices (any, not only hand ones) that end up far from where they belong: compares
+      // each vertex's skinned position with its nearest hand / forearm bone
+      debugFar: function(side){
+        var g = side === 'L' ? bones.lGrip : bones.rGrip, m = g.mesh, geo = m.geometry, pos = geo.attributes.position;
+        var si = geo.attributes.skinIndex, sw = geo.attributes.skinWeight, sk = m.skeleton;
+        sk.update();
+        var hw = wpos(g.hand), v = V(), out = [];
+        for (var i = 0; i < pos.count; i++){
+          var uses = false;
+          for (var k = 0; k < 4; k++){ var b = sk.bones[[si.getX(i), si.getY(i), si.getZ(i), si.getW(i)][k]]; if ([sw.getX(i), sw.getY(i), sw.getZ(i), sw.getW(i)][k] > 0 && (b === g.hand || g.segs.some(function(s){ return s.bone === b; }))) uses = true; }
+          if (!uses) continue;
+          m.boneTransform(i, v); v.applyMatrix4(m.matrixWorld);
+          var d = v.distanceTo(hw);
+          if (d > (+TEST.get("far") || 0.3)) out.push({ i: i, d: +d.toFixed(2), si: [si.getX(i), si.getY(i), si.getZ(i), si.getW(i)], sw: [sw.getX(i), sw.getY(i), sw.getZ(i), sw.getW(i)].map(function(x){ return +x.toFixed(2); }) });
+        }
+        return { n: out.length, sample: out.slice(0, 10), handIdx: sk.bones.indexOf(g.hand), segs: g.segs.map(function(s){ return s.index; }) };
       }
     };
   }
