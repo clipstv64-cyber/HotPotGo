@@ -730,6 +730,7 @@
     // A tool (opts.tool, e.g. the knife) is held in the right hand by its handle instead:
     //   grip  the point on its handle the fist closes around (in the tool's own frame)
     //   dir   from there toward its working end, up: the side that points up (unit vectors)
+    //   upright  it is carried standing (dir pointing up), like a jug
     //   pose  optional function(out): something else leads the tool (cutting). It fills
     //         out.pos (where the grip point is), out.dir, out.up (world) and returns true;
     //         the arm then follows the tool as far as it reaches. Otherwise the tool follows the hand.
@@ -791,7 +792,10 @@
       if (b.rS) turn(b.rS, UP, 0.35);
       if (headQ) setWorldQuat(b.neck, headQ);
       var M = wpos(b.lA).add(wpos(b.rA)).multiplyScalar(0.5);
-      if (!led){   // carried: in front of the right hip, its working end forward and a little up
+      if (!led && o.upright){   // carried upright (a jug, a shaker): in front of the right side of the chest
+        toolOut.pos.copy(M).addScaledVector(r, 0.2).addScaledVector(f, 0.4).addScaledVector(UP, -0.26);
+        toolOut.dir.copy(UP); toolOut.up.copy(f);
+      } else if (!led){   // carried: in front of the right hip, its working end forward and a little up
         toolOut.pos.copy(M).addScaledVector(r, 0.24).addScaledVector(f, 0.36).addScaledVector(UP, -0.34);
         toolOut.dir.copy(f).addScaledVector(UP, 0.35).addScaledVector(r, -0.1).normalize();
         toolOut.up.copy(UP);

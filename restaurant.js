@@ -1,8 +1,9 @@
 // Restaurant: the guests at the tables order stew. The chef fetches potatoes, carrots
 // and onions from their crates in the kitchen's pantry corner, cuts them up on the
 // chopping block with the knife (the mouse leads the knife: sideways to place it, down
-// to cut), puts the pieces into the big pot on the range and cooks the stew: one pot is
-// 20 portions. With an empty bowl from the stack
+// to cut) and puts the pieces into the big pot on the range. Broth is poured in from the
+// jug by tipping it, the heat is set at the range, the stew is stirred with the ladle so
+// it does not catch and burn, and seasoned from the shaker: one pot is 20 portions. With an empty bowl from the stack
 // he ladles a portion, carries it to the guest and serves it; the guest eats, pays and
 // tips for quick service. A guest who waits too long gives up.
 //
@@ -23,7 +24,7 @@
 
   // dishes: what goes into the pot, how many portions it gives, what a portion costs
   var RECIPES = {
-    stew: { name: 'vegetable stew', needs: { potato: 1, carrot: 1, onion: 1 }, portions: 20, cookTime: 12, price: 9 }
+    stew: { name: 'vegetable stew', needs: { potato: 1, carrot: 1, onion: 1 }, portions: 20, cookTime: 40, price: 9 }   // cookTime: seconds of simmering
   };
   var RULES = {
     startMoney: 250,          // euros in the till at the start
@@ -41,6 +42,24 @@
     itemReach: 1.9,           // ... to something lying on a work surface
     serveReach: 2.7           // ... and to a guest's chair (far enough to serve across the table from the aisle)
   };
+  // The range and what happens in the pot (see tick): the heat sets where the pot's
+  // temperature goes. It cooks from `slow` (at half speed), properly from `simmer`. From
+  // `catchAt` it catches on the bottom unless it is stirred, and then it burns.
+  var COOK = {
+    heat: ['off', 'low', 'medium', 'high'],
+    target: [20, 84, 97, 122],                 // degrees the pot goes to at each heat
+    warm: 0.16, cool: 0.08,                    // how fast (share of the difference per second)
+    slow: 80, simmer: 90, hot: 108,
+    catchAt: 86, catchTime: [[86, 26], [97, 16], [122, 6]],   // seconds without stirring until it catches, by temperature
+    burnTime: 18,                              // seconds it may catch until it is burnt
+    dry: 1.5, thick: 1.4,                      // it catches this much faster without broth / with too little
+    hotBurn: 45,                               // above `hot` it burns slowly anyway (seconds)
+    stirTurn: 0.75,                            // one full turn of the ladle loosens this much of the catching
+    brothOk: [0.85, 1.2], brothMax: 1.45, jug: 1.6,   // broth: 1 = what the recipe needs; the jug holds a little more
+    pour: 0.5,                                 // broth per second from the fully tipped jug
+    spice: 3, spiceMax: 8                      // shakes of seasoning: just right, and at most
+  };
+  var HOME = { knife: true, broth: true, spice: true };   // tools with a place of their own
   var VEG = ['potato', 'carrot', 'onion'];
   // How each vegetable is cut: `a` cuts across its length, then (turned by a quarter)
   // `b` cuts across its width. from / to: the part of its length that is cut (shares,
@@ -58,7 +77,9 @@
     onion:  { a: 'an onion', the: 'the onion', many: 'onions', cutName: 'chopped onion', carry: { half: 0.1, fwd: 0.44, drop: -0.25, grip: 0.07, back: 0, curl: 0.45 } },
     bowl:   { a: 'an empty bowl', the: 'the bowl', carry: { half: 0.17, fwd: 0.46, drop: -0.25, grip: 0.06, back: 0, curl: 0.4 } },
     stew:   { a: 'a bowl of stew', the: 'the bowl of stew', carry: { half: 0.17, fwd: 0.46, drop: -0.25, grip: 0.06, back: 0, curl: 0.4 } },
-    knife:  { a: 'the knife', the: 'the knife' }   // held in one hand (see knifeHold)
+    knife:  { a: 'the knife', the: 'the knife' },   // these three are held in one hand (see toolHold)
+    broth:  { a: 'the jug of broth', the: 'the jug of broth' },
+    spice:  { a: 'the spice shaker', the: 'the spice shaker' }
   };
   // Meshy models and parts cut out of the kitchen's own models; width (or height): size in the game
   var MODELS = {
@@ -68,6 +89,8 @@
     onion:  { file: 'models/d_onion.glb', width: 0.17, align: true },
     knife:  { file: 'models/d_knife.glb', width: 0.44, align: true },   // the cleaver from the kitchen's chopping block
     board:  { file: 'models/d_board.glb', width: 0.62 },                // ... and the block without it
+    broth:  { file: 'models/d_broth_jug.glb', height: 0.36 },
+    spice:  { file: 'models/d_spice.glb', height: 0.2 },
     bowl:   { file: 'models/d_bowl_empty.glb', width: 0.4 },
     stew:   { file: 'models/d_stew_bowl.glb', width: 0.4 },
     crate:  { file: 'models/d_crate.glb', width: 0.66 },
@@ -116,14 +139,47 @@
       items: {},                                    // id -> { id, kind, at: 'hand' | 'surface' | 'board' | 'home' | 'table', x, y, z, rot, cut: { a, b, done, q }, batch, q, guest }
       board: null,                                  // id of the vegetable on the chopping block
       knife: null,                                  // id of the knife (at 'home' beside the block, or in the hand)
+      tools: {},                                    // ids of the tools: knife, broth (the jug: item.left = what is in it), spice
       carry: null,                                  // id of the item in the chef's hands
       crates: { potato: RULES.crateStock, carrot: RULES.crateStock, onion: RULES.crateStock },
       bowls: RULES.bowls,                           // clean bowls on the stack
-      pot: { phase: 'empty', has: { potato: 0, carrot: 0, onion: 0 }, cut: {}, qs: [], quality: 1, t: 0, portions: 0, batch: 0 },   // 'empty' | 'filling' | 'cooking' | 'ready'
+      // the pot: 'empty' | 'filling' (things are put in, it cooks) | 'ready' | 'burnt'
+      pot: { phase: 'empty', has: { potato: 0, carrot: 0, onion: 0 }, cut: {}, qs: [], broth: 0, spice: 0,
+             heat: 0, temp: 20, cooked: 0, stick: 0, burn: 0, quality: 1, portions: 0, batch: 0 },
       guests: [],                                   // { id, phase, t, patience, pay, item }; phase: 'idle' | 'waiting' | 'eating' | 'paid' | 'angry'
+      open: false,                                  // guests order once the first pot of stew is ready (opening the restaurant comes with the day)
       nextOrder: RULES.firstOrder
     };
-    (function(){ var k = { id: state.nextId++, kind: 'knife', at: 'home' }; state.items[k.id] = k; state.knife = k.id; })();
+    ['knife', 'broth', 'spice'].forEach(function(kind){
+      var o = { id: state.nextId++, kind: kind, at: 'home' };
+      if (kind === 'broth') o.left = COOK.jug;
+      state.items[o.id] = o; state.tools[kind] = o.id;
+    });
+    state.knife = state.tools.knife;
+    function emptyPot(){
+      var pot = state.pot;
+      VEG.forEach(function(k){ pot.has[k] = 0; });
+      pot.cut = {}; pot.qs = []; pot.broth = 0; pot.spice = 0; pot.cooked = 0; pot.stick = 0; pot.burn = 0; pot.portions = 0; pot.phase = 'empty';
+    }
+    function inPot(){ return state.pot.broth > 0.02 || VEG.some(function(k){ return state.pot.has[k] > 0; }); }
+    // how good the stew is: how well the vegetables were cut, the right amount of broth
+    // and of seasoning, and whether it burnt
+    function potQuality(){
+      var pot = state.pot, q = pot.qs.length ? pot.qs.reduce(function(x, y){ return x + y; }, 0) / pot.qs.length : 1;
+      var bf = pot.broth < COOK.brothOk[0] ? 0.8 : pot.broth > COOK.brothOk[1] ? 0.85 : 1;
+      var d = Math.abs(pot.spice - COOK.spice), sf = d === 0 ? 1 : d === 1 ? 0.92 : d === 2 ? 0.8 : pot.spice < COOK.spice ? 0.7 : 0.6;
+      return clamp(q * bf * sf * (1 - 0.8 * pot.burn));
+    }
+    // how fast it catches on the bottom (per second) at a temperature
+    function catchRate(temp){
+      var T0 = COOK.catchTime;
+      if (temp < COOK.catchAt) return 0;
+      for (var i = 1; i < T0.length; i++) if (temp <= T0[i][0]){
+        var u = (temp - T0[i - 1][0]) / (T0[i][0] - T0[i - 1][0]);
+        return 1 / (T0[i - 1][1] + (T0[i][1] - T0[i - 1][1]) * u);
+      }
+      return 1 / T0[T0.length - 1][1];
+    }
     function guest(id){ for (var i = 0; i < state.guests.length; i++) if (state.guests[i].id === id) return state.guests[i]; return null; }
     function carried(){ return state.carry ? state.items[state.carry] : null; }
     function isVeg(kind){ return VEG.indexOf(kind) >= 0; }
@@ -156,7 +212,7 @@
           if (!it || it.kind !== 'bowl') return false;
           state.bowls++; dropItem(it); return true;
         case 'putDown':    // onto a work surface: arg = { x, y, z }
-          if (!it || !arg || it.kind === 'knife') return false;
+          if (!it || !arg || HOME[it.kind]) return false;
           it.at = 'surface'; it.x = arg.x; it.y = arg.y; it.z = arg.z; it.rot = arg.rot || 0; state.carry = null; return true;
         case 'pickUp':     // arg = item id
           g = state.items[arg];
@@ -166,9 +222,11 @@
             state.board = null;
           }
           g.at = 'hand'; state.carry = g.id; return true;
-        case 'putKnife':   // back to its place beside the block
-          if (!it || it.kind !== 'knife') return false;
-          it.at = 'home'; state.carry = null; return true;
+        case 'putKnife': case 'putHome':   // a tool back to its place (the jug is filled up again there)
+          if (!it || !HOME[it.kind]) return false;
+          it.at = 'home'; state.carry = null;
+          if (it.kind === 'broth') it.left = COOK.jug;
+          return true;
         case 'toBoard':    // a vegetable onto the chopping block: arg = which way it lies
           if (!it || !isVeg(it.kind) || state.board) return false;
           it.at = 'board'; it.rot = +arg || 0; state.board = it.id; state.carry = null; return true;
@@ -194,15 +252,27 @@
         case 'addToPot':
           if (!it || !isVeg(it.kind) || !isCut(it) || (pot.phase !== 'empty' && pot.phase !== 'filling') || pot.has[it.kind] >= RECIPE.needs[it.kind]) return false;
           pot.has[it.kind]++; pot.cut[it.kind] = it.cut; pot.qs.push(it.cut.q); dropItem(it); pot.phase = 'filling';
-          if (!missing().length){   // everything is in: it starts to cook
-            pot.phase = 'cooking'; pot.t = 0;
-            pot.quality = pot.qs.reduce(function(x, y){ return x + y; }, 0) / pot.qs.length;   // how well the vegetables were cut
-          }
           return true;
+        case 'pour':       // broth from the jug in his hand: arg = how much
+          if (!it || it.kind !== 'broth' || !(arg > 0) || (pot.phase !== 'empty' && pot.phase !== 'filling')) return false;
+          var amount = Math.min(arg, it.left, COOK.brothMax - pot.broth);
+          if (amount <= 0) return false;
+          it.left -= amount; pot.broth += amount; pot.phase = 'filling'; return true;
+        case 'season':     // one shake from the shaker in his hand
+          if (!it || it.kind !== 'spice' || !inPot() || (pot.phase !== 'filling' && pot.phase !== 'ready') || pot.spice >= COOK.spiceMax) return false;
+          pot.spice++; return true;
+        case 'stir':       // with the ladle: arg = how far it went round (radians)
+          if (it || !(arg > 0) || !inPot() || pot.phase === 'burnt') return false;
+          pot.stick = Math.max(0, pot.stick - arg / (Math.PI * 2) * COOK.stirTurn); return true;
+        case 'heat':       // the range: one step up, after 'high' it is off again (or arg = the level)
+          pot.heat = typeof arg === 'number' ? clamp(Math.round(arg), 0, 3) : (pot.heat + 1) % COOK.heat.length; return true;
+        case 'dumpPot':    // throw away what burnt
+          if (it || pot.phase !== 'burnt') return false;
+          emptyPot(); return true;
         case 'ladle':      // one portion from the pot into the empty bowl in his hands
           if (!it || it.kind !== 'bowl' || pot.phase !== 'ready' || pot.portions <= 0) return false;
           it.kind = 'stew'; it.batch = pot.batch; it.q = pot.quality;
-          if (--pot.portions <= 0){ pot.portions = 0; pot.phase = 'empty'; VEG.forEach(function(k){ pot.has[k] = 0; }); pot.cut = {}; pot.qs = []; }
+          if (--pot.portions <= 0) emptyPot();
           return true;
         case 'pourBack':
           if (!it || it.kind !== 'stew' || pot.phase !== 'ready' || it.batch !== pot.batch || pot.portions >= RECIPE.portions) return false;
@@ -220,11 +290,25 @@
     }
     // what happens by itself as time passes
     function tick(dt){
-      var pot = state.pot;
-      if (pot.phase === 'cooking'){
-        pot.t += dt;
-        if (pot.t >= RECIPE.cookTime){ pot.phase = 'ready'; pot.portions = RECIPE.portions; pot.batch = state.nextId++; }
+      var pot = state.pot, C = COOK, target = C.target[pot.heat];
+      // the temperature follows the heat
+      pot.temp += (target - pot.temp) * Math.min(1, (target > pot.temp ? C.warm : C.cool) * dt);
+      if (pot.phase === 'filling' || pot.phase === 'ready'){
+        // it cooks once everything is in and it is hot enough
+        if (pot.phase === 'filling' && !missing().length && pot.broth >= 0.4 && pot.temp >= C.slow){
+          pot.cooked += dt / RECIPE.cookTime * (pot.temp >= C.hot ? 1.25 : pot.temp >= C.simmer ? 1 : 0.5);
+          if (pot.cooked >= 1){ pot.cooked = 1; pot.phase = 'ready'; pot.portions = RECIPE.portions; pot.batch = state.nextId++; state.open = true; }
+        }
+        // unstirred it catches on the bottom (sooner with too little broth), then it burns
+        if (VEG.some(function(k){ return pot.has[k] > 0; })){
+          var rate = catchRate(pot.temp) * (pot.broth < 0.05 ? C.dry : pot.broth < C.brothOk[0] ? C.thick : 1) * (pot.phase === 'ready' ? 0.5 : 1);
+          pot.stick = Math.min(1, pot.stick + rate * dt);
+          if (pot.stick >= 1) pot.burn += dt / C.burnTime;
+          if (pot.temp > C.hot) pot.burn += dt / C.hotBurn;
+          if (pot.burn >= 1){ pot.burn = 1; pot.phase = 'burnt'; pot.portions = 0; }
+        }
       }
+      pot.quality = potQuality();
       var open = 0, idle = [];
       state.guests.forEach(function(g){
         if (g.phase === 'waiting'){
@@ -246,7 +330,7 @@
           if (g.rest <= 0) idle.push(g);
         }
       });
-      if (!state.guests.length || !place.pot) return;
+      if (!state.guests.length || !place.pot || !state.open) return;
       state.nextOrder -= dt;
       if (state.nextOrder <= 0){
         if (idle.length && open < RULES.maxOpen) act('order', idle[Math.floor(Math.random() * idle.length)].id);
@@ -304,6 +388,9 @@
             md.range = { a: [x0 + plan.from * md.size.x, x0 + plan.to * md.size.x], b: [z0 + 0.07 * md.size.z, z0 + 0.93 * md.size.z] };
           }
           if (key === 'knife') md.tool = measureKnife(md);
+          if (key === 'broth') md.tool = measureJug(md);
+          if (key === 'spice') md.tool = { grip: V(0, md.size.y * 0.45, 0), dir: V(0, 1, 0), up: V(1, 0, 0) };
+          if (key === 'ladle') md.tool = { grip: V(0, md.size.y * 0.88, 0), dir: V(0, -1, 0), up: V(1, 0, 0) };   // held near the top, the bowl down
           md.obj = holder;
         }, function(e){ console.error('Could not load ' + md.file + ':', e); }); })
         .catch(function(e){ console.error('Could not load ' + md.file + ':', e); });
@@ -358,6 +445,28 @@
       }
       if (lo[0] > hi[0]) return { cu: 0, cy: md.size.y / 2, ru: 0.001, ry: 0.001 };
       return { cu: (lo[0] + hi[0]) / 2, cy: (lo[1] + hi[1]) / 2, ru: (hi[0] - lo[0]) / 2 * 0.97, ry: (hi[1] - lo[1]) / 2 * 0.97 };
+    }
+    // the jug stands upright: its handle is where it reaches out furthest from its axis,
+    // its spout is at the top on the other side
+    function measureJug(md){
+      var pts = md.pts, n = pts.length / 3, H = md.size.y, ax = 0, az = 0, c = 0, i, x, y, z, d;
+      for (i = 0; i < n; i++) if (pts[i * 3 + 1] < H * 0.15){ ax += pts[i * 3]; az += pts[i * 3 + 2]; c++; }   // its axis: the middle of its base
+      ax /= Math.max(1, c); az /= Math.max(1, c);
+      var far = 0, hx = 1, hz = 0;
+      for (i = 0; i < n; i++){
+        y = pts[i * 3 + 1]; if (y < H * 0.3 || y > H * 0.75) continue;
+        x = pts[i * 3] - ax; z = pts[i * 3 + 2] - az; d = Math.hypot(x, z);
+        if (d > far){ far = d; hx = x / d; hz = z / d; }
+      }
+      var spout = V(ax, H, az), best = -1e9, body = 0;
+      for (i = 0; i < n; i++){
+        x = pts[i * 3] - ax; z = pts[i * 3 + 2] - az; y = pts[i * 3 + 1];
+        var t = -(x * hx + z * hz);
+        if (y > H * 0.82 && t > best){ best = t; spout.set(pts[i * 3], y, pts[i * 3 + 2]); }
+        if (y < H * 0.5 && t > body) body = t;   // the body's radius, measured away from the handle
+      }
+      return { grip: V(ax + hx * far * 0.86, H * 0.52, az + hz * far * 0.86), dir: V(0, 1, 0), up: V(-hx, 0, -hz),   // up: the way the spout points
+               handle: far, body: body, spout: spout };
     }
     // the knife lies along X, handle at -X: where to hold it, where its blade and its edge are
     function measureKnife(md){
@@ -512,24 +621,58 @@
       bowlIcon(g, 64, 72, 0.7);
       s.tex.needsUpdate = true;
     }
-    // the pot: a ring filling up while it cooks, then a bowl with the portions left
-    function drawPot(s, pot){
-      var key = pot.phase === 'cooking' ? 'c' + Math.round(pot.t / RECIPE.cookTime * 40) : 'r' + pot.portions;
-      if (s.drawn === key) return; s.drawn = key;
-      var g = s.g; g.clearRect(0, 0, 128, 128);
-      g.beginPath(); g.arc(64, 64, 54, 0, Math.PI * 2); g.fillStyle = 'rgba(255,252,244,.94)'; g.fill();
-      g.lineWidth = 3; g.strokeStyle = 'rgba(40,28,20,.5)'; g.stroke();
-      if (pot.phase === 'cooking'){
-        g.lineWidth = 12; g.strokeStyle = 'rgba(60,45,35,.16)'; g.beginPath(); g.arc(64, 64, 38, 0, Math.PI * 2); g.stroke();
-        g.strokeStyle = '#d9862a'; g.lineCap = 'round';
-        g.beginPath(); g.arc(64, 64, 38, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * clamp(pot.t / RECIPE.cookTime)); g.stroke();
-        bowlIcon(g, 64, 70, 0.62);
-      } else {
-        bowlIcon(g, 44, 72, 0.74);
-        g.fillStyle = '#3a2a20'; g.font = '700 27px system-ui,"Segoe UI",sans-serif'; g.textAlign = 'center';
-        g.fillText('×' + pot.portions, 93, 66);
+    // The pot's panel: heat and temperature (with the range it cooks in), what is still
+    // missing or how far it has cooked, when to stir, how much it is seasoned, and the
+    // portions left when it is done.
+    function drawPanel(pn, pot, blink){
+      var need = missing().map(function(k){ return KINDS[k].many; });
+      if (pot.broth < COOK.brothOk[0] - 0.02) need.push('broth');
+      var warn = pot.stick >= 1 ? 2 : pot.stick >= 0.6 ? 1 : 0;
+      var key = [pot.phase, pot.heat, Math.round(pot.temp), Math.round(pot.cooked * 60), warn, warn === 2 && blink ? 1 : 0, pot.spice, pot.portions, need.join(), Math.round(pot.burn * 10)].join('|');
+      if (pn.drawn === key) return; pn.drawn = key;
+      var g = pn.g, W = 256, H = 168;
+      g.clearRect(0, 0, W, H);
+      g.fillStyle = 'rgba(255,252,244,.95)'; g.strokeStyle = 'rgba(40,28,20,.5)'; g.lineWidth = 3;
+      g.beginPath(); g.moveTo(16, 3); g.arcTo(W - 3, 3, W - 3, H - 3, 14); g.arcTo(W - 3, H - 3, 3, H - 3, 14); g.arcTo(3, H - 3, 3, 3, 14); g.arcTo(3, 3, W - 3, 3, 14); g.closePath(); g.fill(); g.stroke();
+      g.textBaseline = 'middle';
+      // heat and temperature
+      g.font = '700 21px system-ui,"Segoe UI",sans-serif'; g.fillStyle = '#3a2a20'; g.textAlign = 'left';
+      g.fillText('Heat: ' + COOK.heat[pot.heat], 16, 24);
+      g.textAlign = 'right'; g.fillText(Math.round(pot.temp) + '\u00b0', W - 16, 24);
+      // the thermometer: too cool, slow, simmering (good), too hot
+      var x0 = 16, x1 = W - 16, t0 = 20, t1 = 125, by = 42, bh = 13;
+      function tx(t){ return x0 + (x1 - x0) * clamp((t - t0) / (t1 - t0)); }
+      [[t0, COOK.slow, '#c3ccd2'], [COOK.slow, COOK.simmer, '#e6c34a'], [COOK.simmer, COOK.hot, '#62a646'], [COOK.hot, t1, '#cf4a32']].forEach(function(z){
+        g.fillStyle = z[2]; g.fillRect(tx(z[0]), by, tx(z[1]) - tx(z[0]), bh);
+      });
+      var mx = tx(pot.temp);
+      g.fillStyle = '#2a1d15'; g.beginPath(); g.moveTo(mx, by + bh + 2); g.lineTo(mx - 7, by + bh + 13); g.lineTo(mx + 7, by + bh + 13); g.closePath(); g.fill();
+      g.fillRect(mx - 1.5, by - 2, 3, bh + 4);
+      // what is going on
+      g.textAlign = 'left'; g.font = '600 18px system-ui,"Segoe UI",sans-serif'; g.fillStyle = '#3a2a20';
+      if (pot.phase === 'burnt'){ g.fillStyle = '#b3321f'; g.font = '800 24px system-ui,"Segoe UI",sans-serif'; g.fillText('BURNT', 16, 96); }
+      else if (pot.phase === 'ready'){ g.font = '800 23px system-ui,"Segoe UI",sans-serif'; g.fillStyle = '#3f7d2c'; g.fillText('READY  \u00d7' + pot.portions, 16, 96); }
+      else if (need.length){
+        g.fillText('Needs:', 16, 88); g.font = '500 16px system-ui,"Segoe UI",sans-serif';
+        g.fillText(need.join(', '), 16, 109);
+      } else {   // cooking: how far it is
+        g.fillText(pot.temp < COOK.slow ? 'Too cool to cook' : 'Cooking', 16, 86);
+        g.fillStyle = 'rgba(60,45,35,.16)'; g.fillRect(16, 100, W - 32, 12);
+        g.fillStyle = '#d9862a'; g.fillRect(16, 100, (W - 32) * clamp(pot.cooked), 12);
       }
-      s.tex.needsUpdate = true;
+      // seasoning: a dot per shake, the right amount marked
+      var sy = 142;
+      for (var i = 0; i < 6; i++){
+        g.beginPath(); g.arc(24 + i * 19, sy, 6, 0, Math.PI * 2);
+        g.fillStyle = i < pot.spice ? (pot.spice > COOK.spice + 1 ? '#cf4a32' : '#7a5a2a') : 'rgba(60,45,35,.14)'; g.fill();
+      }
+      g.strokeStyle = '#3f7d2c'; g.lineWidth = 2.5; g.beginPath(); g.arc(24 + (COOK.spice - 1) * 19, sy, 9.5, 0, Math.PI * 2); g.stroke();
+      // stir!
+      if (warn && pot.phase !== 'burnt' && !(warn === 2 && blink)){
+        g.textAlign = 'right'; g.font = '800 22px system-ui,"Segoe UI",sans-serif'; g.fillStyle = warn === 2 ? '#cf4a32' : '#d9862a';
+        g.fillText(pot.broth < 0.05 ? 'ADD BROTH!' : 'STIR!', W - 16, sy);
+      }
+      pn.tex.needsUpdate = true;
     }
     // "+€11" floating up from a table
     var pops = [];
@@ -555,7 +698,21 @@
       var p = new T.Sprite(new T.SpriteMaterial({ map: puffTex, transparent: true, depthWrite: false, opacity: 0 }));
       p.visible = false; root.add(p); puffs.push({ sp: p, t: i / 8, dx: rnd(-1, 1), dz: rnd(-1, 1) });
     }
-    var potSign = sign(0.36);
+    var panel = (function(){
+      var cv = document.createElement('canvas'); cv.width = 256; cv.height = 168;
+      var tex = new T.CanvasTexture(cv); tex.encoding = T.sRGBEncoding;
+      var sp = new T.Sprite(new T.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+      sp.scale.set(0.58, 0.38, 1); sp.visible = false; sp.renderOrder = 6; root.add(sp);
+      return { sp: sp, g: cv.getContext('2d'), tex: tex, drawn: '' };
+    })();
+    // flames under the pot
+    var flameTex = (function(){
+      var cv = document.createElement('canvas'); cv.width = 32; cv.height = 64;
+      var g = cv.getContext('2d'), gr = g.createLinearGradient(0, 64, 0, 0);
+      gr.addColorStop(0, 'rgba(80,140,255,.95)'); gr.addColorStop(0.45, 'rgba(120,190,255,.8)'); gr.addColorStop(0.8, 'rgba(255,190,90,.55)'); gr.addColorStop(1, 'rgba(255,170,60,0)');
+      g.fillStyle = gr; g.beginPath(); g.moveTo(16, 0); g.bezierCurveTo(30, 30, 30, 52, 16, 64); g.bezierCurveTo(2, 52, 2, 30, 16, 0); g.fill();
+      return new T.CanvasTexture(cv);
+    })();
     // the stew in the pot: a glossy surface with bits of carrot, potato and onion
     var stewTex = (function(){
       var cv = document.createElement('canvas'); cv.width = cv.height = 256;
@@ -578,7 +735,8 @@
     // ---------- the places: crates in the storeroom, pot on the range, bowls on the island ------
     // built once the models and the kitchen are there
     var place = { pot: null, crates: {}, stacks: null, board: null, knifeHome: null };
-    var knifeHold = null;   // how the knife is held (see gameplay.js: a tool)
+    var knifeHold = null, toolHold = {};   // how the tools are held (see gameplay.js: a tool)
+    var STEW_COL = new T.Color(0x9a938c), BURNT_COL = new T.Color(0x1d1612);
     var CRATE_GRID = [[-0.19, -0.075], [0, -0.075], [0.19, -0.075], [-0.19, 0.085], [0, 0.085], [0.19, 0.085]];
     function buildPlaces(){
       var k = ctx.getKitchen();
@@ -589,8 +747,18 @@
       var bo = instance('board'); bo.position.copy(k.board.pos); bo.rotation.y = 0.6; root.add(bo);
       place.board = { obj: bo, r: MODELS.board.size.x / 2, pos: V(k.board.pos.x, k.board.pos.y + MODELS.board.size.y, k.board.pos.z) };
       place.knifeHome = V(k.board.pos.x, k.board.pos.y, k.board.pos.z - place.board.r - 0.17);
-      var kt = MODELS.knife.tool;
-      knifeHold = { tool: true, grip: kt.grip, dir: kt.dir, up: kt.up, lean: 0.34, pose: knifePose };
+      // where the tools lie: the knife beside the block, jug and shaker on the range beside the pot
+      var jt = MODELS.broth.tool;
+      place.home = { knife: { pos: place.knifeHome, rot: 0.25 },
+                     broth: { pos: V(k.potAt.x - 0.03, k.potAt.y, k.potAt.z + 0.8), rot: Math.atan2(jt.up.z, jt.up.x) },   // its handle toward the aisle
+                     spice: { pos: V(k.potAt.x - 0.3, k.potAt.y, k.potAt.z + 0.53), rot: 0.4 } };
+      function holdOf(kind, pose, more){
+        var t = MODELS[kind].tool, o = { tool: true, grip: t.grip, dir: t.dir, up: t.up, lean: 0.3, pose: pose };
+        Object.keys(more || {}).forEach(function(key){ o[key] = more[key]; });
+        return o;
+      }
+      knifeHold = holdOf('knife', knifePose, { lean: 0.34 });
+      toolHold = { knife: knifeHold, broth: holdOf('broth', jugPose, { upright: true }), spice: holdOf('spice', spicePose, { upright: true }), ladle: holdOf('ladle', ladlePose) };
       // the pantry corner: three crates side by side at the kitchen's back wall, between
       // the door to the back rooms and the side counter, right beside the range
       var cs = MODELS.crate.size, wallZ = -10;
@@ -620,7 +788,23 @@
       pg.position.copy(k.potAt); pg.add(pm); root.add(pg);
       var inner = size.x * 0.37;    // the pot's inside radius (measured on the model; its width includes the handles)
       var stew = new T.Mesh(new T.CircleGeometry(inner, 40), new T.MeshStandardMaterial({ map: stewTex, color: 0x9a938c, roughness: 0.62, metalness: 0 }));
-      stew.rotation.x = -Math.PI / 2; stew.visible = false; stew.receiveShadow = true; pg.add(stew);
+      stew.rotation.x = -Math.PI / 2; stew.visible = false; stew.receiveShadow = true; stew.material.transparent = true; pg.add(stew);
+      // the broth before it has turned into stew, the line it should reach, the seasoning on top
+      var liquid = new T.Mesh(new T.CircleGeometry(inner, 40), new T.MeshStandardMaterial({ color: 0x9a6a16, roughness: 0.6, metalness: 0, transparent: true, opacity: 0.9 }));
+      liquid.rotation.x = -Math.PI / 2; liquid.visible = false; liquid.receiveShadow = true; pg.add(liquid);
+      var line = new T.Mesh(new T.TorusGeometry(inner * 0.985, 0.004, 6, 56), new T.MeshBasicMaterial({ color: 0xfff1c4 }));
+      line.rotation.x = Math.PI / 2; line.visible = false; pg.add(line);
+      var scv = document.createElement('canvas'); scv.width = scv.height = 128;
+      var stex = new T.CanvasTexture(scv);
+      var specks = new T.Mesh(new T.CircleGeometry(inner * 0.96, 32), new T.MeshBasicMaterial({ map: stex, transparent: true, depthWrite: false }));
+      specks.rotation.x = -Math.PI / 2; specks.visible = false; pg.add(specks);
+      var flames = [];
+      for (var fi = 0; fi < 10; fi++){
+        var fs2 = new T.Sprite(new T.SpriteMaterial({ map: flameTex, transparent: true, depthWrite: false }));
+        var fa = fi / 10 * Math.PI * 2;
+        fs2.position.set(Math.cos(fa) * size.x * 0.415, 0, Math.sin(fa) * size.x * 0.415); fs2.visible = false;   // just outside the pot's wall
+        pg.add(fs2); flames.push(fs2);
+      }
       var veg = {};
       VEG.forEach(function(kind, i){
         var v = new T.Group(), a = i * 2.1;   // filled with the cut pieces when they are put in
@@ -629,6 +813,15 @@
       });
       var ladle = instance('ladle'); pg.add(ladle);
       place.pot = { grp: pg, model: pm, pos: pg.position, size: size, inner: inner, stew: stew, veg: veg, ladle: ladle,
+                    liquid: liquid, line: line, specks: { mesh: specks, g: scv.getContext('2d'), tex: stex, drawn: -1 }, flames: flames,
+                    floor: size.y * 0.24, level: size.y * 0.24, spin: 0,
+                    ladleTool: instance('ladle'),                                    // the same ladle in the chef's hand while he stirs
+                    knob: V(k.potAt.x - 0.6, 0, k.potAt.z),                          // the range's knobs are at its front
+                    stream: (function(){   // the broth running from the jug
+                      var geo = new T.CylinderGeometry(0.011, 0.016, 1, 8); geo.translate(0, -0.5, 0);
+                      var m = new T.Mesh(geo, new T.MeshStandardMaterial({ color: 0x9a6a16, roughness: 0.4, transparent: true, opacity: 0.9 }));
+                      m.visible = false; root.add(m); return m;
+                    })(),
                     low: size.y * 0.27, high: size.y * 0.8,                         // the stew's level: nearly empty .. full (the inside floor is at 0.22)
                     rest: { x: inner * 0.3, y: size.y * 0.24, z: -inner * 0.35, tilt: 0.42 } };   // the ladle leaning in the pot
     }
@@ -747,6 +940,19 @@
     }
     // the mouse while cutting (called from index.html; true = the movement was used here)
     function mouse(dx, dy){
+      if (pouring){ pouring.tilt = clamp(pouring.tilt + dy * 0.0045); return true; }   // pulled down it tips further
+      if (stirring){
+        var S = stirring, P = place.pot, k = 0.0011, lim = P.inner * 0.7;
+        var r0 = Math.hypot(S.x, S.z), a0 = Math.atan2(S.z, S.x);
+        S.x += (S.r.x * dx - S.f.x * dy) * k; S.z += (S.r.z * dx - S.f.z * dy) * k;   // sideways and away from him / toward him
+        var r1 = Math.hypot(S.x, S.z);
+        if (r1 > lim){ S.x *= lim / r1; S.z *= lim / r1; r1 = lim; }
+        if (r0 > P.inner * 0.15 && r1 > P.inner * 0.15){   // going round the middle is what stirs
+          var da = angle(Math.atan2(S.z, S.x) - a0);
+          if (Math.abs(da) > 1e-4 && act('stir', Math.abs(da))) P.spin += da * 3.2;
+        }
+        return true;
+      }
       if (!cutting) return false;
       var o = state.items[state.board];
       if (!o || cutting.cool > 0 || cutting.end >= 0 || !cutAxis(o)) return true;
@@ -757,7 +963,7 @@
       if (cutting.h <= 0.03 && cutting.armed){ cutting.armed = false; chop(); }
       return true;
     }
-    window.addEventListener('mousedown', function(e){ if (e.button === 2 && cutting) stopCutting(); });
+    window.addEventListener('mousedown', function(e){ if (e.button === 2){ if (cutting) stopCutting(); if (pouring) stopPour(); if (stirring) stopStir(); } });
     // where the knife is while it is led (see knifeHold): its blade above the cut, the handle toward the chef
     function knifePose(out){
       if (!cutting || !place.board) return false;
@@ -768,6 +974,70 @@
       out.up.set(0, 1, 0);
       return true;
     }
+    // ---------- at the pot: pouring broth, stirring, seasoning ------------------------------------
+    // Pouring: pulling the mouse down tips the jug, the further the faster it runs.
+    // Stirring: the mouse leads the ladle round in the pot. Seasoning: a shake per click.
+    var pouring = null;    // { look, f, tilt (0..1), flow }
+    var stirring = null;   // { look, f, r, x, z (where the ladle is in the pot) }
+    var shake = null;      // { t (0..1), f }
+    function facePot(){
+      var chef = ctx.getChef(), P = place.pot.pos, f = V(P.x - chef.position.x, 0, P.z - chef.position.z).normalize(), th = Math.atan2(f.x, f.z);
+      return { look: th, f: f, r: V(-Math.cos(th), 0, Math.sin(th)) };
+    }
+    function startPour(){ if (!pouring){ pouring = facePot(); pouring.tilt = 0; pouring.flow = 0; } }
+    function stopPour(){ pouring = null; }
+    function startStir(){
+      if (stirring || carried()) return;
+      stirring = facePot(); stirring.x = -stirring.f.x * place.pot.inner * 0.45; stirring.z = -stirring.f.z * place.pot.inner * 0.45;
+      play.setCarry(place.pot.ladleTool, toolHold.ladle); shown.carry = 'tool';
+    }
+    function stopStir(){ if (!stirring) return; stirring = null; play.setCarry(null); shown.carry = null; }
+    function seasonOnce(){
+      if (!act('season')) return;
+      shake = facePot(); shake.t = 0;
+      shakeSound();
+    }
+    // where the tools are while they are led (see toolHold)
+    function jugPose(out){
+      if (!pouring) return false;
+      // it stands to the right of the pot (so the pot stays in view) and tips over its rim to the left
+      var P = place.pot, jt = MODELS.broth.tool, a = pouring.tilt * 1.45, f = pouring.f, r = pouring.r;
+      var to = V(-r.x * 0.96 + f.x * 0.28, 0, -r.z * 0.96 + f.z * 0.28).normalize();   // the way it pours: toward the pot's middle
+      out.pos.copy(P.pos).addScaledVector(to, -(P.inner * 0.42 + jt.body * 0.6 + jt.handle)); out.pos.y = P.pos.y + P.size.y + 0.07 + jt.grip.y;
+      out.dir.set(0, Math.cos(a), 0).addScaledVector(to, Math.sin(a));
+      out.up.copy(to).multiplyScalar(Math.cos(a)); out.up.y = -Math.sin(a);   // the spout points to the pot and down
+      return true;
+    }
+    function ladlePose(out){
+      if (!stirring) return false;
+      var P = place.pot, S = stirring, tip = V(P.pos.x + S.x, P.pos.y + P.level + 0.012, P.pos.z + S.z);
+      var back = V(-S.f.x * 0.3, 0.5, -S.f.z * 0.3).normalize();              // the handle comes up toward him
+      out.pos.copy(tip).addScaledVector(back, MODELS.ladle.size.y * 0.88);
+      out.dir.copy(back).negate(); out.up.copy(S.r);
+      return true;
+    }
+    function spicePose(out){
+      if (!shake) return false;
+      var P = place.pot, f = shake.f, r = shake.r;
+      out.pos.copy(P.pos).addScaledVector(r, P.inner * 0.45).addScaledVector(f, -P.inner * 0.1); out.pos.y = P.pos.y + P.size.y + 0.2 + 0.035 * Math.sin(shake.t * Math.PI * 4);
+      out.dir.set(-r.x * 0.6, -0.8, -r.z * 0.6).normalize();                  // upside down over the pot, from the right
+      out.up.copy(shake.r);
+      return true;
+    }
+    function shakeSound(){
+      try {
+        audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+        for (var b = 0; b < 2; b++){
+          var t = audio.currentTime + b * 0.11, n = Math.floor(audio.sampleRate * 0.05), buf = audio.createBuffer(1, n, audio.sampleRate), d = buf.getChannelData(0);
+          for (var i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 2);
+          var src = audio.createBufferSource(); src.buffer = buf;
+          var flt = audio.createBiquadFilter(); flt.type = 'highpass'; flt.frequency.value = 4200;
+          var gn = audio.createGain(); gn.gain.value = 0.22;
+          src.connect(flt); flt.connect(gn); gn.connect(audio.destination); src.start(t);
+        }
+      } catch (e) { /* no sound then */ }
+    }
+
     // a short chop: the blade going through, then hitting the wood
     var audio = null;
     function chopSound(ok){
@@ -792,6 +1062,8 @@
       var out = [], it = carried(), pot = state.pot;
       if (!place.pot) return out;
       if (cutting) return [{ pos: place.board.pos, reach: 9, key: 'E', label: 'Stop cutting', use: stopCutting }];
+      if (pouring) return [{ pos: place.pot.pos, reach: 9, key: 'E', label: 'Stop pouring', use: stopPour }];
+      if (stirring) return [{ pos: place.pot.pos, reach: 9, key: 'E', label: 'Stop stirring', use: stopStir }];
       function add(e){ out.push(e); }
       var free = !it && hands.handsFree;
       // the crates
@@ -838,29 +1110,52 @@
             : { pos: B.pos, reach: RULES.reach, key: 'F', label: 'Pick up ' + nameOf(onBoard, 'the'), use: function(){ act('pickUp', onBoard.id); }, obj: see(onBoard) });
         }
       }
-      if (it && it.kind !== 'knife' && aim && !scoop){
+      // the jug of broth and the spice shaker on the range
+      ['broth', 'spice'].forEach(function(kind){
+        var o = state.items[state.tools[kind]], at = place.home[kind].pos;
+        if (it === o) add({ pos: at, reach: RULES.reach, key: 'F', label: 'Put ' + KINDS[kind].the + ' back', use: function(){ act('putHome'); } });
+        else if (free && o.at === 'home') add({ pos: at, reach: RULES.reach, key: 'F', label: 'Take ' + KINDS[kind].the, use: function(){ act('pickUp', o.id); }, obj: see(o) });
+      });
+      if (it && !HOME[it.kind] && aim && !scoop){
         if (aim.free) add({ pos: V(aim.x, 0, aim.z), reach: 2.4, key: 'F', bias: 0.35, label: 'Put ' + nameOf(it, 'the') + ' down', use: function(){ if (aim && aim.free) act('putDown', aim); } });
         else add({ pos: V(aim.x, 0, aim.z), reach: 2.4, key: 'F', bias: 0.35, label: 'No room here' });
       }
-      // the pot
-      var pe = { pos: place.pot.pos, reach: RULES.reach, key: 'E' }, cooking = pot.phase === 'cooking', ready = pot.phase === 'ready';
+      // the pot: E puts things in and ladles, the left button works with the tool in hand
+      // (jug, shaker) or, with free hands, stirs with the ladle
+      var pe = { pos: place.pot.pos, reach: RULES.reach, key: 'E' }, ready = pot.phase === 'ready', burnt = pot.phase === 'burnt', some = inPot();
       if (scoop) pe = null;
-      else if (it && isVeg(it.kind)){
+      else if (burnt){
+        if (free){ pe.label = 'Throw the burnt stew away'; pe.use = function(){ act('dumpPot'); }; pe.obj = place.pot.model; }
+        else pe.label = 'The stew is burnt';
+      } else if (it && isVeg(it.kind)){
         if (!isCut(it)) pe.label = 'Cut ' + KINDS[it.kind].the + ' up first';
-        else if (cooking) pe.label = 'The stew is already cooking';
-        else if (ready) pe.label = 'There is still stew in the pot';
+        else if (ready) pe.label = 'The stew is done already';
         else if (pot.has[it.kind] >= RECIPE.needs[it.kind]) pe.label = 'There is enough ' + it.kind + ' in the pot';
         else { pe.label = 'Put ' + nameOf(it, 'the') + ' in the pot'; pe.use = function(){ act('addToPot'); }; pe.obj = place.pot.model; }
       } else if (it && it.kind === 'bowl'){
         if (ready){ pe.label = 'Ladle a portion'; pe.use = function(){ if (act('ladle')) scoop = { t: 0, item: it.id }; }; pe.obj = place.pot.model; }
-        else pe.label = cooking ? 'The stew is not ready yet' : 'The pot is empty';
+        else pe.label = some ? 'The stew is not ready yet' : 'The pot is empty';
       } else if (it && it.kind === 'stew'){
         if (ready && it.batch === pot.batch && pot.portions < RECIPE.portions){ pe.label = 'Pour it back'; pe.use = function(){ act('pourBack'); }; }
         else pe = null;
-      } else if (cooking) pe.label = 'Cooking…';
-      else if (ready) pe.label = pot.portions + (pot.portions === 1 ? ' portion' : ' portions') + ' left – bring an empty bowl';
-      else pe.label = 'Still needed, cut up: ' + list(missing().map(function(k){ return KINDS[k].a; }));
+      } else if (it && it.kind === 'broth'){
+        pe.key = 'LMB';
+        if (ready) pe.label = 'The stew is done already';
+        else if (it.left <= 0.01) pe.label = 'The jug is empty';
+        else if (pot.broth >= COOK.brothMax - 0.01) pe.label = 'The pot is full';
+        else { pe.label = 'Pour broth'; pe.use = startPour; pe.obj = place.pot.model; }
+      } else if (it && it.kind === 'spice'){
+        pe.key = 'LMB';
+        if (!some) pe.label = 'Nothing in the pot to season';
+        else { pe.label = 'Season'; pe.use = seasonOnce; pe.obj = place.pot.model; }
+      } else if (free && some){ pe.key = 'LMB'; pe.label = 'Stir'; pe.use = startStir; pe.obj = place.pot.ladle; }
+      else if (free) pe = null;
+      else pe = null;
       if (pe) add(pe);
+      // the heat (with free hands, or with jug or shaker in hand)
+      if (!burnt && !scoop && (free || (it && (it.kind === 'broth' || it.kind === 'spice')))){
+        add({ pos: place.pot.knob, reach: RULES.reach, key: 'E', label: 'Heat: ' + COOK.heat[pot.heat] + ' \u2192 ' + COOK.heat[(pot.heat + 1) % COOK.heat.length], use: function(){ act('heat'); } });
+      }
       // guests waiting for their food
       state.guests.forEach(function(g){
         if (g.phase !== 'waiting') return;
@@ -898,12 +1193,12 @@
           v = objs[id] = { obj: o.cut && isVeg(kind) ? makeCut(kind, o.cut, o.cut.done) : instance(kind), look: want, placed: false, rot: rot };
         }
         if (o.at === 'hand'){
-          if (shown.carry !== o.id){ shown.carry = o.id; v.placed = false; v.rot = undefined; play.setCarry(v.obj, o.kind === 'knife' ? knifeHold : KINDS[o.kind].carry); }
+          if (shown.carry !== o.id){ shown.carry = o.id; v.placed = false; v.rot = undefined; play.setCarry(v.obj, toolHold[o.kind] || KINDS[o.kind].carry); }
           return;
         }
         if (!v.placed){
           if (o.at === 'table'){ var gv = views[o.guest]; placeBowl(gv); v.obj.position.copy(gv.bowlAt); v.obj.rotation.set(0, rnd(0, 6.28), 0); }
-          else if (o.at === 'home'){ v.obj.position.copy(place.knifeHome); v.obj.rotation.set(0, 0.25, 0); }
+          else if (o.at === 'home'){ v.obj.position.copy(place.home[o.kind].pos); v.obj.rotation.set(0, place.home[o.kind].rot, 0); }
           else if (o.at === 'board'){ v.obj.position.copy(place.board.pos); if (v.rot === undefined) v.rot = o.rot || 0; v.obj.rotation.set(0, v.rot, 0); }
           else { v.obj.position.set(o.x, o.y, o.z); v.obj.rotation.set(0, o.rot || 0, 0); }
           v.obj.visible = true; root.add(v.obj); v.placed = true;
@@ -913,13 +1208,15 @@
           v.obj.rotation.y = v.rot;
         }
       });
-      if (!it && shown.carry !== null){ shown.carry = null; play.setCarry(null); }
+      if (!it && shown.carry !== null && shown.carry !== 'tool'){ shown.carry = null; play.setCarry(null); }   // ('tool': the ladle while stirring)
       // the line above the hint: cutting, a short message, or what he carries
       var label = it ? 'Carrying ' + nameOf(it, 'a') : '', ob = state.board && state.items[state.board];
       if (cutting && ob && cutAxis(ob)){
         var pl = CUTS[ob.kind];
         label = 'Slide the mouse sideways, pull it down to cut   \u00b7   cut ' + (cutCount(ob) + 1) + ' of ' + (pl.a + pl.b);
-      } else if (note.t > 0) label = note.text;
+      } else if (pouring) label = 'Pull the mouse down to tip the jug, push it up to stop   \u00b7   broth: ' + Math.round(state.pot.broth * 100) + '% of what is needed';
+      else if (stirring) label = 'Move the mouse in circles to stir';
+      else if (note.t > 0) label = note.text;
       if (carryEl.textContent !== label){ carryEl.textContent = label; carryEl.classList.toggle('on', !!label); }
     }
 
@@ -945,11 +1242,23 @@
           if (cutting.end >= 0){ cutting.end -= dt; if (cutting.end <= 0) stopCutting(); }
         }
       }
-      if (cutting){   // the view goes to the block
-        var L = ctx.look.get(), bp = place.board.pos, cam = camera.position;
-        var ahead = (bp.x - cam.x) * Math.sin(cutting.look) + (bp.z - cam.z) * Math.cos(cutting.look);
-        var pitch = clamp(-Math.atan2(cam.y - bp.y, Math.max(0.12, ahead)), -1.3, -0.5), e = 1 - Math.exp(-7 * dt);
-        ctx.look.set(L.yaw + angle(cutting.look - Math.PI - L.yaw) * e, L.pitch + (pitch - L.pitch) * e);
+      if (pouring){
+        var jug = carried();
+        if (!jug || jug.kind !== 'broth' || ctx.isMoving()) stopPour();
+        else {
+          var flow = clamp((pouring.tilt - 0.35) / 0.65) * COOK.pour;
+          pouring.flow = flow > 0 && act('pour', flow * dt) ? flow : 0;
+        }
+      }
+      if (stirring && (carried() || ctx.isMoving() || state.pot.phase === 'burnt' || !inPot())) stopStir();
+      if (shake){ shake.t += dt / 0.5; if (shake.t >= 1) shake = null; }
+      // while a tool is led the view goes to where it works
+      var work = cutting ? { yaw: cutting.look, at: place.board.pos } : pouring ? { yaw: pouring.look, at: place.pot.pos } : stirring ? { yaw: stirring.look, at: place.pot.pos } : null;
+      if (work){
+        var L = ctx.look.get(), cam = camera.position, wy = work.at.y + (cutting ? 0 : place.pot.size.y * 0.6);
+        var ahead = (work.at.x - cam.x) * Math.sin(work.yaw) + (work.at.z - cam.z) * Math.cos(work.yaw);
+        var pitch = clamp(-Math.atan2(cam.y - wy, Math.max(0.12, ahead)), -1.3, -0.5), e = 1 - Math.exp(-7 * dt);
+        ctx.look.set(L.yaw + angle(work.yaw - Math.PI - L.yaw) * e, L.pitch + (pitch - L.pitch) * e);
       }
       syncItems(dt);
 
@@ -987,24 +1296,56 @@
         if (p.t >= 1){ root.remove(p.s.sp); p.s.tex.dispose(); p.s.sp.material.dispose(); pops.splice(i, 1); }
       }
 
-      // the pot: vegetables in it, the stew's level, the ladle, its sign and the steam
-      var P = place.pot, pot = state.pot, cooking = pot.phase === 'cooking', ready = pot.phase === 'ready';
+      // the pot: what is in it, the heat under it, its panel and the steam
+      var P = place.pot, pot = state.pot, ready = pot.phase === 'ready', burnt = pot.phase === 'burnt', filling = pot.phase === 'filling';
+      var fill = ready ? Math.min(1, pot.broth) * pot.portions / RECIPE.portions : burnt ? Math.min(0.5, pot.broth) : pot.broth;
+      P.level += (P.floor + (P.high - P.floor) * clamp(fill, 0, 1.18) - P.level) * Math.min(1, dt * 5);
+      var wet = pot.phase !== 'empty' && pot.broth > 0.01;
       VEG.forEach(function(kind){
-        var v = P.veg[kind], show = pot.phase === 'filling' && pot.has[kind] > 0 && !!pot.cut[kind];
+        var v = P.veg[kind], show = filling && pot.cooked < 0.3 && pot.has[kind] > 0 && !!pot.cut[kind];
         if (show && v.userData.cut !== pot.cut[kind]){   // the pieces as they were cut
           while (v.children.length) v.remove(v.children[0]);
           v.add(makeCut(kind, pot.cut[kind], true)); v.userData.cut = pot.cut[kind];
         }
-        v.visible = show;
+        v.visible = show; v.position.y = Math.max(P.size.y * 0.23, P.level - 0.04);   // they float in the broth
       });
-      P.stew.visible = cooking || ready;
-      if (P.stew.visible){
-        var level = cooking ? 1 : pot.portions / RECIPE.portions;
-        P.stew.position.y += ((P.low + (P.high - P.low) * level) - P.stew.position.y) * Math.min(1, dt * 4);
-        if (cooking) P.stew.rotation.z += dt * 0.25;   // it simmers
-      } else P.stew.position.y = P.high;
+      // broth, turning into stew as it cooks; darker as it burns
+      var done = ready || burnt ? 1 : smooth(pot.cooked / 0.6);
+      P.liquid.visible = wet; P.liquid.position.y = P.level;
+      P.stew.visible = (wet || burnt) && done > 0.02; P.stew.position.y = P.level + 0.002; P.stew.material.opacity = done;
+      P.stew.material.color.copy(STEW_COL).lerp(BURNT_COL, burnt ? 1 : pot.burn * 0.8);
+      P.spin *= Math.exp(-2.2 * dt);
+      var turn = ((wet && pot.temp >= COOK.simmer ? 0.22 : 0) + P.spin) * dt;   // it simmers, and it goes round with the ladle
+      P.stew.rotation.z += turn; P.liquid.rotation.z += turn; P.specks.mesh.rotation.z += turn;
+      var jugInHand = carried() && carried().kind === 'broth';
+      P.line.visible = !ready && !burnt && pot.broth < COOK.brothOk[1] && (jugInHand || (wet && pot.broth < COOK.brothOk[0]));   // how far the broth should come up
+      P.line.position.y = P.floor + (P.high - P.floor) * 1;
+      var sk = P.specks;
+      if (sk.drawn !== pot.spice){   // the seasoning lies on top
+        sk.drawn = pot.spice; sk.g.clearRect(0, 0, 128, 128);
+        for (var q = 0; q < pot.spice * 22; q++){
+          var qa = Math.random() * Math.PI * 2, qd = Math.sqrt(Math.random()) * 58;
+          sk.g.fillStyle = q % 4 === 0 ? 'rgba(70,95,40,.85)' : 'rgba(45,30,18,.85)';
+          sk.g.fillRect(64 + Math.cos(qa) * qd, 64 + Math.sin(qa) * qd, 2.2, 2.2);
+        }
+        sk.tex.needsUpdate = true;
+      }
+      sk.mesh.visible = wet && pot.spice > 0; sk.mesh.position.y = P.level + 0.004;
+      P.flames.forEach(function(fl, i){
+        var size = [0, 0.07, 0.11, 0.17][pot.heat] * (0.85 + 0.25 * Math.sin(clock * 17 + i * 2.1));
+        fl.visible = pot.heat > 0; fl.scale.set(size * 0.55, size, 1); fl.position.y = size * 0.42 - 0.01;
+      });
+      // the broth running from the jug
+      var jugObj = jugInHand && objs[carried().id] && objs[carried().id].obj;
+      P.stream.visible = !!(pouring && pouring.flow > 0 && jugObj);
+      if (P.stream.visible){
+        jugObj.updateMatrixWorld(true);
+        var sp = jugObj.localToWorld(MODELS.broth.tool.spout.clone());
+        P.stream.position.copy(sp); P.stream.scale.set(1, Math.max(0.02, sp.y - (P.pos.y + P.level)), 1);
+      }
       // the ladle: leaning in the pot; when ladling it lifts, swings over the bowl, pours and comes back
       var L = P.ladle, R = P.rest;
+      L.visible = !stirring;
       L.position.set(R.x, R.y, R.z); L.rotation.set(0, 0.6, -R.tilt);
       if (scoop){
         var t = scoop.t, bowl = objs[scoop.item] && objs[scoop.item].obj, up = P.size.y + 0.1;
@@ -1015,14 +1356,19 @@
         L.position.lerp(lift, a).lerp(over, b).lerp(V(R.x, R.y, R.z), d);
         L.rotation.z = -R.tilt * (1 - a) - 1.25 * c * (1 - d) - R.tilt * d;
       }
-      var top = P.pos.y + P.size.y;
-      potSign.sp.visible = cooking || ready;
-      if (potSign.sp.visible){ drawPot(potSign, pot); potSign.sp.position.set(P.pos.x, top + 0.42, P.pos.z); }
-      var strength = cooking ? 1 : ready ? 0.5 : 0;
+      var top = P.pos.y + P.size.y, chef = ctx.getChef();
+      panel.sp.visible = (pot.phase !== 'empty' || pot.heat > 0) && !!chef && Math.hypot(chef.position.x - P.pos.x, chef.position.z - P.pos.z) < 5;
+      if (panel.sp.visible){   // behind the pot as he sees it, just above its rim
+        drawPanel(panel, pot, Math.sin(clock * 9) > 0);
+        var away = V(P.pos.x - chef.position.x, 0, P.pos.z - chef.position.z).normalize();
+        panel.sp.position.set(P.pos.x + away.x * P.inner * 1.3, top + 0.15, P.pos.z + away.z * P.inner * 1.3);
+      }
+      var smoke = burnt || pot.stick >= 1, strength = burnt ? 0.8 : wet ? clamp((pot.temp - 62) / 35) * (ready ? 0.7 : 1) : 0;
       puffs.forEach(function(pf){
         pf.t += dt * 0.55; if (pf.t >= 1){ pf.t -= 1; pf.dx = rnd(-1, 1); pf.dz = rnd(-1, 1); }
         pf.sp.visible = strength > 0;
         if (!strength) return;
+        pf.sp.material.color.setHex(smoke ? 0x4a4541 : 0xffffff);
         var e = pf.t, size = 0.26 + e * 0.5;
         pf.sp.position.set(P.pos.x + pf.dx * (0.1 + e * 0.1), top + e * 0.75, P.pos.z + pf.dz * (0.1 + e * 0.1));
         pf.sp.scale.set(size, size, 1);
@@ -1037,8 +1383,10 @@
         var it = carried();
         return { money: state.money, served: state.served, lost: state.lost, carry: it ? it.kind : null,
                  crates: VEG.map(function(k){ return state.crates[k]; }).join('/'), bowls: state.bowls,
-                 pot: state.pot.phase + (state.pot.phase === 'cooking' ? ' ' + state.pot.t.toFixed(1) : '') + ' x' + state.pot.portions +
-                      ' has ' + VEG.map(function(k){ return state.pot.has[k]; }).join(''),
+                 pot: state.pot.phase + ' x' + state.pot.portions + ' has ' + VEG.map(function(k){ return state.pot.has[k]; }).join('') +
+                      ' broth ' + state.pot.broth.toFixed(2) + ' spice ' + state.pot.spice + ' heat ' + state.pot.heat + ' ' + Math.round(state.pot.temp) + 'deg cooked ' +
+                      state.pot.cooked.toFixed(2) + ' stick ' + state.pot.stick.toFixed(2) + ' burn ' + state.pot.burn.toFixed(2),
+                 mode: cutting ? 'cut' : pouring ? 'pour ' + pouring.tilt.toFixed(2) : stirring ? 'stir' : '',
                  items: Object.keys(state.items).map(function(id){ return state.items[id].kind + '@' + state.items[id].at; }).join(' '),
                  guests: state.guests.map(function(g){ return g.id + ':' + g.phase + (g.phase === 'waiting' ? ' ' + g.patience.toFixed(2) : ''); }).join(' '),
                  board: (function(){ var o = state.board && state.items[state.board]; return o ? o.kind + ' ' + (o.cut ? o.cut.a.length + '+' + o.cut.b.length + (o.cut.done ? ' done q=' + o.cut.q.toFixed(2) : '') : 'whole') : null; })(),
@@ -1046,7 +1394,8 @@
                  cutting: cutting ? { x: +cutting.x.toFixed(3), h: +cutting.h.toFixed(2), cool: +cutting.cool.toFixed(2) } : null, note: note.t > 0 ? note.text : '',
                  ready: !!place.pot, aim: aim ? [+aim.x.toFixed(2), +aim.z.toFixed(2)] : null };
       },
-      debugAct: act,
+      debugAct: act, debugPot: function(){ return state.pot; }, debugCookRules: COOK,
+      debugTools: function(){ return { ids: state.tools, jug: MODELS.broth.tool, home: place.home, left: state.items[state.tools.broth].left }; },
       debugCut: { start: startCutting, stop: stopCutting, limits: function(){ var o = state.items[state.board]; return o && cutAxis(o) ? cutLimits(o, cutAxis(o)) : null; },
                   ranges: function(kind){ return MODELS[kind].range; }, knife: function(){ return MODELS.knife.tool; }, sizes: function(){ var o = {}; Object.keys(MODELS).forEach(function(k){ o[k] = MODELS[k].size.toArray().map(function(x){ return +x.toFixed(3); }); }); return o; } },
       debugEat: function(){ Object.keys(state.items).forEach(function(id){ var o = state.items[id]; if (o.kind === 'stew' && o.at === 'surface'){ delete state.items[id]; state.bowls++; } }); },

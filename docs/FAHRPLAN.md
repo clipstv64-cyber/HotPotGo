@@ -28,10 +28,10 @@ Rest dran kommt. Er wird nach jeder Etappe aktualisiert.
 | 5 | Interaktives Schneidebrett | fertig: das Hackbrett auf der Arbeitsinsel; Gemüse mit F darauflegen, das Beil daneben mit F nehmen |
 | 6 | Gemüse schneiden | fertig: linke Maustaste startet, Maus seitwärts setzt das Messer, Maus nach unten schneidet; Karotte in Scheiben (5 Schnitte), Kartoffel in Würfel (3 + 3, wird gedreht), Zwiebel in Stücke (2 + 3); Schnittgeräusch; gleichmäßige Schnitte geben bessere Qualität |
 | 7 | Zutaten in den Topf geben | fertig: nur geschnittenes Gemüse, die Stücke liegen so im Topf, wie sie geschnitten wurden |
-| 8 | Brühe hinzufügen | fehlt |
-| 9 | Herdtemperatur einstellen | fehlt |
-| 10 | Umrühren und Garzeit überwachen | teilweise: fester Zeitablauf von 12 Sekunden, kein Rühren |
-| 11 | Fertiger Eintopf mit genau 20 Portionen | fertig: genau 20 Portionen (getestet), Füllstand sinkt sichtbar, jeder Topf hat eine eigene Kennung |
+| 8 | Brühe hinzufügen | fertig: Krug vom Herd nehmen (F), linke Maustaste, Maus nach unten kippt den Krug; im Topf zeigt eine Linie die nötige Menge; zu wenig Brühe lässt es schneller ansetzen, zu viel macht es wässrig |
+| 9 | Herdtemperatur einstellen | fertig: E am Herd schaltet aus, niedrig, mittel, hoch; die Temperatur steigt und fällt; niedrig kocht langsam und sicher, hoch schnell mit Anbrenngefahr; Flammen und Anzeige am Topf |
+| 10 | Umrühren und Garzeit überwachen | fertig: linke Maustaste am Topf, Maus im Kreis führt die Kelle; ohne Rühren setzt der Eintopf an und brennt dann an; 40 Sekunden Köcheln; Würzen mit dem Streuer (3 Stöße sind richtig) |
+| 11 | Fertiger Eintopf mit genau 20 Portionen | fertig: genau 20 Portionen (getestet), Füllstand sinkt sichtbar; angebrannter Eintopf muss weggeworfen werden; Qualität aus Schnitt, Brühe, Würze und Anbrennen bestimmt das Trinkgeld |
 | 12 | Schüssel nehmen und Portion einfüllen | fertig: leere Schüssel vom Stapel, Schöpfkelle füllt eine Portion ein; Schüsseln kommen nach dem Essen von selbst zurück (Spülen folgt später) |
 | 13 | Kunden treten ein und setzen sich | fehlt: acht Gäste sitzen fest an ihren Plätzen |
 | 14 | Bestellung entgegennehmen | teilweise: Gäste bestellen von selbst mit einer Blase |
@@ -54,9 +54,8 @@ dem der Gastgeber die Aktionen prüft.
 1. **Kochen, Teil 1 – Zutaten und 20 Portionen.** Erledigt (20.11.2026).
 2. **Kochen, Teil 2 – Schneiden.** Erledigt (20.11.2026). Die Schnittqualität aller Zutaten
    bestimmt die Qualität des Topfes und damit das Trinkgeld.
-3. **Kochen, Teil 3 – Brühe, Hitze, Rühren.** Brühe eingießen, Herdstufe wählen,
-   umrühren; zu viel Hitze oder kein Rühren lässt den Eintopf anbrennen; daraus ergibt
-   sich die Qualität.
+3. **Kochen, Teil 3 – Brühe, Hitze, Rühren.** Erledigt (20.11.2026). Bis es den Tag mit
+   Vorbereitung und Öffnen gibt, bestellen die Gäste erst, wenn der erste Topf fertig ist.
 4. **Gäste kommen und gehen.** Eintreten, Tisch suchen, hinsetzen, bestellen, essen,
    zahlen, gehen; wer zu lange wartet, steht auf und geht.
 5. **Der Tag.** Uhr, Öffnen und Schließen, Tagesabrechnung, Speichern und Laden.
