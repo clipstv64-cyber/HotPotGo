@@ -54,8 +54,9 @@ dem der Gastgeber die Aktionen prüft.
 1. **Kochen, Teil 1 – Zutaten und 20 Portionen.** Erledigt (20.11.2026).
 2. **Kochen, Teil 2 – Schneiden.** Erledigt (20.11.2026). Die Schnittqualität aller Zutaten
    bestimmt die Qualität des Topfes und damit das Trinkgeld.
-3. **Kochen, Teil 3 – Brühe, Hitze, Rühren.** Erledigt (20.11.2026). Bis es den Tag mit
-   Vorbereitung und Öffnen gibt, bestellen die Gäste erst, wenn der erste Topf fertig ist.
+3. **Kochen, Teil 3 – Brühe, Hitze, Rühren.** Erledigt (20.11.2026). Das Restaurant wird mit E
+   an der Eingangstür geöffnet und geschlossen; Gäste bestellen nur, solange geöffnet ist.
+   Brühe gibt es als Vorrat (reicht für etwa sechs Töpfe), der Krug wird daraus nachgefüllt.
 4. **Gäste kommen und gehen.** Eintreten, Tisch suchen, hinsetzen, bestellen, essen,
    zahlen, gehen; wer zu lange wartet, steht auf und geht.
 5. **Der Tag.** Uhr, Öffnen und Schließen, Tagesabrechnung, Speichern und Laden.

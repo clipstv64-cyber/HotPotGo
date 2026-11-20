@@ -56,6 +56,7 @@
     hotBurn: 45,                               // above `hot` it burns slowly anyway (seconds)
     stirTurn: 0.75,                            // one full turn of the ladle loosens this much of the catching
     brothOk: [0.85, 1.2], brothMax: 1.45, jug: 1.6,   // broth: 1 = what the recipe needs; the jug holds a little more
+    stock: 7,                                  // broth in the kitchen at the start (enough for about six pots)
     pour: 0.5,                                 // broth per second from the fully tipped jug
     spice: 3, spiceMax: 8                      // shakes of seasoning: just right, and at most
   };
@@ -147,12 +148,13 @@
       pot: { phase: 'empty', has: { potato: 0, carrot: 0, onion: 0 }, cut: {}, qs: [], broth: 0, spice: 0,
              heat: 0, temp: 20, cooked: 0, stick: 0, burn: 0, quality: 1, portions: 0, batch: 0 },
       guests: [],                                   // { id, phase, t, patience, pay, item }; phase: 'idle' | 'waiting' | 'eating' | 'paid' | 'angry'
-      open: false,                                  // guests order once the first pot of stew is ready (opening the restaurant comes with the day)
+      open: false,                                  // the restaurant is opened and closed at the front door; guests only order while it is open
+      broth: 0,                                     // broth in stock (1 = what one pot needs), besides what is in the jug
       nextOrder: RULES.firstOrder
     };
     ['knife', 'broth', 'spice'].forEach(function(kind){
       var o = { id: state.nextId++, kind: kind, at: 'home' };
-      if (kind === 'broth') o.left = COOK.jug;
+      if (kind === 'broth'){ o.left = COOK.jug; state.broth = COOK.stock - COOK.jug; }
       state.items[o.id] = o; state.tools[kind] = o.id;
     });
     state.knife = state.tools.knife;
@@ -225,7 +227,10 @@
         case 'putKnife': case 'putHome':   // a tool back to its place (the jug is filled up again there)
           if (!it || !HOME[it.kind]) return false;
           it.at = 'home'; state.carry = null;
-          if (it.kind === 'broth') it.left = COOK.jug;
+          if (it.kind === 'broth'){   // it is filled up from the stock
+            var fillUp = Math.min(COOK.jug - it.left, state.broth);
+            it.left += fillUp; state.broth -= fillUp;
+          }
           return true;
         case 'toBoard':    // a vegetable onto the chopping block: arg = which way it lies
           if (!it || !isVeg(it.kind) || state.board) return false;
@@ -264,6 +269,8 @@
         case 'stir':       // with the ladle: arg = how far it went round (radians)
           if (it || !(arg > 0) || !inPot() || pot.phase === 'burnt') return false;
           pot.stick = Math.max(0, pot.stick - arg / (Math.PI * 2) * COOK.stirTurn); return true;
+        case 'open':       // the front door: open or close the restaurant (arg: true / false, else the other way round)
+          state.open = typeof arg === 'boolean' ? arg : !state.open; return true;
         case 'heat':       // the range: one step up, after 'high' it is off again (or arg = the level)
           pot.heat = typeof arg === 'number' ? clamp(Math.round(arg), 0, 3) : (pot.heat + 1) % COOK.heat.length; return true;
         case 'dumpPot':    // throw away what burnt
@@ -297,7 +304,7 @@
         // it cooks once everything is in and it is hot enough
         if (pot.phase === 'filling' && !missing().length && pot.broth >= 0.4 && pot.temp >= C.slow){
           pot.cooked += dt / RECIPE.cookTime * (pot.temp >= C.hot ? 1.25 : pot.temp >= C.simmer ? 1 : 0.5);
-          if (pot.cooked >= 1){ pot.cooked = 1; pot.phase = 'ready'; pot.portions = RECIPE.portions; pot.batch = state.nextId++; state.open = true; }
+          if (pot.cooked >= 1){ pot.cooked = 1; pot.phase = 'ready'; pot.portions = RECIPE.portions; pot.batch = state.nextId++; }
         }
         // unstirred it catches on the bottom (sooner with too little broth), then it burns
         if (VEG.some(function(k){ return pot.has[k] > 0; })){
@@ -348,14 +355,18 @@
       '.hp-coin{width:15px;height:15px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#ffe48a,#d79a1e);box-shadow:inset 0 0 0 1.5px rgba(120,70,0,.45)}' +
       '.hp-carry{position:fixed;left:50%;bottom:15.5%;transform:translateX(-50%);padding:4px 11px;border-radius:999px;background:rgba(15,12,10,.3);' +
       'color:rgba(255,255,255,.75);font:500 12.5px/1.2 system-ui,"Segoe UI",sans-serif;letter-spacing:.2px;opacity:0;transition:opacity .2s;pointer-events:none;user-select:none}' +
-      '.hp-carry.on{opacity:1}';
+      '.hp-carry.on{opacity:1}' +
+      '.hp-open{position:fixed;right:22px;top:58px;display:flex;align-items:center;gap:7px;padding:5px 12px;border-radius:999px;background:rgba(15,12,10,.36);' +
+      'color:rgba(255,255,255,.85);font:600 13px/1.2 system-ui,"Segoe UI",sans-serif;letter-spacing:.3px;pointer-events:none;user-select:none}' +
+      '.hp-open i{width:9px;height:9px;border-radius:50%;background:#9a9a9a}.hp-open.on i{background:#6fd24f;box-shadow:0 0 6px rgba(111,210,79,.8)}';
     document.head.appendChild(css);
     var moneyEl = document.createElement('div'); moneyEl.className = 'hp-money';
     moneyEl.innerHTML = '<span class="hp-coin"></span><span class="hp-amount"></span>'; document.body.appendChild(moneyEl);
     var amountEl = moneyEl.querySelector('.hp-amount');
     var carryEl = document.createElement('div'); carryEl.className = 'hp-carry'; document.body.appendChild(carryEl);
     function euro(n){ return '€' + n; }
-    var shown = { money: null, carry: null };
+    var openEl = document.createElement('div'); openEl.className = 'hp-open'; openEl.innerHTML = '<i></i><span></span>'; document.body.appendChild(openEl);
+    var shown = { money: null, carry: null, open: null };
 
     // ---------- models ------------------------------------------------------------------------
     var gltf = new T.GLTFLoader();
@@ -790,7 +801,7 @@
       var stew = new T.Mesh(new T.CircleGeometry(inner, 40), new T.MeshStandardMaterial({ map: stewTex, color: 0x9a938c, roughness: 0.62, metalness: 0 }));
       stew.rotation.x = -Math.PI / 2; stew.visible = false; stew.receiveShadow = true; stew.material.transparent = true; pg.add(stew);
       // the broth before it has turned into stew, the line it should reach, the seasoning on top
-      var liquid = new T.Mesh(new T.CircleGeometry(inner, 40), new T.MeshStandardMaterial({ color: 0x9a6a16, roughness: 0.6, metalness: 0, transparent: true, opacity: 0.9 }));
+      var liquid = new T.Mesh(new T.CircleGeometry(inner, 40), new T.MeshStandardMaterial({ color: new T.Color(0xc79a3a).convertSRGBToLinear(), roughness: 0.6, metalness: 0, transparent: true, opacity: 0.9 }));
       liquid.rotation.x = -Math.PI / 2; liquid.visible = false; liquid.receiveShadow = true; pg.add(liquid);
       var line = new T.Mesh(new T.TorusGeometry(inner * 0.985, 0.004, 6, 56), new T.MeshBasicMaterial({ color: 0xfff1c4 }));
       line.rotation.x = Math.PI / 2; line.visible = false; pg.add(line);
@@ -819,7 +830,7 @@
                     knob: V(k.potAt.x - 0.6, 0, k.potAt.z),                          // the range's knobs are at its front
                     stream: (function(){   // the broth running from the jug
                       var geo = new T.CylinderGeometry(0.011, 0.016, 1, 8); geo.translate(0, -0.5, 0);
-                      var m = new T.Mesh(geo, new T.MeshStandardMaterial({ color: 0x9a6a16, roughness: 0.4, transparent: true, opacity: 0.9 }));
+                      var m = new T.Mesh(geo, new T.MeshStandardMaterial({ color: new T.Color(0xc79a3a).convertSRGBToLinear(), roughness: 0.4, transparent: true, opacity: 0.92 }));
                       m.visible = false; root.add(m); return m;
                     })(),
                     low: size.y * 0.27, high: size.y * 0.8,                         // the stew's level: nearly empty .. full (the inside floor is at 0.22)
@@ -1019,8 +1030,8 @@
     function spicePose(out){
       if (!shake) return false;
       var P = place.pot, f = shake.f, r = shake.r;
-      out.pos.copy(P.pos).addScaledVector(r, P.inner * 0.45).addScaledVector(f, -P.inner * 0.1); out.pos.y = P.pos.y + P.size.y + 0.2 + 0.035 * Math.sin(shake.t * Math.PI * 4);
-      out.dir.set(-r.x * 0.6, -0.8, -r.z * 0.6).normalize();                  // upside down over the pot, from the right
+      out.pos.copy(P.pos).addScaledVector(r, P.inner * 0.95).addScaledVector(f, P.inner * 0.1); out.pos.y = P.pos.y + P.size.y + 0.19 + 0.03 * Math.sin(shake.t * Math.PI * 4);
+      out.dir.set(-r.x * 0.75, -0.66, -r.z * 0.75).normalize();               // tipped over the pot from its right
       out.up.copy(shake.r);
       return true;
     }
@@ -1056,6 +1067,7 @@
       } catch (e) { /* no sound then */ }
     }
 
+    var DOOR = V(-1.3, 0, 9.9);   // the entrance door in the front wall (decor.js)
     // ---------- what the chef can do: F picks up / puts down, E uses ---------------------------
     function list(words){ return words.join(', ').replace(/, ([^,]*)$/, ' and $1'); }
     play.addInteractables(function(hands){
@@ -1113,7 +1125,8 @@
       // the jug of broth and the spice shaker on the range
       ['broth', 'spice'].forEach(function(kind){
         var o = state.items[state.tools[kind]], at = place.home[kind].pos;
-        if (it === o) add({ pos: at, reach: RULES.reach, key: 'F', label: 'Put ' + KINDS[kind].the + ' back', use: function(){ act('putHome'); } });
+        var more = kind === 'broth' && o.left < COOK.jug - 0.05 && state.broth > 0.01;
+        if (it === o) add({ pos: at, reach: RULES.reach, key: 'F', label: 'Put ' + KINDS[kind].the + ' back' + (more ? ' and fill it up' : ''), use: function(){ act('putHome'); } });
         else if (free && o.at === 'home') add({ pos: at, reach: RULES.reach, key: 'F', label: 'Take ' + KINDS[kind].the, use: function(){ act('pickUp', o.id); }, obj: see(o) });
       });
       if (it && !HOME[it.kind] && aim && !scoop){
@@ -1141,7 +1154,7 @@
       } else if (it && it.kind === 'broth'){
         pe.key = 'LMB';
         if (ready) pe.label = 'The stew is done already';
-        else if (it.left <= 0.01) pe.label = 'The jug is empty';
+        else if (it.left <= 0.01) pe.label = state.broth > 0.01 ? 'The jug is empty \u2013 fill it up at its place' : 'There is no broth left';
         else if (pot.broth >= COOK.brothMax - 0.01) pe.label = 'The pot is full';
         else { pe.label = 'Pour broth'; pe.use = startPour; pe.obj = place.pot.model; }
       } else if (it && it.kind === 'spice'){
@@ -1156,6 +1169,8 @@
       if (!burnt && !scoop && (free || (it && (it.kind === 'broth' || it.kind === 'spice')))){
         add({ pos: place.pot.knob, reach: RULES.reach, key: 'E', label: 'Heat: ' + COOK.heat[pot.heat] + ' \u2192 ' + COOK.heat[(pot.heat + 1) % COOK.heat.length], use: function(){ act('heat'); } });
       }
+      // the front door: opening and closing the restaurant
+      add({ pos: DOOR, reach: 2.4, key: 'E', label: state.open ? 'Close the restaurant' : 'Open the restaurant', use: function(){ act('open'); } });
       // guests waiting for their food
       state.guests.forEach(function(g){
         if (g.phase !== 'waiting') return;
@@ -1247,7 +1262,7 @@
         if (!jug || jug.kind !== 'broth' || ctx.isMoving()) stopPour();
         else {
           var flow = clamp((pouring.tilt - 0.35) / 0.65) * COOK.pour;
-          pouring.flow = flow > 0 && act('pour', flow * dt) ? flow : 0;
+          if (dt > 0) pouring.flow = flow > 0 && act('pour', flow * dt) ? flow : 0;   // (a frame without time changes nothing)
         }
       }
       if (stirring && (carried() || ctx.isMoving() || state.pot.phase === 'burnt' || !inPot())) stopStir();
@@ -1262,6 +1277,12 @@
       }
       syncItems(dt);
 
+      if (state.open !== shown.open){
+        if (shown.open !== null) say(state.open ? 'The restaurant is open' : 'The restaurant is closed');
+        shown.open = state.open; openEl.classList.toggle('on', state.open); openEl.lastChild.textContent = state.open ? 'Open' : 'Closed';
+      }
+      // the first pot is ready and nobody can come in yet: say what to do
+      if (state.pot.phase === 'ready' && !state.open && !shown.told){ shown.told = true; say('The stew is ready \u2013 open the restaurant at the front door'); }
       if (state.money !== shown.money){
         var first = shown.money === null;
         shown.money = state.money; amountEl.textContent = euro(state.money);
@@ -1394,6 +1415,7 @@
                  cutting: cutting ? { x: +cutting.x.toFixed(3), h: +cutting.h.toFixed(2), cool: +cutting.cool.toFixed(2) } : null, note: note.t > 0 ? note.text : '',
                  ready: !!place.pot, aim: aim ? [+aim.x.toFixed(2), +aim.z.toFixed(2)] : null };
       },
+      debugStock: function(){ return { open: state.open, broth: +state.broth.toFixed(2), jug: +state.items[state.tools.broth].left.toFixed(2) }; },
       debugAct: act, debugPot: function(){ return state.pot; }, debugCookRules: COOK,
       debugTools: function(){ return { ids: state.tools, jug: MODELS.broth.tool, home: place.home, left: state.items[state.tools.broth].left }; },
       debugCut: { start: startCutting, stop: stopCutting, limits: function(){ var o = state.items[state.board]; return o && cutAxis(o) ? cutLimits(o, cutAxis(o)) : null; },
