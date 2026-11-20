@@ -12,7 +12,11 @@
 // The day: in the morning the chef cooks in peace, the clock stands still. Opening the
 // front door starts the opening hours; at closing time (or when he closes himself) nobody
 // new comes in, the last guests finish, and "End the day" at the door shows the day's
-// accounts. Overnight the crates and the broth are filled up again and paid for.
+// accounts.
+//
+// Supplies are ordered at the computer in the office. After a short while they arrive as
+// a box in the storeroom; the chef carries it to the kitchen and unpacks it at the crates
+// and at the broth shelf.
 //
 // The game saves itself (every few seconds, at every change of the day and when the
 // window is closed) and offers to continue when it is started again.
@@ -51,8 +55,9 @@
     // the opening hours (minutes of the day) and how many seconds of play they take;
     // before the restaurant is opened the clock stands at `opens`
     day: { opens: 11 * 60, closes: 21 * 60, length: 720 },
-    // euros for filling the stock up again overnight: one vegetable, broth for one pot (about 35 a pot)
+    // what supplies cost at the computer (euros): one vegetable, broth for one pot (about 35 a pot)
     cost: { potato: 8, carrot: 8, onion: 8, broth: 11 },
+    delivery: 30,             // seconds until an order arrives in the storeroom
     autosave: 20,             // seconds between two automatic saves
     reach: 2.1,               // how close the chef has to be to a crate, the pot, the bowls
     cutReach: 1.75,           // ... to the chopping block to cut on it
@@ -80,6 +85,22 @@
   };
   var HOME = { knife: true, broth: true, spice: true };   // tools with a place of their own
   var VEG = ['potato', 'carrot', 'onion'];
+  // what can be ordered at the computer (broth: one unit is what one pot needs)
+  var GOODS = ['potato', 'carrot', 'onion', 'broth'];
+  var GOOD = {
+    potato: { name: 'Potatoes', one: 'potato', many: 'potatoes' },
+    carrot: { name: 'Carrots', one: 'carrot', many: 'carrots' },
+    onion:  { name: 'Onions', one: 'onion', many: 'onions' },
+    broth:  { name: 'Broth', one: 'broth for 1 pot', many: 'broth for # pots' }
+  };
+  // "3 potatoes, 1 carrot and broth for 2 pots"
+  function goodsText(goods){
+    var words = GOODS.filter(function(k){ return goods[k] > 0; }).map(function(k){
+      var n = Math.round(goods[k] * 10) / 10;
+      return k === 'broth' ? (n === 1 ? GOOD.broth.one : GOOD.broth.many.replace('#', n)) : n + ' ' + (n === 1 ? GOOD[k].one : GOOD[k].many);
+    });
+    return words.length ? words.join(', ').replace(/, ([^,]*)$/, ' and $1') : 'nothing';
+  }
   // How each vegetable is cut: `a` cuts across its length, then (turned by a quarter)
   // `b` cuts across its width. from / to: the part of its length that is cut (shares,
   // from its thin end); dropEnd: what lies beyond the last cut is thrown away (the
@@ -98,7 +119,8 @@
     stew:   { a: 'a bowl of stew', the: 'the bowl of stew', carry: { half: 0.17, fwd: 0.46, drop: -0.25, grip: 0.06, back: 0, curl: 0.4 } },
     knife:  { a: 'the knife', the: 'the knife' },   // these three are held in one hand (see toolHold)
     broth:  { a: 'the jug of broth', the: 'the jug of broth' },
-    spice:  { a: 'the spice shaker', the: 'the spice shaker' }
+    spice:  { a: 'the spice shaker', the: 'the spice shaker' },
+    parcel: { a: 'a delivery box', the: 'the delivery box', carry: { half: 0.215, fwd: 0.46, drop: -0.4, grip: 0.12, back: 0, curl: 0.3 } }   // item.goods = what is in it
   };
   // Meshy models and parts cut out of the kitchen's own models; width (or height): size in the game
   var MODELS = {
@@ -115,7 +137,8 @@
     stew:   { file: 'models/d_stew_bowl.glb', width: 0.4 },
     crate:  { file: 'models/d_crate.glb', width: 0.66 },
     pot:    { file: 'models/d_cookpot.glb', width: 0.86 },
-    ladle:  { file: 'models/d_ladle.glb', height: 0.56 }
+    ladle:  { file: 'models/d_ladle.glb', height: 0.56 },
+    parcel: { file: 'models/d_parcel.glb', width: 0.44 }                  // one box out of the storeroom's stack of boxes
   };
 
   function clamp(v, a, b){ return Math.max(a === undefined ? 0 : a, Math.min(b === undefined ? 1 : b, v)); }
@@ -155,7 +178,8 @@
 
     // ---------- the state and the actions that change it ---------------------------------
     // the day: 'prep' (before opening) -> 'open' -> 'closed' (the last guests finish) -> 'done' (the accounts are shown)
-    function newDay(n){ return { n: n, phase: 'prep', time: RULES.day.opens, served: 0, lost: 0, sales: 0, tips: 0, report: null }; }
+    // (spent: euros for supplies ordered that day)
+    function newDay(n){ return { n: n, phase: 'prep', time: RULES.day.opens, served: 0, lost: 0, sales: 0, tips: 0, spent: 0, report: null }; }
     function newState(){
       var st = {
         money: RULES.startMoney, served: 0, lost: 0, nextId: 1,
@@ -175,6 +199,9 @@
         open: false,                                  // guests come in (the same as day.phase === 'open')
         broth: 0,                                     // broth in stock (1 = what one pot needs), besides what is in the jug
         nextGuest: RULES.firstGuest,
+        orders: [],                                   // supplies on their way: { id, goods: { potato, carrot, onion, broth }, cost, left (seconds) }
+        delivered: 0,                                 // how many deliveries have arrived so far
+        history: [],                                  // the accounts of the days that are over (see 'endDay')
         day: newDay(1)
       };
       ['knife', 'broth', 'spice'].forEach(function(kind){
@@ -187,25 +214,19 @@
     }
     var state = newState();
     function inside(){ return state.guests.some(function(g){ return g.phase !== 'away'; }); }   // is a guest still in the restaurant?
-    // Overnight the crates and the broth are filled up again, as far as the money goes
-    // (until supplies are ordered at the computer). Returns what it cost.
-    function restock(){
-      var P = RULES.cost, cost = 0, short = false;
-      VEG.forEach(function(k){
-        while (state.crates[k] < RULES.crateStock){
-          if (state.money - cost < P[k]){ short = true; break; }
-          state.crates[k]++; cost += P[k];
-        }
-      });
-      var jug = state.items[state.tools.broth], need = Math.max(0, COOK.stock - state.broth - jug.left);
-      var full = Math.round(need * P.broth), pay = Math.min(full, Math.max(0, state.money - cost));
-      if (pay < full) short = true;
-      if (full > 0) state.broth += need * pay / full;
-      cost += pay;
-      if (jug.at === 'home'){ var fillUp = Math.min(COOK.jug - jug.left, state.broth); jug.left += fillUp; state.broth -= fillUp; }
-      state.money -= cost;
-      return { cost: cost, short: short };
+    // supplies: what is in the kitchen, what the kitchen holds, and how much more may be ordered
+    function emptyGoods(){ return { potato: 0, carrot: 0, onion: 0, broth: 0 }; }
+    function parcels(){ return Object.keys(state.items).map(function(id){ return state.items[id]; }).filter(function(o){ return o.kind === 'parcel'; }); }
+    function stockOf(kind){ return kind === 'broth' ? state.broth + state.items[state.tools.broth].left : state.crates[kind]; }
+    function holds(kind){ return kind === 'broth' ? COOK.stock : RULES.crateStock; }
+    function coming(kind){   // ordered or delivered, but not unpacked yet
+      var n = 0;
+      state.orders.forEach(function(o){ n += o.goods[kind] || 0; });
+      parcels().forEach(function(p){ n += p.goods[kind] || 0; });
+      return n;
     }
+    function room(kind){ return Math.max(0, Math.floor(holds(kind) - stockOf(kind) - coming(kind) + 1e-6)); }
+    function priceOf(goods){ var c = 0; GOODS.forEach(function(k){ c += (goods[k] || 0) * RULES.cost[k]; }); return c; }
     function emptyPot(){
       var pot = state.pot;
       VEG.forEach(function(k){ pot.has[k] = 0; });
@@ -266,7 +287,7 @@
           it.at = 'surface'; it.x = arg.x; it.y = arg.y; it.z = arg.z; it.rot = arg.rot || 0; state.carry = null; return true;
         case 'pickUp':     // arg = item id
           g = state.items[arg];
-          if (it || !g || (g.at !== 'surface' && g.at !== 'board' && g.at !== 'home')) return false;
+          if (it || !g || (g.at !== 'surface' && g.at !== 'board' && g.at !== 'home' && g.at !== 'dock')) return false;
           if (g.at === 'board'){
             if (!isCut(g) && cutCount(g) > 0) return false;   // half cut: it stays until it is done
             state.board = null;
@@ -323,11 +344,40 @@
         case 'close':      // ... and end: nobody new comes in, who is inside finishes the meal
           if (day.phase !== 'open') return false;
           day.phase = 'closed'; state.open = false; return true;
-        case 'endDay':     // everybody has gone: the day's accounts, and the stock is filled up for tomorrow
+        case 'buy':        // an order at the computer: arg = { potato, carrot, onion, broth } (how many of each)
+          if (!arg) return false;
+          var goods = emptyGoods(), any = false, fits = true;
+          GOODS.forEach(function(k){
+            var n = arg[k] || 0;
+            if (n !== Math.floor(n) || n < 0 || n > room(k)) fits = false;
+            goods[k] = n; if (n > 0) any = true;
+          });
+          var price = priceOf(goods);
+          if (!fits || !any || price > state.money) return false;
+          state.money -= price; day.spent += price;
+          state.orders.push({ id: state.nextId++, goods: goods, cost: price, left: RULES.delivery });
+          return true;
+        case 'unpack':     // out of the delivery box in his hands into the kitchen's stock: arg = which goods
+          if (!it || it.kind !== 'parcel' || !(it.goods[arg] > 0)) return false;
+          var put = arg === 'broth' ? it.goods.broth : Math.min(it.goods[arg], RULES.crateStock - state.crates[arg]);
+          if (put <= 0) return false;
+          if (arg === 'broth'){
+            var jug2 = state.items[state.tools.broth];
+            state.broth += put;
+            if (jug2.at === 'home'){ var top = Math.min(COOK.jug - jug2.left, state.broth); jug2.left += top; state.broth -= top; }
+          } else state.crates[arg] += put;
+          it.goods[arg] -= put;
+          if (!GOODS.some(function(k){ return it.goods[k] > 0; })) dropItem(it);   // the empty box is thrown away
+          return true;
+        case 'toDock':     // the delivery box back to where it was delivered
+          if (!it || it.kind !== 'parcel' || parcels().some(function(p){ return p.at === 'dock'; })) return false;
+          it.at = 'dock'; state.carry = null; return true;
+        case 'endDay':     // everybody has gone: the day's accounts
           if (day.phase !== 'closed' || inside()) return false;
-          var bill = restock();
-          day.report = { n: day.n, served: day.served, lost: day.lost, sales: day.sales, tips: day.tips, cost: bill.cost, short: bill.short,
-                         profit: day.sales + day.tips - bill.cost, money: state.money };
+          day.report = { n: day.n, served: day.served, lost: day.lost, sales: day.sales, tips: day.tips, cost: day.spent,
+                         profit: day.sales + day.tips - day.spent, money: state.money };
+          state.history.push(day.report);
+          if (state.history.length > 60) state.history.shift();
           day.phase = 'done'; return true;
         case 'nextDay':    // the next morning
           if (day.phase !== 'done') return false;
@@ -373,6 +423,16 @@
       if (day.phase === 'open'){
         day.time += dt * (RULES.day.closes - RULES.day.opens) / RULES.day.length;
         if (day.time >= RULES.day.closes){ day.time = RULES.day.closes; act('close'); }
+      }
+      // orders arrive in the storeroom: a box (what comes while a box still stands there goes into that one)
+      for (var oi = state.orders.length - 1; oi >= 0; oi--){
+        var od = state.orders[oi];
+        od.left -= dt;
+        if (od.left > 0) continue;
+        var box = parcels().filter(function(p){ return p.at === 'dock'; })[0];
+        if (!box){ box = { id: state.nextId++, kind: 'parcel', at: 'dock', goods: emptyGoods() }; state.items[box.id] = box; }
+        for (var gi = 0; gi < GOODS.length; gi++) box.goods[GOODS[gi]] += od.goods[GOODS[gi]] || 0;
+        state.orders.splice(oi, 1); state.delivered++;
       }
       // the temperature follows the heat
       pot.temp += (target - pot.temp) * Math.min(1, (target > pot.temp ? C.warm : C.cool) * dt);
@@ -462,7 +522,38 @@
       'font:700 18px/1.2 Georgia,"Times New Roman",serif;cursor:pointer}' +
       '.hp-start button:first-of-type{margin-top:20px}.hp-start button.quiet{background:transparent;color:#4a3626}' +
       '.hp-start button:hover{background:#6b513a;color:#f4ead2}' +
-      '.hp-hold .hp-money,.hp-hold .hp-open,.hp-hold .hp-carry,.hp-hold .hp-hint{visibility:hidden}';   // nothing of the game on screen while it waits
+      '.hp-hold .hp-money,.hp-hold .hp-open,.hp-hold .hp-carry,.hp-hold .hp-hint{visibility:hidden}' +
+      // the computer in the office: an old monitor with a plain grey program on it
+      '.hp-pc{position:fixed;left:0;top:0;right:0;bottom:0;display:none;align-items:center;justify-content:center;background:rgba(10,8,6,.74);z-index:18;' +
+      'font:15px/1.35 "Courier New",Consolas,monospace;color:#1d1b16;user-select:none}' +
+      '.hp-pc.on{display:flex}' +
+      '.hp-pc .case{position:relative;flex:none;padding:26px 26px 46px;background:linear-gradient(#e4decd,#cdc5b0);border-radius:20px;' +
+      'box-shadow:0 30px 80px rgba(0,0,0,.6),inset 0 -7px 0 rgba(0,0,0,.13),inset 0 3px 0 rgba(255,255,255,.5)}' +
+      '.hp-pc .brand{position:absolute;left:0;right:0;bottom:13px;text-align:center;font:700 12px/1 system-ui,"Segoe UI",sans-serif;letter-spacing:3px;color:#8d8570}' +
+      '.hp-pc .case:after{content:"";position:absolute;right:36px;bottom:16px;width:9px;height:9px;border-radius:50%;background:#6fd24f;box-shadow:0 0 6px #6fd24f}' +
+      '.hp-pc .screen{width:860px;height:540px;display:flex;flex-direction:column;overflow:hidden;background:#2f716c;border-radius:12px;' +
+      'box-shadow:0 0 0 5px #23211d,inset 0 0 70px rgba(0,0,0,.45)}' +
+      '.hp-pc .win{flex:1;min-height:0;display:flex;flex-direction:column;margin:14px 16px 12px;background:#cfcbbd;border:2px solid;border-color:#fff #55514a #55514a #fff}' +
+      '.hp-pc .title{display:flex;justify-content:space-between;padding:4px 9px;background:#1f3f8c;color:#fff;font-weight:700}' +
+      '.hp-pc .body{flex:1;min-height:0;overflow:hidden;padding:10px 14px}' +
+      '.hp-pc .bar{display:flex;align-items:center;gap:7px;padding:5px 8px;background:#cfcbbd;border-top:2px solid #fff}' +
+      '.hp-pc .grow{flex:1}.hp-pc .clock{padding:3px 9px;border:2px solid;border-color:#55514a #fff #fff #55514a}' +
+      '.hp-pc button{font:inherit;font-weight:700;padding:4px 11px;color:#1d1b16;background:#cfcbbd;border:2px solid;border-color:#fff #55514a #55514a #fff;cursor:pointer}' +
+      '.hp-pc button:active,.hp-pc button.tab.on{border-color:#55514a #fff #fff #55514a;background:#e6e3d8}' +
+      '.hp-pc button:disabled{color:#8f8b80;cursor:default}' +
+      '.hp-pc kbd{font:inherit;padding:0 5px;margin-left:5px;border:1px solid #55514a;border-radius:3px}' +
+      '.hp-pc .line{display:grid;grid-template-columns:56px 1.25fr 1.5fr 60px 124px 66px;align-items:center;gap:10px;padding:4px 0;border-bottom:1px solid #a9a598}' +
+      '.hp-pc .line.head{font-weight:700;padding-bottom:5px;border-bottom:2px solid #55514a}' +
+      '.hp-pc .line img,.hp-pc .line i{display:block;width:52px;height:52px;background:#e9e6da;border:2px solid;border-color:#55514a #fff #fff #55514a}' +
+      '.hp-pc .line b{font-size:17px}.hp-pc small{font-size:12.5px;color:#55514a}' +
+      '.hp-pc .qty{display:flex;align-items:center;gap:8px}.hp-pc .qty b{min-width:22px;text-align:center}.hp-pc .qty button{width:34px;padding:2px 0;font-size:18px;line-height:1.2}' +
+      '.hp-pc .right{text-align:right}' +
+      '.hp-pc .foot{display:flex;align-items:center;gap:26px;padding:10px 0 8px}.hp-pc .foot b{font-size:19px}.hp-pc .foot button{padding:7px 18px;font-size:16px}' +
+      '.hp-pc .info{padding:7px 10px;background:#e9e6da;border:2px solid;border-color:#55514a #fff #fff #55514a;min-height:66px}' +
+      '.hp-pc .info p{margin:1px 0}.hp-pc .info .warn{color:#a3271a;font-weight:700}.hp-pc .info .ok{color:#1f6b2a;font-weight:700}' +
+      '.hp-pc h3{margin:4px 0 6px;font:700 16px/1.3 "Courier New",Consolas,monospace}' +
+      '.hp-pc table{width:100%;border-collapse:collapse;margin-bottom:12px}.hp-pc td,.hp-pc th{padding:2px 8px;border-bottom:1px solid #a9a598;text-align:right}' +
+      '.hp-pc td:first-child,.hp-pc th:first-child{text-align:left}.hp-pc th{border-bottom:2px solid #55514a}.hp-pc .neg{color:#a3271a}';   // nothing of the game on screen while it waits
     document.head.appendChild(css);
     var moneyEl = document.createElement('div'); moneyEl.className = 'hp-money';
     moneyEl.innerHTML = '<span class="hp-coin"></span><span class="hp-amount"></span>'; document.body.appendChild(moneyEl);
@@ -480,8 +571,7 @@
       function row(name, value, cls){ return '<div class="row' + (cls ? ' ' + cls : '') + '"><span>' + name + '</span><b>' + value + '</b></div>'; }
       dayEl.innerHTML = '<h2>Day ' + r.n + '</h2><div class="sub">The day\u2019s accounts</div>' +
         row('Guests served', r.served) + row('Guests who left hungry', r.lost, r.lost ? 'minus' : '') +
-        row('Stew sold', euro(r.sales)) + row('Tips', euro(r.tips)) + row('Ingredients for tomorrow', signed(-r.cost), r.cost ? 'minus' : '') +
-        (r.short ? '<div class="small">Not enough money to fill up everything.</div>' : '') +
+        row('Stew sold', euro(r.sales)) + row('Tips', euro(r.tips)) + row('Supplies bought', signed(-r.cost), r.cost ? 'minus' : '') +
         row('Profit today', signed(r.profit), 'sum ' + (r.profit < 0 ? 'minus' : 'plus')) + row('In the till', signed(r.money)) +
         '<div class="go"><kbd>E</kbd>Start day ' + (r.n + 1) + '</div>';
     }
@@ -1030,7 +1120,7 @@
       if (place.knifeHome && Math.abs(place.knifeHome.x - x) < 0.34 && Math.abs(place.knifeHome.z - z) < 0.2) ok = false;   // the knife's place
       Object.keys(state.items).forEach(function(id){
         var o = state.items[id];
-        if (o.at === 'surface' && Math.hypot(o.x - x, o.z - z) < (o.kind === 'bowl' || o.kind === 'stew' ? 0.36 : 0.24)) ok = false;
+        if (o.at === 'surface' && Math.hypot(o.x - x, o.z - z) < (o.kind === 'parcel' ? 0.45 : o.kind === 'bowl' || o.kind === 'stew' ? 0.36 : 0.24)) ok = false;
       });
       return ok;
     }
@@ -1199,7 +1289,7 @@
     function list(words){ return words.join(', ').replace(/, ([^,]*)$/, ' and $1'); }
     play.addInteractables(function(hands){
       var out = [], it = carried(), pot = state.pot;
-      if (!place.pot || hold) return out;
+      if (!place.pot || hold || pc) return out;
       if (state.day.phase === 'done'){   // the accounts are on screen: on to the next morning
         var me = ctx.getChef();
         return me ? [{ pos: me.position, reach: 9, key: 'E', label: 'Start day ' + (state.day.n + 1), use: function(){ act('nextDay'); } }] : out;
@@ -1212,10 +1302,17 @@
       // the crates
       VEG.forEach(function(kind){
         var c = place.crates[kind], K = KINDS[kind], e = { pos: c.pos, reach: RULES.reach, key: 'F' };
+        if (it && it.kind === 'parcel'){   // unpacking a delivery
+          if (!(it.goods[kind] > 0)) return;
+          e.key = 'E';
+          if (state.crates[kind] >= RULES.crateStock) e.label = 'This crate is full';
+          else { e.label = 'Unpack the ' + K.many + ' (' + it.goods[kind] + ')'; e.use = function(){ act('unpack', kind); }; e.obj = c.model; }
+          add(e); return;
+        }
         if (it && it.kind === kind && !it.cut){ e.label = 'Put ' + K.the + ' back'; e.use = function(){ act('putBack'); }; }
         else if (it) return;
         else if (!free) e.label = 'Hands full';
-        else if (state.crates[kind] <= 0) e.label = 'No ' + K.many + ' left';
+        else if (state.crates[kind] <= 0) e.label = 'No ' + K.many + ' left \u2013 order some at the computer in the office';
         else { e.label = 'Take ' + K.a; e.use = function(){ act('take', kind); }; e.obj = c.model; }
         add(e);
       });
@@ -1260,6 +1357,15 @@
         if (it === o) add({ pos: at, reach: RULES.shelfReach, key: 'F', label: 'Put ' + KINDS[kind].the + ' back' + (more ? ' and fill it up' : ''), use: function(){ act('putHome'); } });
         else if (free && o.at === 'home') add({ pos: at, reach: RULES.shelfReach, key: 'F', label: 'Take ' + KINDS[kind].the, use: function(){ act('pickUp', o.id); }, obj: see(o) });
       });
+      // a delivery: the box in the storeroom, its broth at the shelf
+      var atDock = parcels().filter(function(p){ return p.at === 'dock'; })[0];
+      if (atDock && free) add({ pos: DOCK, reach: RULES.itemReach, key: 'F', label: 'Pick up the delivery box', use: function(){ act('pickUp', atDock.id); }, obj: see(atDock) });
+      if (it && it.kind === 'parcel'){
+        if (!atDock) add({ pos: DOCK, reach: RULES.itemReach, key: 'F', label: 'Put the delivery box down', use: function(){ act('toDock'); } });
+        if (it.goods.broth > 0) add({ pos: place.home.broth.pos, reach: RULES.shelfReach, key: 'E', label: 'Unpack the broth', use: function(){ act('unpack', 'broth'); }, obj: see(state.items[state.tools.broth]) });
+      }
+      // the computer in the office
+      add({ pos: PC, reach: 2.3, key: 'E', label: 'Use the computer', use: openPC });
       if (it && !HOME[it.kind] && aim && !scoop){
         if (aim.free) add({ pos: V(aim.x, 0, aim.z), reach: 2.4, key: 'F', bias: 0.35, label: 'Put ' + nameOf(it, 'the') + ' down', use: function(){ if (aim && aim.free) act('putDown', aim); } });
         else add({ pos: V(aim.x, 0, aim.z), reach: 2.4, key: 'F', bias: 0.35, label: 'No room here' });
@@ -1351,6 +1457,7 @@
         if (!v.placed){
           if (o.at === 'table'){ var gv = views[o.guest]; placeBowl(gv); v.obj.position.copy(gv.bowlAt); v.obj.rotation.set(0, rnd(0, 6.28), 0); }
           else if (o.at === 'home'){ v.obj.position.copy(place.home[o.kind].pos); v.obj.rotation.set(0, place.home[o.kind].rot, 0); }
+          else if (o.at === 'dock'){ v.obj.position.copy(DOCK); v.obj.rotation.set(0, 0.35, 0); }
           else if (o.at === 'board'){ v.obj.position.copy(place.board.pos); if (v.rot === undefined) v.rot = o.rot || 0; v.obj.rotation.set(0, v.rot, 0); }
           else { v.obj.position.set(o.x, o.y, o.z); v.obj.rotation.set(0, o.rot || 0, 0); }
           v.obj.visible = true; root.add(v.obj); v.placed = true;
@@ -1362,7 +1469,7 @@
       });
       if (!it && shown.carry !== null && shown.carry !== 'tool'){ shown.carry = null; play.setCarry(null); }   // ('tool': the ladle while stirring)
       // the line above the hint: cutting, a short message, or what he carries
-      var label = it ? 'Carrying ' + nameOf(it, 'a') : '', ob = state.board && state.items[state.board];
+      var label = it ? 'Carrying ' + nameOf(it, 'a') + (it.kind === 'parcel' ? ': ' + goodsText(it.goods) : '') : '', ob = state.board && state.items[state.board];
       if (cutting && ob && cutAxis(ob)){
         var pl = CUTS[ob.kind];
         label = 'Slide the mouse sideways, pull it down to cut   \u00b7   cut ' + (cutCount(ob) + 1) + ' of ' + (pl.a + pl.b);
@@ -1413,6 +1520,11 @@
       }
       if (stirring && (carried() || ctx.isMoving() || state.pot.phase === 'burnt' || !inPot())) stopStir();
       if (shake){ shake.t += dt / 0.5; if (shake.t >= 1) shake = null; }
+      if (shown.delivered !== state.delivered){
+        if (shown.delivered !== undefined) say('A delivery has arrived \u2013 the box is in the storeroom', 6);
+        shown.delivered = state.delivered;
+      }
+      drawPC();
       // while a tool is led the view goes to where it works
       var work = cutting ? { yaw: cutting.look, at: place.board.pos } : pouring ? { yaw: pouring.look, at: place.pot.pos } : stirring ? { yaw: stirring.look, at: place.pot.pos } : null;
       if (work){
@@ -1566,6 +1678,150 @@
       });
     }
 
+    // ---------- the computer in the office ------------------------------------------------------
+    // E at the desk shows its screen: ordering supplies, and the accounts. The mouse is
+    // free while it is on; E or Esc gets up again. The game goes on meanwhile.
+    var PC = V(5.2, 0, -15.8), DOCK = V(6.95, 0, -12.75);   // the desk; where deliveries are put down in the storeroom
+    var pc = null;   // while it is used: { page: 'supplies' | 'accounts', cart, said: [text, kind], fresh, sig }
+    var pcEl = document.createElement('div'); pcEl.className = 'hp-pc';
+    pcEl.innerHTML = '<div class="case"><div class="screen"></div><div class="brand">OFFICE PC</div></div>';
+    document.body.appendChild(pcEl);
+    var pcScreen = pcEl.querySelector('.screen'), pcCase = pcEl.querySelector('.case');
+    function fitPC(){ pcCase.style.transform = 'scale(' + Math.min(1, (window.innerWidth - 24) / 912, (window.innerHeight - 24) / 612) + ')'; }
+    window.addEventListener('resize', fitPC);
+    function lockMouse(){
+      var cv = document.querySelector('canvas');
+      try { var lock = cv && cv.requestPointerLock && cv.requestPointerLock(); if (lock && lock.catch) lock.catch(function(){}); } catch (err){}
+    }
+    function openPC(){
+      if (pc) return;
+      pc = { page: 'supplies', cart: emptyGoods(), said: null, fresh: true, sig: '' };
+      setTimeout(function(){ if (pc) pc.fresh = false; }, 0);   // (fresh: until the key press that switched it on is over)
+      if (ctx.releaseKeys) ctx.releaseKeys();
+      if (document.exitPointerLock) document.exitPointerLock();
+      fitPC(); pcEl.classList.add('on'); document.body.classList.add('hp-hold');
+      drawPC();
+    }
+    function closePC(){
+      if (!pc) return;
+      pc = null; pcEl.classList.remove('on'); document.body.classList.remove('hp-hold');
+      lockMouse();
+    }
+    // a small picture of a model, drawn once with the game's own renderer
+    var thumbs = {};
+    function thumb(kind){
+      if (thumbs[kind] !== undefined) return thumbs[kind];
+      var Rn = ctx.renderer, md = MODELS[kind];
+      if (!Rn || !md || !md.obj) return '';
+      try {
+        var px = 128, rt = new T.WebGLRenderTarget(px, px), sc = new T.Scene(), sz = md.size, r = Math.max(sz.x, sz.y, sz.z);
+        rt.texture.encoding = T.sRGBEncoding;
+        sc.environment = scene.environment;
+        sc.add(new T.AmbientLight(0xffffff, 0.7));
+        var lamp = new T.DirectionalLight(0xffffff, 1.2); lamp.position.set(1.5, 3, 2); sc.add(lamp);
+        sc.add(instance(kind));
+        var cam = new T.PerspectiveCamera(28, 1, 0.01, 20);
+        cam.position.set(r * 1.5, sz.y / 2 + r * 1.3, r * 1.9); cam.lookAt(V(0, sz.y / 2, 0));
+        var oldTarget = Rn.getRenderTarget(), oldColor = new T.Color(), oldAlpha = Rn.getClearAlpha();
+        Rn.getClearColor(oldColor);
+        Rn.setRenderTarget(rt); Rn.setClearColor(0x000000, 0); Rn.clear(); Rn.render(sc, cam);
+        var buf = new Uint8Array(px * px * 4);
+        Rn.readRenderTargetPixels(rt, 0, 0, px, px, buf);
+        Rn.setRenderTarget(oldTarget); Rn.setClearColor(oldColor, oldAlpha); rt.dispose();
+        var cv = document.createElement('canvas'); cv.width = cv.height = px;
+        var g = cv.getContext('2d'), img = g.createImageData(px, px);
+        for (var y = 0; y < px; y++) img.data.set(buf.subarray((px - 1 - y) * px * 4, (px - y) * px * 4), y * px * 4);   // (it comes upside down)
+        g.putImageData(img, 0, 0);
+        thumbs[kind] = cv.toDataURL();
+      } catch (e){ console.error('Drawing the picture of ' + kind + ' failed:', e); thumbs[kind] = ''; }
+      return thumbs[kind];
+    }
+    function clockText(){ var m = Math.floor(state.day.time + 1e-6); return Math.floor(m / 60) + ':' + (m % 60 < 10 ? '0' : '') + (m % 60); }
+    function minSec(t){ t = Math.max(0, Math.ceil(t)); return Math.floor(t / 60) + ':' + (t % 60 < 10 ? '0' : '') + (t % 60); }
+    function oneDec(x){ return Math.round(x * 10) / 10; }
+    // the screen follows the state: drawn again whenever something on it has changed
+    function drawPC(){
+      if (!pc) return;
+      var day = state.day, total = priceOf(pc.cart), boxes = parcels();
+      var sig = [pc.page, JSON.stringify(pc.cart), pc.said, state.money, GOODS.map(function(k){ return oneDec(stockOf(k)) + '/' + room(k) + '/' + coming(k); }).join(' '),
+                 state.orders.map(function(o){ return Math.ceil(o.left); }).join(','), boxes.map(function(p){ return p.at + JSON.stringify(p.goods); }).join(','),
+                 day.n, clockText(), day.phase, day.served, day.lost, day.sales, day.tips, day.spent, state.history.length].join('|');
+      if (sig === pc.sig) return;
+      pc.sig = sig;
+      var html = '', title;
+      if (pc.page === 'supplies'){
+        title = 'Order supplies';
+        html += '<div class="line head"><span></span><span>Item</span><span>In the kitchen</span><span class="right">Price</span><span>Order</span><span class="right">Sum</span></div>';
+        GOODS.forEach(function(k){
+          var pic = thumb(k), have = k === 'broth' ? 'for ' + oneDec(stockOf(k)) + ' of ' + holds(k) + ' pots' : stockOf(k) + ' of ' + holds(k), on = coming(k), n = pc.cart[k];
+          html += '<div class="line">' + (pic ? '<img src="' + pic + '" alt="">' : '<i></i>') +
+            '<span><b>' + GOOD[k].name + '</b>' + (k === 'broth' ? '<br><small>for one pot of stew</small>' : '') + '</span>' +
+            '<span>' + have + (on ? '<br><small>+ ' + on + ' on the way</small>' : '') + '</span>' +
+            '<span class="right">' + euro(RULES.cost[k]) + '</span>' +
+            '<span class="qty"><button data-do="minus:' + k + '"' + (n > 0 ? '' : ' disabled') + '>\u2212</button><b>' + n + '</b>' +
+            '<button data-do="plus:' + k + '"' + (n < room(k) ? '' : ' disabled') + '>+</button></span>' +
+            '<span class="right">' + (n ? euro(n * RULES.cost[k]) : '') + '</span></div>';
+        });
+        var poor = total > state.money;
+        html += '<div class="foot"><span>Total <b>' + euro(total) + '</b></span><span>In the till <b>' + signed(state.money) + '</b></span><span class="grow"></span>' +
+                '<button data-do="buy"' + (total > 0 && !poor ? '' : ' disabled') + '>Order now</button></div><div class="info">';
+        if (poor) html += '<p class="warn">Not enough money in the till for this order.</p>';
+        if (pc.said) html += '<p class="' + pc.said[1] + '">' + pc.said[0] + '</p>';
+        state.orders.forEach(function(o){ html += '<p>On its way: ' + goodsText(o.goods) + ' \u2013 arrives in ' + minSec(o.left) + '</p>'; });
+        boxes.forEach(function(p){ html += '<p>' + (p.at === 'dock' ? 'Waiting in the storeroom: a box with ' : 'Not unpacked yet: a box with ') + goodsText(p.goods) + '</p>'; });
+        if (!poor && !pc.said && !state.orders.length && !boxes.length)
+          html += '<p>Orders arrive as a box in the storeroom after about ' + RULES.delivery + ' seconds.</p><p>Carry the box to the kitchen and unpack it at the crates and at the broth shelf.</p>' +
+                  (GOODS.every(function(k){ return room(k) === 0; }) ? '<p>The kitchen is full: there is no room for more right now.</p>' : '');
+        html += '</div>';
+      } else {
+        title = 'Accounts';
+        var soFar = day.sales + day.tips - day.spent;
+        function tr(name, value, neg){ return '<tr><td>' + name + '</td><td' + (neg ? ' class="neg"' : '') + '>' + value + '</td></tr>'; }
+        html += '<h3>Today \u2013 day ' + day.n + '</h3><table>' + tr('Guests served', day.served) + tr('Guests who left hungry', day.lost, day.lost > 0) +
+                tr('Stew sold', euro(day.sales)) + tr('Tips', euro(day.tips)) + tr('Supplies bought', signed(-day.spent), day.spent > 0) +
+                tr('<b>Profit so far</b>', '<b>' + signed(soFar) + '</b>', soFar < 0) + tr('<b>In the till</b>', '<b>' + signed(state.money) + '</b>', state.money < 0) + '</table>';
+        html += '<h3>Earlier days</h3>';
+        if (!state.history.length) html += '<p>No day is finished yet.</p>';
+        else {
+          html += '<table><tr><th>Day</th><th>Guests</th><th>Stew + tips</th><th>Supplies</th><th>Profit</th><th>Till</th></tr>';
+          state.history.slice(-7).reverse().forEach(function(r){
+            html += '<tr><td>Day ' + r.n + '</td><td>' + r.served + '</td><td>' + euro(r.sales + r.tips) + '</td><td>' + signed(-r.cost) + '</td><td' + (r.profit < 0 ? ' class="neg"' : '') + '>' + signed(r.profit) + '</td><td>' + signed(r.money) + '</td></tr>';
+          });
+          html += '</table>';
+        }
+      }
+      pcScreen.innerHTML = '<div class="win"><div class="title"><span>' + title + '</span><span>Hot Pot Go</span></div><div class="body">' + html + '</div></div>' +
+        '<div class="bar"><button class="tab' + (pc.page === 'supplies' ? ' on' : '') + '" data-do="page:supplies">Supplies</button>' +
+        '<button class="tab' + (pc.page === 'accounts' ? ' on' : '') + '" data-do="page:accounts">Accounts</button><span class="grow"></span>' +
+        '<span class="clock">Day ' + day.n + ' \u00b7 ' + clockText() + '</span><button data-do="close">Get up<kbd>E</kbd></button></div>';
+    }
+    // a button on the screen: 'plus:potato', 'minus:potato', 'buy', 'page:accounts', 'close'
+    function pcDo(cmd){
+      if (!pc) return;
+      var p = cmd.split(':'), k = p[1];
+      pc.said = null;
+      if (p[0] === 'plus'){ if (GOOD[k] && pc.cart[k] < room(k)) pc.cart[k]++; }
+      else if (p[0] === 'minus'){ if (GOOD[k] && pc.cart[k] > 0) pc.cart[k]--; }
+      else if (p[0] === 'page') pc.page = k === 'accounts' ? 'accounts' : 'supplies';
+      else if (p[0] === 'buy'){
+        if (act('buy', pc.cart)){ pc.cart = emptyGoods(); pc.said = ['Ordered \u2013 thank you! The box comes to the storeroom.', 'ok']; saveNow(false); }
+        else pc.said = ['This order is not possible.', 'warn'];
+      } else if (p[0] === 'close'){ closePC(); return; }
+      drawPC();
+    }
+    // (on pressing down, not on letting go: the screen may be drawn again in between)
+    pcEl.addEventListener('mousedown', function(e){
+      var t = e.target;
+      while (t && t !== pcEl && !(t.getAttribute && t.getAttribute('data-do'))) t = t.parentNode;
+      if (!t || t === pcEl || t.disabled) return;
+      e.preventDefault(); pcDo(t.getAttribute('data-do'));
+    });
+    window.addEventListener('keydown', function(e){
+      if (!pc || pc.fresh || e.repeat) return;   // (not the key press that switched it on, not a key held down)
+      var k = e.key.toLowerCase();
+      if (k === 'e' || k === 'escape') closePC();
+    });
+
     // ---------- the saved game ---------------------------------------------------------------
     // Everything the rules know (`state`), where the chef stands and the stains on the
     // floor, as one text. `hold`: the game waits for "Continue" or "New restaurant".
@@ -1597,8 +1853,9 @@
       ok = ok && Object.keys(HOME).every(function(k){ var o = st.items[st.tools[k]]; return !!o && o.kind === k; });
       ok = ok && Object.keys(st.items).every(function(id){
         var o = st.items[id];
-        return !!o && o.id === +id && !!KINDS[o.kind] && oneOf(o.at, ['hand', 'surface', 'board', 'home', 'table']) &&
-               (o.at !== 'surface' || (num(o.x) && num(o.y) && num(o.z))) && (!o.cut || (isVeg(o.kind) && okCut(o.cut)));
+        return !!o && o.id === +id && !!KINDS[o.kind] && oneOf(o.at, ['hand', 'surface', 'board', 'home', 'table', 'dock']) &&
+               (o.at !== 'surface' || (num(o.x) && num(o.y) && num(o.z))) && (!o.cut || (isVeg(o.kind) && okCut(o.cut))) &&
+               (o.kind !== 'parcel' || (!!o.goods && GOODS.every(function(k){ return num(o.goods[k]) && o.goods[k] >= 0; })));
       });
       ok = ok && num(st.items[st.tools.broth].left) && (st.day.phase !== 'done' || (!!st.day.report && num(st.day.report.n)));
       if (!ok) return null;
@@ -1607,6 +1864,10 @@
       Object.keys(fresh).forEach(function(k){ if (st[k] === undefined || st[k] === null && fresh[k] !== null) st[k] = fresh[k]; });
       Object.keys(fresh.pot).forEach(function(k){ if (typeof fresh.pot[k] === 'number' && !num(st.pot[k])) st.pot[k] = fresh.pot[k]; });
       Object.keys(fresh.day).forEach(function(k){ if (typeof fresh.day[k] === 'number' && !num(st.day[k])) st.day[k] = fresh.day[k]; });
+      st.orders = (Array.isArray(st.orders) ? st.orders : []).filter(function(o){ return !!o && !!o.goods && num(o.left) && GOODS.every(function(k){ return num(o.goods[k]) && o.goods[k] >= 0; }); });
+      st.history = (Array.isArray(st.history) ? st.history : []).filter(function(r){ return !!r && ['n', 'served', 'lost', 'sales', 'tips', 'cost', 'profit', 'money'].every(function(k){ return num(r[k]); }); });
+      if (!num(st.delivered)) st.delivered = 0;
+      if (st.day.report && !num(st.day.report.cost)) st.day.report.cost = 0;
       if (!Array.isArray(st.pot.qs)) st.pot.qs = [];
       if (!st.pot.cut || typeof st.pot.cut !== 'object') st.pot.cut = {};
       VEG.forEach(function(k){ if (st.pot.cut[k] && !okCut(st.pot.cut[k])) delete st.pot.cut[k]; });
@@ -1631,6 +1892,7 @@
         if (o.at === 'table') lost = !st.guests.some(function(g){ return g.phase === 'eating' && g.item === o.id; });
         else if (o.at === 'hand') lost = st.carry !== o.id;
         else if (o.at === 'board') lost = st.board !== o.id;
+        else if (o.at === 'dock') lost = o.kind !== 'parcel';
         if (!lost) return;
         if (HOME[o.kind]) o.at = 'home';
         else { if (o.kind === 'bowl' || o.kind === 'stew') st.bowls++; delete st.items[id]; }
@@ -1644,6 +1906,7 @@
       Object.keys(objs).forEach(function(id){ if (objs[id].obj.parent) objs[id].obj.parent.remove(objs[id].obj); delete objs[id]; });
       play.setCarry(null);
       cutting = null; pouring = null; stirring = null; shake = null; scoop = null; note.t = 0;
+      closePC(); shown.delivered = undefined;
       shown.carry = null; shown.money = null; shown.hud = null; shown.phase = undefined; shown.told = true;
       if (play.setStains) play.setStains(d.stains);
       pendingChef = d.chef && num(d.chef.x) && num(d.chef.z) ? d.chef : null;
@@ -1697,7 +1960,10 @@
 
     return {
       update: update, mouse: mouse,
+      atScreen: function(){ return !!pc || hold; },   // the keys belong to a screen, not to the chef
       // ---- for tests only ----
+      debugPC: function(cmd){ if (cmd === 'open') openPC(); else if (cmd) pcDo(cmd); return pc ? { page: pc.page, cart: pc.cart, said: pc.said } : null; },
+      debugSupplies: function(){ var o = {}; GOODS.forEach(function(k){ o[k] = oneDec(stockOf(k)) + ' room ' + room(k) + ' coming ' + coming(k); }); o.orders = state.orders.map(function(x){ return goodsText(x.goods) + ' in ' + Math.ceil(x.left); }); o.boxes = parcels().map(function(p){ return p.at + ': ' + goodsText(p.goods); }); return o; },
       debugDay: function(){ return JSON.parse(JSON.stringify(state.day)); },
       debugTime: function(minutes){ state.day.time = minutes; },
       debugSave: saveNow, debugSnapshot: snapshot, debugBegin: begin, debugHold: function(){ return hold; },

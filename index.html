@@ -245,6 +245,7 @@
   var shiftDown = false, jumpRequested = false;
   window.addEventListener('keydown', function(e){
     var k = e.key.toLowerCase();
+    if (restaurant && restaurant.atScreen && restaurant.atScreen()) return;   // a screen is on (the computer, the start card)
     if (k in keys) keys[k] = true;
     if (e.key === 'Shift') shiftDown = true;
     if (k === 'e' && !e.repeat){ if (gameplay) gameplay.interact(); else toggleNearDoor(); }   // use
@@ -506,6 +507,8 @@
           // where the player looks, and whether a movement key is held
           look: { get: function(){ return { yaw: lookYaw, pitch: lookPitch }; }, set: function(yaw, pitch){ lookYaw = yaw; lookPitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, pitch)); } },
           isMoving: function(){ return !!(keys.w || keys.a || keys.s || keys.d); },
+          releaseKeys: function(){ keys.w = keys.a = keys.s = keys.d = false; shiftDown = false; },
+          renderer: renderer,
           // where the chef stands (for the saved game)
           chefAt: { get: function(){ return model ? { x: model.position.x, z: model.position.z } : null; },
                     set: function(x, z){ if (!model) return false; model.position.x = x; model.position.z = z; return true; } },

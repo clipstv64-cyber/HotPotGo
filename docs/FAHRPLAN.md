@@ -24,7 +24,7 @@ Rest dran kommt. Er wird nach jeder Etappe aktualisiert.
 | 1 | Begehbares Restaurant mit Küche und Gastraum | fertig |
 | 2 | Spielerbewegung und Kamera | fertig |
 | 3 | Gegenstände aufnehmen und ablegen | fertig: F nimmt auf und legt ab (Zutaten, Schüsseln auf den Arbeitsflächen; Besen überall), E benutzt |
-| 4 | Kühlschrank und Zutaten | teilweise: Kartoffeln, Karotten, Zwiebeln als einzelne Gegenstände aus drei Kisten in der Vorratsecke der Küche, mit Vorrat (je 6); Kühlschrank noch ohne Funktion |
+| 4 | Kühlschrank und Zutaten | teilweise: Kartoffeln, Karotten, Zwiebeln als einzelne Gegenstände aus drei Kisten in der Vorratsecke der Küche, mit Vorrat (je 6), der am Computer nachbestellt wird; Kühlschrank noch ohne Funktion |
 | 5 | Interaktives Schneidebrett | fertig: das Hackbrett auf der Arbeitsinsel; Gemüse mit F darauflegen, das Beil daneben mit F nehmen |
 | 6 | Gemüse schneiden | fertig: linke Maustaste startet, Maus seitwärts setzt das Messer, Maus nach unten schneidet; Karotte in Scheiben (5 Schnitte), Kartoffel in Würfel (3 + 3, wird gedreht), Zwiebel in Stücke (2 + 3); Schnittgeräusch; gleichmäßige Schnitte geben bessere Qualität |
 | 7 | Zutaten in den Topf geben | fertig: nur geschnittenes Gemüse, die Stücke liegen so im Topf, wie sie geschnitten wurden |
@@ -66,8 +66,22 @@ dem der Gastgeber die Aktionen prüft.
 Offen aus Phase 1 (bewusst vereinfacht): Kühlschrank ohne Funktion, Bestellung am Tisch
 aufnehmen, freie Platzwahl der Gäste, Spülen, Pausenmenü.
 
-Als Nächstes folgt Phase 2 des Konzepts (Computer mit Bestellungen und Lieferungen, Geräte
-und Möbel kaufen, Bewertungen, weitere Gerichte), dann Mehrspieler und Mitarbeiter.
+## Stand von Phase 2 (Restaurant-Management)
+
+| Nr. | Punkt aus dem Konzept | Stand |
+|---|---|---|
+| 1 | Voll funktionsfähiger Restaurant-Computer | teilweise: der Computer im Büro hat einen eigenen Bildschirm mit zwei Programmen, „Supplies“ (bestellen) und „Accounts“ (heutige Zahlen und frühere Tage); Shop, Restaurantverwaltung, Bewertungen fehlen |
+| 2 | Zutaten bestellen | fertig: Menge wählen, Summe, Kassenstand, bestellen |
+| 3 | Warenlieferung und Lagerverwaltung | teilweise: Lieferung kommt nach 30 Sekunden als Karton ins Lager und wird in der Küche ausgepackt; ein eigener Lagerbestand im Lagerraum fehlt |
+| 4 | Geräte kaufen | fehlt |
+| 5 | Möbel kaufen und platzieren | fehlt |
+| 6 | Wände und Böden verändern | fehlt |
+| 7 | Neue Räume freischalten | fehlt |
+| 8 | Kundenzufriedenheit und Sternebewertungen | fehlt |
+| 9 | Weitere Rezepte | fehlt |
+| 10 | Reinigungssystem | teilweise: Flecken und Besen gibt es schon |
+
+Danach folgen Mehrspieler und Mitarbeiter (Phase 3).
 
 ## Absprachen
 
@@ -92,9 +106,15 @@ und Möbel kaufen, Bewertungen, weitere Gerichte), dann Mehrspieler und Mitarbei
   21:00 dauert 12 Minuten (mit Vorbereitung etwa die 15 bis 20 Minuten aus dem Konzept;
   einstellbar in `RULES.day`). Schließen gilt für den ganzen Tag, auch wenn man selbst
   früher schließt. Sind die letzten Gäste gegangen, beendet man den Tag an der Tür.
-- **Vorrat über Nacht:** Bis man am Computer bestellen kann (Phase 2), werden Kisten und
-  Brühe über Nacht von selbst aufgefüllt und in der Abrechnung abgezogen, soweit das Geld
-  reicht. Reste im Topf bleiben für den nächsten Tag.
+- **Bestellen** (20.11.2026): Vorrat füllt sich nicht mehr von selbst auf. Am Computer im
+  Büro (E am Schreibtisch) bestellt man Kartoffeln, Karotten, Zwiebeln und Brühe; das Geld
+  geht sofort ab und steht in der Tagesabrechnung als „Supplies bought“. Nach 30 Sekunden
+  steht ein Karton im Lager (Ecke links neben der Tür). Man trägt ihn in die Küche und
+  packt mit E an den Kisten und am Brühe-Brett aus. Bestellen kann man nur, was in die
+  Küche passt (6 je Gemüse, Brühe für 7 Töpfe). Kommt eine Lieferung, während noch ein
+  Karton im Lager steht, landet sie im selben Karton. Reste im Topf bleiben über Nacht.
+- **Karton ohne neues Modell:** Der Lieferkarton ist aus dem Kartonstapel im Lager
+  herausgeschnitten (`models/d_parcel.glb`), weil gerade keine Meshy-Guthaben da sind.
 - **Spielstand:** eine Datei im Benutzerordner des Spiels (`saves/restaurant.json`), dazu
   der Stand vom Vortag als Sicherung. Gespeichert werden Regeln-Zustand, Standort des
   Kochs und Flecken. Nicht gespeichert: der Besen (steht nach dem Laden in der Kammer)

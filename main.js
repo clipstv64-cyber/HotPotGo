@@ -90,7 +90,10 @@ function createWindow() {
     minWidth: 800,
     minHeight: 450,
     backgroundColor: '#bfe3ff',
-    title: 'Hot Pot Go',
+    // a self-test window takes no keys and does not come to the front, so nobody plays in it by mistake
+    title: process.env.HOTPOT_SELFTEST ? 'Hot Pot Go – automatic test (closes by itself)' : 'Hot Pot Go',
+    show: !process.env.HOTPOT_SELFTEST,
+    focusable: !process.env.HOTPOT_SELFTEST,
     autoHideMenuBar: true,
     webPreferences: {
       contextIsolation: true,
@@ -100,6 +103,10 @@ function createWindow() {
     },
   });
 
+  if (process.env.HOTPOT_SELFTEST) {
+    win.on('page-title-updated', (event) => event.preventDefault());
+    win.showInactive();
+  }
   win.loadURL('app://game/index.html' + (process.env.HOTPOT_QUERY || ''));   // query: test settings only
 
   // F11 = full screen, F12 = developer tools (development only)
