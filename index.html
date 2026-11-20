@@ -129,15 +129,14 @@
   var CHAIR_SEAT = 0.46;    // seat height as a share of the chair height (measured on the model)
   var CHAIR_BACK = 0.15;    // backrest depth as a share of the chair depth
   var SIT_GAP = 0.03;
-  var ENTRANCE = [10, 0];          // where the guests come in (on the right-hand wall)
+  var ENTRANCE = [-1.35, 9.95];    // the entrance door in the front wall (x, z): the guests come in and leave here
   var ENTRANCE_AISLE_X = -5.4;     // the aisle in front of the tables
   var ENTRANCE_BEHIND = 0.75;      // walk this far behind the chair row
   var ENTRANCE_SIDE = 0.6;         // stand this far beside the chair before sitting
   var ENTRANCE_CORNER = 0.45;      // switch to the next point of the way this close to it
   var ENTRANCE_TURN_SPEED = 2.6;   // radians per second
-  var ENTRANCE_DELAY = 1;          // seconds before the first guest comes in
-  var ENTRANCE_GAP = 4;            // seconds between guests
-  var ENTRANCE_WALK_IN = false;    // guests walk in and sit down (off: seated from the start)
+  var STAND_UP_TIME = 1.3;         // seconds to get up from the chair
+  var GUEST_KEEP_OFF = 1.15;        // walking guests keep this far from the chef
   var IDLE_LOOK_PACE = 3;         // overall speed of looking around at the table
   var HAND_ON_TABLE_LIFT = 0.018;  // wrist height above the table top (share of body height)
   var SIT_DOWN_TIME = 1.4;         // seconds to sit down
@@ -158,6 +157,7 @@
   var CHEF_RADIUS = 0.45;
   var STEP_UP = 0.05;       // tiny ledges he simply steps over
   var obstacles = [];       // { minX, maxX, minZ, maxZ, top }
+  window.__hotpotObstacles = obstacles;   // for tests
   // table centres (x, z): one row of four along the left side of the room
   var TABLE_SPOTS = [[-7.5, -7], [-7.5, -2.33], [-7.5, 2.33], [-7.5, 7]];
   var CEIL_COLOR_URL = "textures/ceil_color.jpg";
@@ -506,14 +506,18 @@
           // where the player looks, and whether a movement key is held
           look: { get: function(){ return { yaw: lookYaw, pitch: lookPitch }; }, set: function(yaw, pitch){ lookYaw = yaw; lookPitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, pitch)); } },
           isMoving: function(){ return !!(keys.w || keys.a || keys.s || keys.d); },
-          // the people sitting at the tables: who they are, their chair and table, their head
+          // the guests: who they are, their chair and table, their head and hands, where they
+          // are right now ('away', 'coming', 'seated', 'leaving'), and how to send them in and out
           getGuests: function(){
-            return characters.filter(function(c){ return c.state === 'seated' && c.sit; }).map(function(c){
+            return characters.filter(function(c){ return c.sit; }).map(function(c){
               if (!c.guestInfo) c.guestInfo = { id: c.cfg.name, group: c.group, spot: c.sit.spot, head: findBone(c.obj, c.cfg.prefix, 'Head'),
-                hands: [findBone(c.obj, c.cfg.prefix, 'LeftHand'), findBone(c.obj, c.cfg.prefix, 'RightHand')] };
+                hands: [findBone(c.obj, c.cfg.prefix, 'LeftHand'), findBone(c.obj, c.cfg.prefix, 'RightHand')],
+                where: function(){ return c.state === 'away' ? 'away' : c.state === 'seated' ? 'seated' : c.goal === 'leave' ? 'leaving' : 'coming'; },
+                come: function(){ guestCome(c); }, leave: function(){ guestLeave(c); }, seatNow: function(){ guestSeatNow(c); } };
               return c.guestInfo;
             });
-          } });
+          },
+          getEntrance: function(){ return decor && decor.entrance; } });
         window.__hotpotRestaurant = restaurant;   // for tests
       } catch (e){ console.error('Setting up the restaurant failed:', e); }
     }
@@ -1789,6 +1793,9 @@
     if (ch.sit || ch.cfg.seat === undefined) return;
     var spot = chairSpots[ch.cfg.seat];
     if (!spot) return;
+    // the walking pose (all bones, also those the walk does not move), to come back to after sitting
+    ch.walkBones = [];
+    ch.obj.traverse(function(o){ if (o.isBone) ch.walkBones.push({ bone: o, q: o.quaternion.clone(), p: o.position.clone() }); });
     if (ch.seatedWeights) loadWeights(ch.obj, ch.seatedWeights);
     // stop the walk first: stopping restores the bones to their rest pose
     if (ch.action) ch.action.stop();
@@ -1806,15 +1813,43 @@
     var bones = [];
     ch.obj.traverse(function(o){ if (o.isBone) bones.push({ bone: o, q: o.quaternion.clone(), p: o.position.clone() }); });
     ch.sit = { spot: spot, bones: bones, pos: ch.group.position.clone(), rot: ch.group.rotation.y, route: entranceRoute(spot) };
-    if (!ENTRANCE_WALK_IN){
-      // everyone is already seated when the scene starts
-      ch.group.visible = true;
-      finishSeat(ch);
-      return;
-    }
+    // nobody is in the restaurant at the start: the guests come in when it is open
+    startWalking(ch);
+    ch.group.visible = false; ch.state = 'away';
+  }
+  // back into the walking pose, the walk running
+  function startWalking(ch){
     if (ch.walkingWeights) loadWeights(ch.obj, ch.walkingWeights);
-    ch.action.reset(); ch.action.play();
+    ch.walkBones.forEach(function(e){ e.bone.quaternion.copy(e.q); e.bone.position.copy(e.p); });
+    ch.action.reset(); ch.action.timeScale = ch.cfg.animRate; ch.action.play();
     ch.mixer.update(0);
+  }
+  // A guest comes in through the entrance door and walks to their chair ...
+  function guestCome(ch){
+    if (ch.state !== 'away' || !ch.sit) return;
+    startWalking(ch);
+    var g = ch.group;
+    g.position.set(ENTRANCE[0], 0, ENTRANCE[1] + 0.9); g.rotation.y = Math.PI;   // outside, facing in
+    g.visible = true;
+    ch.route = ch.sit.route; ch.leg = 0; ch.goal = 'sit'; ch.state = 'walk';
+  }
+  // ... gets up again and walks out the way they came
+  function guestLeave(ch){
+    if (ch.state !== 'seated') return;
+    restoreSkirt(ch);
+    ch.seated = false;
+    ch.action.reset(); ch.action.timeScale = 0; ch.action.play();
+    ch.standT = 0; ch.state = 'stand'; ch.goal = 'leave';
+  }
+  // for tests: seated at once
+  function guestSeatNow(ch){
+    if (!ch.sit) return;
+    ch.group.visible = true; ch.goal = 'sit';
+    finishSeat(ch);
+  }
+  // the skirt's cloth as it is modelled (sitting down lays part of it on the seat)
+  function restoreSkirt(ch){
+    (ch.restPos || []).forEach(function(e){ e.attr.array.set(e.copy); e.attr.needsUpdate = true; });
   }
 
   // the way in: through the entrance, down the room, along the gap behind the
@@ -1824,10 +1859,15 @@
     var zBehind = spot.z + back * ENTRANCE_BEHIND;
     var side = spot.x > TABLE_SPOTS[0][0] ? 1 : -1;     // aisle-side chairs step in from the aisle
     var sideX = spot.x + side * ENTRANCE_SIDE;
-    return [new THREE.Vector3(ENTRANCE[0] - 1.5, 0, ENTRANCE[1]),
+    return [new THREE.Vector3(ENTRANCE[0], 0, ENTRANCE[1] - 1.1),
             new THREE.Vector3(ENTRANCE_AISLE_X, 0, zBehind),
             new THREE.Vector3(sideX, 0, zBehind),
             new THREE.Vector3(sideX, 0, spot.z)];
+  }
+  // the way out: the same way back, and out through the door
+  function exitRoute(ch){
+    var r = ch.sit.route;
+    return [r[2], r[1], r[0], new THREE.Vector3(ENTRANCE[0], 0, ENTRANCE[1] + 0.9)];
   }
 
   // the person has sat down: freeze the pose (and lay the skirt on the seat)
@@ -1841,6 +1881,10 @@
     ch.group.updateMatrixWorld(true);
     if (ch.seatedWeights) loadWeights(ch.obj, ch.seatedWeights);
     ch.seated = true; ch.state = 'seated';
+    if (!ch.restPos){   // (the draping changes the cloth's shape: keep the original to undo it when they get up)
+      ch.restPos = [];
+      ch.obj.traverse(function(m){ if (m.isSkinnedMesh){ var a = m.geometry.attributes.position; ch.restPos.push({ attr: a, copy: a.array.slice() }); } });
+    } else restoreSkirt(ch);
     drapeSkirt(ch, ch.sit.spot);
     setupIdle(ch);
   }
@@ -2021,8 +2065,8 @@
     });
   }
 
-  // one person per frame: waiting outside, walking in, sitting down, seated
-  var crowdClock = -1;
+  // one person per frame: away, walking (in or out), sitting down, seated, getting up
+  var crowdClock = -1, standQ = new THREE.Quaternion(), standP = new THREE.Vector3();
   function updateCharacter(ch, delta){
     if (ch.state === 'path'){
       if (ch.mixer) ch.mixer.update(delta);
@@ -2030,33 +2074,44 @@
       return;
     }
     if (ch.state === 'seated'){ idleSeated(ch, delta); return; }
-    if (!ch.sit) return;
+    if (!ch.sit || ch.state === 'away') return;
     var g = ch.group, speed = ch.cfg.strideSpeed * ch.cfg.animRate;
-    if (ch.state === 'wait'){
-      if (crowdClock < ch.cfg.order * ENTRANCE_GAP + ENTRANCE_DELAY) return;
-      ch.state = 'walk'; ch.leg = 0; g.visible = true;
-      g.position.set(ENTRANCE[0] + 1.2, 0, ENTRANCE[1]);
-      g.rotation.y = Math.atan2(ch.sit.route[0].x - g.position.x, ch.sit.route[0].z - g.position.z);
-    }
     if (ch.state === 'walk'){
       ch.mixer.update(delta);
-      var route = ch.sit.route, target = route[ch.leg], last = ch.leg === route.length - 1;
+      var route = ch.route, target = route[ch.leg], last = ch.leg === route.length - 1;
       var dx = target.x - g.position.x, dz = target.z - g.position.z, dist = Math.hypot(dx, dz);
-      // turn smoothly toward the next point (limited turning speed)
+      // turn smoothly toward the next point (limited turning speed); a sharp turn is made on the spot
       var want = Math.atan2(dx, dz), turn = shortestAngle(want - g.rotation.y);
       var maxTurn = ENTRANCE_TURN_SPEED * delta;
       g.rotation.y += Math.max(-maxTurn, Math.min(maxTurn, turn));
-      var step = speed * delta;
+      var step = speed * delta * Math.max(0, Math.min(1, 1 - (Math.abs(turn) - 0.5) / 0.7));
       if (last){
-        // the last stretch leads straight onto the spot beside the chair
-        if (dist <= step){ g.position.x = target.x; g.position.z = target.z; ch.state = 'sit'; ch.sitT = 0;
+        // the last stretch leads straight onto the spot
+        if (dist <= Math.max(step, 0.02)){
+          g.position.x = target.x; g.position.z = target.z;
+          if (ch.goal === 'leave'){ g.visible = false; ch.state = 'away'; return; }   // out of the door
+          ch.state = 'sit'; ch.sitT = 0;
           ch.from = { pos: g.position.clone(), rot: g.rotation.y };
           // sitting: the skirt follows the thighs again (it lies on them)
-          if (ch.seatedWeights) loadWeights(ch.obj, ch.seatedWeights); }
-        else { g.position.x += dx / dist * step; g.position.z += dz / dist * step; }
+          if (ch.seatedWeights) loadWeights(ch.obj, ch.seatedWeights);
+        } else { g.position.x += dx / dist * step; g.position.z += dz / dist * step; }
       } else {
         g.position.x += Math.sin(g.rotation.y) * step; g.position.z += Math.cos(g.rotation.y) * step;
         if (dist < ENTRANCE_CORNER) ch.leg++;
+      }
+      // not through the chef: they keep a little distance and go round him
+      if (model && ch.state === 'walk' && !(last && ch.goal === 'sit')){
+        // (measured from a little in front of him, where the player's eyes are)
+        var mx = model.position.x + Math.sin(model.rotation.y) * 0.35, mz = model.position.z + Math.cos(model.rotation.y) * 0.35;
+        var cx = g.position.x - mx, cz = g.position.z - mz, cd = Math.hypot(cx, cz);
+        if (cd < GUEST_KEEP_OFF){
+          var hx = Math.sin(g.rotation.y), hz = Math.cos(g.rotation.y);
+          if (cd < 1e-3){ cx = hz; cz = -hx; cd = 1; }
+          var sideways = cx * hz - cz * hx >= 0 ? 1 : -1;   // the side of his they are on already
+          g.position.x = mx + cx / cd * GUEST_KEEP_OFF + hz * sideways * speed * delta;
+          g.position.z = mz + cz / cd * GUEST_KEEP_OFF - hx * sideways * speed * delta;
+          if (!last && dist < ENTRANCE_CORNER + GUEST_KEEP_OFF) ch.leg++;   // he stands on their way point
+        }
       }
       g.position.y = 0;
       plantFeet(ch);
@@ -2073,6 +2128,27 @@
       g.rotation.y = ch.from.rot + shortestAngle(ch.sit.rot - ch.from.rot) * s;
       g.updateMatrixWorld(true);
       if (t >= 1) finishSeat(ch);
+      return;
+    }
+    if (ch.state === 'stand'){
+      // getting up: from the seated pose into the walking pose, onto the spot beside the chair
+      ch.standT += delta / STAND_UP_TIME;
+      var t2 = Math.min(1, ch.standT), s2 = t2 * t2 * (3 - 2 * t2);
+      ch.walkBones.forEach(function(e){ e.bone.quaternion.copy(e.q); e.bone.position.copy(e.p); });
+      ch.action.timeScale = ch.cfg.animRate * s2;
+      ch.mixer.update(delta);
+      ch.sit.bones.forEach(function(e){
+        standQ.copy(e.q).slerp(e.bone.quaternion, s2); e.bone.quaternion.copy(standQ);
+        standP.copy(e.p).lerp(e.bone.position, s2); e.bone.position.copy(standP);
+      });
+      var beside = ch.sit.route[ch.sit.route.length - 1];
+      g.position.lerpVectors(ch.sit.pos, standP.set(beside.x, 0, beside.z), s2);
+      g.rotation.y = ch.sit.rot;
+      g.updateMatrixWorld(true);
+      if (t2 >= 1){
+        if (ch.walkingWeights) loadWeights(ch.obj, ch.walkingWeights);
+        ch.route = exitRoute(ch); ch.leg = 0; ch.state = 'walk';
+      }
     }
   }
 

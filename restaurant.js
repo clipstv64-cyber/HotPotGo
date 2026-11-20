@@ -1,4 +1,6 @@
-// Restaurant: the guests at the tables order stew. The chef fetches potatoes, carrots
+// Restaurant: while it is open, guests come in through the entrance door, sit down at
+// their table, read the menu and order stew; when they have eaten and paid (or waited
+// too long) they get up and leave. The chef fetches potatoes, carrots
 // and onions from their crates in the kitchen's pantry corner, cuts them up on the
 // chopping block with the knife (the mouse leads the knife: sideways to place it, down
 // to cut) and puts the pieces into the big pot on the range. Broth is poured in from the
@@ -30,11 +32,12 @@
     startMoney: 250,          // euros in the till at the start
     crateStock: 6,            // vegetables in each crate at the start
     bowls: 10,                // clean bowls on the stack at the start
-    firstOrder: 8,            // seconds until the first guest orders
-    orderEvery: [14, 26],     // seconds between new orders
-    maxOpen: 3,               // at most this many guests waiting at once
+    firstGuest: 3,            // seconds after opening until the first guest comes in
+    guestEvery: [14, 26],     // seconds between guests coming in
+    decide: [4, 8],           // seconds a guest reads the menu before ordering
     patience: 120,            // seconds a guest waits for the food
-    rest: 30,                 // seconds until a guest who has eaten (or given up) may order again
+    linger: 2.5,              // seconds a guest stays seated after paying (or giving up) before getting up
+    rest: 25,                 // seconds until a guest who has left may come again
     eatTime: 14,              // seconds a guest eats
     tip: 3,                   // the tip shrinks with the waiting time
     reach: 2.1,               // how close the chef has to be to a crate, the pot, the bowls
@@ -149,10 +152,12 @@
       // the pot: 'empty' | 'filling' (things are put in, it cooks) | 'ready' | 'burnt'
       pot: { phase: 'empty', has: { potato: 0, carrot: 0, onion: 0 }, cut: {}, qs: [], broth: 0, spice: 0,
              heat: 0, temp: 20, cooked: 0, stick: 0, burn: 0, quality: 1, portions: 0, batch: 0 },
-      guests: [],                                   // { id, phase, t, patience, pay, item }; phase: 'idle' | 'waiting' | 'eating' | 'paid' | 'angry'
+      // { id, phase, t, patience, pay, item, rest }; phase: 'away' -> 'coming' -> 'deciding' -> 'waiting' -> 'eating' -> 'paid' -> 'leaving' -> 'away'
+      // (from 'waiting' also -> 'angry' -> 'leaving' when the patience runs out)
+      guests: [],
       open: false,                                  // the restaurant is opened and closed at the front door; guests only order while it is open
       broth: 0,                                     // broth in stock (1 = what one pot needs), besides what is in the jug
-      nextOrder: RULES.firstOrder
+      nextGuest: RULES.firstGuest
     };
     ['knife', 'broth', 'spice'].forEach(function(kind){
       var o = { id: state.nextId++, kind: kind, at: 'home' };
@@ -286,9 +291,18 @@
         case 'pourBack':
           if (!it || it.kind !== 'stew' || pot.phase !== 'ready' || it.batch !== pot.batch || pot.portions >= RECIPE.portions) return false;
           it.kind = 'bowl'; delete it.batch; pot.portions++; return true;
+        case 'arrive':     // a guest comes in
+          g = guest(arg); if (!g || g.phase !== 'away') return false;
+          g.phase = 'coming'; return true;
+        case 'seated':     // ... has sat down and reads the menu
+          g = guest(arg); if (!g || g.phase !== 'coming') return false;
+          g.phase = 'deciding'; g.t = rnd(RULES.decide[0], RULES.decide[1]); return true;
         case 'order':
-          g = guest(arg); if (!g || g.phase !== 'idle') return false;
+          g = guest(arg); if (!g || g.phase !== 'deciding') return false;
           g.phase = 'waiting'; g.patience = 1; return true;
+        case 'left':       // ... has gone out of the door
+          g = guest(arg); if (!g || g.phase !== 'leaving') return false;
+          g.phase = 'away'; g.rest = RULES.rest; return true;
         case 'serve':
           g = guest(arg); if (!g || g.phase !== 'waiting' || !it || it.kind !== 'stew') return false;
           it.at = 'table'; it.guest = g.id; state.carry = null;
@@ -318,10 +332,12 @@
         }
       }
       pot.quality = potQuality();
-      var open = 0, idle = [];
+      var away = [];
       state.guests.forEach(function(g){
-        if (g.phase === 'waiting'){
-          open++;
+        if (g.phase === 'deciding'){
+          g.t -= dt;
+          if (g.t <= 0) act('order', g.id);
+        } else if (g.phase === 'waiting'){
           g.patience -= dt / RULES.patience;
           if (g.patience <= 0){ g.phase = 'angry'; g.t = 0; state.lost++; }
         } else if (g.phase === 'eating'){
@@ -333,17 +349,18 @@
           }
         } else if (g.phase === 'paid' || g.phase === 'angry'){
           g.t += dt;
-          if (g.t >= 3){ g.phase = 'idle'; g.rest = RULES.rest; }
-        } else {
+          if (g.t >= RULES.linger) g.phase = 'leaving';
+        } else if (g.phase === 'away'){
           g.rest = Math.max(0, (g.rest || 0) - dt);
-          if (g.rest <= 0) idle.push(g);
+          if (g.rest <= 0) away.push(g);
         }
       });
+      // while the restaurant is open, guests come in one after the other
       if (!state.guests.length || !place.pot || !state.open) return;
-      state.nextOrder -= dt;
-      if (state.nextOrder <= 0){
-        if (idle.length && open < RULES.maxOpen) act('order', idle[Math.floor(Math.random() * idle.length)].id);
-        state.nextOrder = rnd(RULES.orderEvery[0], RULES.orderEvery[1]);
+      state.nextGuest -= dt;
+      if (state.nextGuest <= 0){
+        if (away.length) act('arrive', away[Math.floor(Math.random() * away.length)].id);
+        state.nextGuest = rnd(RULES.guestEvery[0], RULES.guestEvery[1]);
       }
     }
 
@@ -615,6 +632,13 @@
       g.fillRect(28, 80, 72 * clamp(patience), 9);
       s.tex.needsUpdate = true;
     }
+    function drawDeciding(s){
+      if (s.drawn === 'deciding') return; s.drawn = 'deciding';
+      var g = s.g; bubbleShape(g, 'rgba(255,252,244,.96)');
+      g.fillStyle = 'rgba(70,52,40,.75)';
+      [40, 64, 88].forEach(function(x){ g.beginPath(); g.arc(x, 54, 8, 0, Math.PI * 2); g.fill(); });
+      s.tex.needsUpdate = true;
+    }
     function drawAngry(s){
       if (s.drawn === 'angry') return; s.drawn = 'angry';
       var g = s.g; bubbleShape(g, 'rgba(255,236,230,.96)');
@@ -846,7 +870,7 @@
       if (!v){
         var sp = info.spot, t = sp.table, toTable = sp.z < t.z ? 1 : -1;
         v = views[info.id] = { info: info, sign: sign(0.62), toTable: toTable, bowlAt: V(sp.x, t.top, t.z - toTable * (t.halfZ - 0.34)) };
-        state.guests.push({ id: info.id, phase: 'idle', t: 0, patience: 0, pay: 0, rest: rnd(0, 12), item: null });
+        state.guests.push({ id: info.id, phase: 'away', t: 0, patience: 0, pay: 0, rest: 0, item: null });
       }
       return v;
     }
@@ -1295,10 +1319,12 @@
       VEG.forEach(function(kind){ place.crates[kind].inside.forEach(function(v, i){ v.visible = i < state.crates[kind]; }); });
       place.stacks.bowls.forEach(function(b, i){ b.visible = i < state.bowls; });
 
-      // the guests: order bubble, eating ring, money popping up
+      // the guests: sent in and out as the rules say, and their signs (menu, order, eating, angry)
       state.guests.forEach(function(g){
-        var v = views[g.id], s = v.sign;
-        var show = g.phase === 'waiting' || g.phase === 'angry' || g.phase === 'eating';
+        var v = views[g.id], s = v.sign, where = v.info.where();
+        if (g.phase === 'coming'){ if (where === 'away') v.info.come(); else if (where === 'seated') act('seated', g.id); }
+        if (g.phase === 'leaving'){ if (where === 'seated') v.info.leave(); else if (where === 'away') act('left', g.id); }
+        var show = where === 'seated' && (g.phase === 'deciding' || g.phase === 'waiting' || g.phase === 'angry' || g.phase === 'eating');
         s.sp.visible = show;
         if (show){
           v.info.head.getWorldPosition(headPos);
@@ -1308,12 +1334,16 @@
             drawOrder(s, g.patience);
             if (g.patience < 0.25) size *= 1 + Math.sin(clock * 9) * 0.05;   // getting impatient
           } else if (g.phase === 'eating'){ drawEating(s, g.t / RULES.eatTime); size = 0.36; }
+          else if (g.phase === 'deciding'){ drawDeciding(s); size = 0.46; }
           else drawAngry(s);
           s.sp.scale.set(size, size, 1);
         }
         if (g.phase === 'paid' && !g.popped){ g.popped = true; popMoney(V(v.bowlAt.x, v.bowlAt.y + 0.45, v.bowlAt.z), g.pay); }
         if (g.phase !== 'paid') g.popped = false;
       });
+      // the entrance door stands open while the restaurant is open or somebody is still inside
+      var door = ctx.getEntrance && ctx.getEntrance();
+      if (door) door.target = state.open || state.guests.some(function(g){ return g.phase !== 'away'; }) ? 1 : 0;
       for (var i = pops.length - 1; i >= 0; i--){
         var p = pops[i]; p.t += dt / 1.6;
         p.s.sp.position.y = p.y + p.t * 0.7; p.s.sp.material.opacity = clamp(2.2 * (1 - p.t));
@@ -1414,6 +1444,14 @@
                  ready: !!place.pot, aim: aim ? [+aim.x.toFixed(2), +aim.z.toFixed(2)] : null };
       },
       debugStock: function(){ return { open: state.open, broth: +state.broth.toFixed(2), jug: +state.items[state.tools.broth].left.toFixed(2) }; },
+      // for tests: this guest sits at the table right now and has ordered
+      debugOrder: function(id){
+        var g = guest(id), v = views[id];
+        if (!g || !v) return false;
+        v.info.seatNow(); g.phase = 'waiting'; g.patience = 1; return true;
+      },
+      debugPhase: function(id, phase){ var g = guest(id); if (g){ g.phase = phase; g.t = 0; } },
+      debugGuests: function(){ return state.guests.map(function(g){ return g.id + ':' + g.phase + '/' + views[g.id].info.where(); }).join(' '); },
       debugAct: act, debugPot: function(){ return state.pot; }, debugCookRules: COOK,
       debugTools: function(){ return { ids: state.tools, jug: MODELS.broth.tool, home: place.home, left: state.items[state.tools.broth].left }; },
       debugCut: { start: startCutting, stop: stopCutting, limits: function(){ var o = state.items[state.board]; return o && cutAxis(o) ? cutLimits(o, cutAxis(o)) : null; },

@@ -33,11 +33,11 @@ Rest dran kommt. Er wird nach jeder Etappe aktualisiert.
 | 10 | Umrühren und Garzeit überwachen | fertig: linke Maustaste am Topf, Maus im Kreis führt die Kelle; ohne Rühren setzt der Eintopf an und brennt dann an; 40 Sekunden Köcheln; Würzen mit dem Streuer (3 Stöße sind richtig) |
 | 11 | Fertiger Eintopf mit genau 20 Portionen | fertig: genau 20 Portionen (getestet), Füllstand sinkt sichtbar; angebrannter Eintopf muss weggeworfen werden; Qualität aus Schnitt, Brühe, Würze und Anbrennen bestimmt das Trinkgeld |
 | 12 | Schüssel nehmen und Portion einfüllen | fertig: leere Schüssel vom Stapel, Schöpfkelle füllt eine Portion ein; Schüsseln kommen nach dem Essen von selbst zurück (Spülen folgt später) |
-| 13 | Kunden treten ein und setzen sich | fehlt: acht Gäste sitzen fest an ihren Plätzen |
-| 14 | Bestellung entgegennehmen | teilweise: Gäste bestellen von selbst mit einer Blase |
+| 13 | Kunden treten ein und setzen sich | fertig: solange geöffnet ist, kommen Gäste einzeln durch die Eingangstür, gehen zu ihrem Platz und setzen sich; jeder der acht Gäste hat noch seinen festen Stuhl |
+| 14 | Bestellung entgegennehmen | teilweise: Gäste lesen kurz die Karte (drei Punkte) und bestellen dann von selbst mit einer Blase |
 | 15 | Essen zum Tisch bringen | fertig |
 | 16 | Kunden bezahlen lassen | fertig: 9 € pro Portion plus Trinkgeld für schnelle Bedienung, Startgeld 250 € |
-| 17 | Geduldsanzeige und Verlassen des Restaurants | teilweise: Geduld läuft ab und der Gast gibt auf, bleibt aber sitzen |
+| 17 | Geduldsanzeige und Verlassen des Restaurants | fertig: nach dem Bezahlen oder wenn die Geduld aufgebraucht ist, stehen sie auf und gehen durch die Tür hinaus |
 | 18 | Einfache Tagesabrechnung | fehlt: es gibt noch keinen Tag und keine Uhr |
 | 19 | Speichern und Laden | fehlt |
 
@@ -57,8 +57,8 @@ dem der Gastgeber die Aktionen prüft.
 3. **Kochen, Teil 3 – Brühe, Hitze, Rühren.** Erledigt (20.11.2026). Das Restaurant wird mit E
    an der Eingangstür geöffnet und geschlossen; Gäste bestellen nur, solange geöffnet ist.
    Brühe gibt es als Vorrat (reicht für etwa sechs Töpfe), der Krug wird daraus nachgefüllt.
-4. **Gäste kommen und gehen.** Eintreten, Tisch suchen, hinsetzen, bestellen, essen,
-   zahlen, gehen; wer zu lange wartet, steht auf und geht.
+4. **Gäste kommen und gehen.** Erledigt (20.11.2026). Offen: freie Platzwahl (jeder hat noch
+   seinen festen Stuhl), Gäste weichen nur dem Koch aus, nicht einander.
 5. **Der Tag.** Uhr, Öffnen und Schließen, Tagesabrechnung, Speichern und Laden.
 
 Danach folgt Phase 2 des Konzepts (Computer mit Bestellungen und Lieferungen, Geräte

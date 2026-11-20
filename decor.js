@@ -80,7 +80,25 @@
     }
 
     // ---------- front wall: entrance door, radiators, umbrella stand ------------
-    place('door', { h: 2.6 }, onWall('front', X1 + 1.3, 0), 0, 0, 0, 0, { back: true }).scale.z = 0.35;   // flatter against the wall
+    // The door hangs in a pivot at its hinge side and swings into the room; behind it is
+    // the doorway with the daylight outside. entrance.target: 0 = shut, 1 = open.
+    var doorWall = onWall('front', X1 + 1.3, 0), doorPivot = new T.Group();
+    doorWall.add(doorPivot);
+    var entrance = { open: 0, target: 0, pivot: doorPivot };
+    place('door', { h: 2.6 }, doorPivot, 0, 0, 0, 0, { back: true, done: function(holder, size){
+      doorPivot.position.x = -size.x / 2; holder.position.x = size.x / 2;   // hinges at the side away from the handle
+      var cv = document.createElement('canvas'); cv.width = 64; cv.height = 128;
+      var g = cv.getContext('2d'), sky = g.createLinearGradient(0, 0, 0, 78);
+      sky.addColorStop(0, '#bcdcff'); sky.addColorStop(1, '#f1f7fc');
+      g.fillStyle = sky; g.fillRect(0, 0, 64, 78);
+      g.fillStyle = '#c9c1b2'; g.fillRect(0, 70, 64, 10);                    // a wall across the street
+      var ground = g.createLinearGradient(0, 80, 0, 128);
+      ground.addColorStop(0, '#b3ab9d'); ground.addColorStop(1, '#8f887c');
+      g.fillStyle = ground; g.fillRect(0, 80, 64, 48);
+      var tex = new T.CanvasTexture(cv); tex.encoding = T.sRGBEncoding;
+      var way = new T.Mesh(new T.PlaneGeometry(size.x * 0.84, size.y * 0.94), new T.MeshBasicMaterial({ map: tex }));
+      way.position.set(0, size.y * 0.47, 0.006); doorWall.add(way);
+    } }).scale.z = 0.35;   // flatter against the wall
     place('radiator', { w: 1.3 }, onWall('front', X1 + 6.0, 0.06), 0, 0, 0.02, 0, { back: true });
     place('radiator', { w: 1.3 }, onWall('front', X1 - 1.6, 0.06), 0, 0, 0.02, 0, { back: true });
     addBox(-6, 9.85, 1.4, 0.25, 0.85); addBox(1.6, 9.85, 1.4, 0.25, 0.85);
@@ -305,9 +323,12 @@
     function update(dt, time){
       if (!barDone) dressBar();
       for (var i = 0; i < updaters.length; i++) updaters[i](dt, time);
+      // the entrance door swings open and shut
+      entrance.open += (entrance.target - entrance.open) * Math.min(1, dt * 4);
+      doorPivot.rotation.y = -1.5 * entrance.open;
     }
 
-    return { dressTable: dressTable, update: update, root: root };
+    return { dressTable: dressTable, update: update, root: root, entrance: entrance };
   }
 
   window.HotPotDecor = { build: build };
