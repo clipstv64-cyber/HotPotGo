@@ -588,7 +588,7 @@
       hold.k = k;
       var want = broomAt === 'hand' || broomAt === 'taking' || (broomAt === 'storing' && move.t < 0.6);
       hold.arms = clamp(hold.arms + (want ? 5 : -3.5) * dt);
-      var closed = broomAt === 'hand' || (inHands && k > 0.8) ? 1 : carry && !inHands ? 0.25 : 0;
+      var closed = broomAt === 'hand' || (inHands && k > 0.8) ? 1 : carry && !inHands ? (carryOpts.curl || 0.25) : 0;
       closeFingers(b.lGrip, closed, dt); closeFingers(b.rGrip, closed, dt);
       var th = chef.rotation.y;
       hold.headShift.set(0, 0, 0);
@@ -723,7 +723,7 @@
     // Other parts of the game hand over an object with setCarry(); it is held in front of
     // the chest, a hand on either side. opts: half (half its width, where the hands are),
     // fwd / drop (its place from the middle between the shoulders), grip (hands' height
-    // above its origin), back (hands this far behind its middle).
+    // above its origin), back (hands this far behind its middle), curl (how far the fingers close).
     var carry = null, carryW = 0, carryOpts = { half: 0.17, fwd: 0.42, drop: -0.16, grip: 0.04, back: 0 };
     function setCarry(obj, opts){
       if (carry) root.remove(carry.obj);

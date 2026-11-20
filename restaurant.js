@@ -114,14 +114,46 @@
     // ---------- the things that are carried and served (Meshy models) ----------------------
     var gltf = new T.GLTFLoader();
     if (window.MeshoptDecoder) gltf.setMeshoptDecoder(MeshoptDecoder);
-    // width: its size in the game; pivot: where its middle is within its outline (the pot's
-    // long handle sticks out to one side); carry: how the chef holds it (see gameplay.js)
+    // Both are parts of the kitchen's own shelf model, cut out with scripts/cut-model.mjs:
+    // the metal bowl from its top board and a tray of greens.
+    // width: its size in the game; carry: how the chef holds it (see gameplay.js)
     var ITEMS = {
-      stew: { file: 'models/d_stew_pot.glb', width: 0.56, pivot: [0.3, 0.5], label: 'a pot of stew',
-              carry: { half: 0.205, fwd: 0.47, drop: -0.22, grip: 0.05, back: 0.0, yaw: -0.57 } },   // turned so its handle points away to the front left
-      veg:  { file: 'models/d_veg_crate.glb', width: 0.52, pivot: [0.5, 0.5], label: 'vegetables',
-              carry: { half: 0.27, fwd: 0.52, drop: -0.3, grip: 0.1, back: 0.04 } }
+      stew: { file: 'models/d_stew_bowl.glb', width: 0.36, label: 'a bowl of stew',
+              carry: { half: 0.185, fwd: 0.46, drop: -0.25, grip: 0.07, back: 0, curl: 0.4 } },
+      veg:  { file: 'models/d_veg_tray.glb', width: 0.6, label: 'vegetables',
+              carry: { half: 0.31, fwd: 0.53, drop: -0.31, grip: 0.06, back: 0.03, curl: 0.4 } }
     };
+    // the stew in the bowl: a glossy surface with bits of carrot, potato and greens
+    var stewTex = (function(){
+      var cv = document.createElement('canvas'); cv.width = cv.height = 128;
+      var g = cv.getContext('2d'), gr = g.createRadialGradient(64, 64, 8, 64, 64, 64);
+      gr.addColorStop(0, '#c2702a'); gr.addColorStop(0.8, '#a9571d'); gr.addColorStop(1, '#7c3c12');
+      g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
+      var bits = ['#e8912e', '#e8912e', '#e6cf93', '#e6cf93', '#6a8f3c', '#8a3f1c'];
+      for (var n = 0; n < 46; n++){
+        var a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * 50, x = 64 + Math.cos(a) * d, y = 64 + Math.sin(a) * d;
+        g.save(); g.translate(x, y); g.rotate(Math.random() * 3.14);
+        g.fillStyle = bits[n % bits.length];
+        if (n % 3 === 0){ g.beginPath(); g.arc(0, 0, 5 + Math.random() * 3, 0, Math.PI * 2); g.fill(); }
+        else g.fillRect(-5, -4, 9 + Math.random() * 4, 7 + Math.random() * 3);
+        g.fillStyle = 'rgba(255,240,210,.22)'; g.fillRect(-3, -3, 4, 2);
+        g.restore();
+      }
+      var t = new T.CanvasTexture(cv); t.encoding = T.sRGBEncoding; return t;
+    })();
+    var STEW_AT = [0.6, 0.76];   // the stew's surface in the bowl: height and radius (shares of the bowl's)
+    function stewSurface(it){
+      var m = new T.Mesh(new T.CircleGeometry(1, 28), new T.MeshStandardMaterial({ map: stewTex, color: 0x8f8780, roughness: 0.3, metalness: 0 }));
+      m.rotation.x = -Math.PI / 2; m.name = 'stew'; m.receiveShadow = true;
+      setStew(m, it, 1);
+      return m;
+    }
+    // how full the bowl is: 1 = just served .. 0 = empty
+    function setStew(m, it, full){
+      var r = it.width / 2 * STEW_AT[1] * (0.55 + 0.45 * full);
+      m.scale.set(r, r, 1); m.position.y = it.height * (0.22 + (STEW_AT[0] - 0.22) * full);
+      m.visible = full > 0.02;
+    }
     Object.keys(ITEMS).forEach(function(key){
       var it = ITEMS[key];
       fetch(it.file).then(function(r){ if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); })
@@ -129,11 +161,13 @@
           var obj = g.scene; obj.updateMatrixWorld(true);
           var bb = new T.Box3().setFromObject(obj), s = bb.getSize(V()), c = bb.getCenter(V());
           var k = it.width / Math.max(s.x, s.z);
-          obj.position.x -= bb.min.x + s.x * it.pivot[0]; obj.position.y -= bb.min.y; obj.position.z -= bb.min.z + s.z * it.pivot[1];   // standing on the origin
+          obj.position.x -= c.x; obj.position.y -= bb.min.y; obj.position.z -= c.z;   // standing on the origin
           obj.traverse(function(m){ if (m.isMesh){ m.castShadow = true; m.receiveShadow = true; m.frustumCulled = false; } });
           var sized = new T.Group(); sized.add(obj); sized.scale.setScalar(k);
           var holder = new T.Group(); holder.add(sized);
-          it.obj = holder; it.height = s.y * k;
+          it.height = s.y * k;
+          if (key === 'stew') holder.add(stewSurface(it));
+          it.obj = holder;
         }, function(e){ console.error('Could not load ' + it.file + ':', e); }); })
         .catch(function(e){ console.error('Could not load ' + it.file + ':', e); });
     });
@@ -263,14 +297,40 @@
       var v = views[info.id];
       if (!v){
         var sp = info.spot, t = sp.table, toTable = sp.z < t.z ? 1 : -1;
-        v = views[info.id] = { info: info, sign: sign(0.62), bowl: null,
-          // on the table in front of the guest, a little way in from the edge
-          bowlAt: V(sp.x, t.top, t.z - toTable * (t.halfZ - 0.34)) };
+        v = views[info.id] = { info: info, sign: sign(0.62), bowl: null, toTable: toTable,
+          bowlAt: V(sp.x, t.top, t.z - toTable * (t.halfZ - 0.34)) };   // (set again when the bowl is served)
         state.guests.push({ id: info.id, phase: 'idle', t: 0, patience: 0, pay: 0, rest: rnd(0, 12) });
       }
       return v;
     }
     var headPos = V();
+    // The bowl goes on the table in front of the guest where it is clear of the hands
+    // lying there: between them if they are far enough apart, else just beyond them.
+    function placeBowl(v){
+      var sp = v.info.spot, t = sp.table, R = ITEMS.stew.width / 2;
+      var segs = (v.info.hands || []).map(function(h){
+        if (!h) return null;
+        var a = V(); h.getWorldPosition(a);
+        var b = a.clone(), kid = h.children[0];
+        if (kid){ kid.getWorldPosition(b); b.sub(a).setY(0); if (b.lengthSq() > 1e-6) b.setLength(0.2); b.add(a); }
+        return [a, b];
+      }).filter(Boolean);
+      var best = null, p = V();
+      for (var d = 0.2; d <= t.halfZ - R + 0.001; d += 0.03){
+        for (var side = -0.18; side <= 0.181; side += 0.06){
+          p.set(sp.x + side, 0, t.z - v.toTable * (t.halfZ - d));
+          var clear = 0.3;
+          segs.forEach(function(sg){   // distance from the bowl's middle to the hand (wrist to fingertips)
+            var ab = V(sg[1].x - sg[0].x, 0, sg[1].z - sg[0].z), ap = V(p.x - sg[0].x, 0, p.z - sg[0].z);
+            var u = Math.max(0, Math.min(1, ap.dot(ab) / Math.max(1e-6, ab.lengthSq())));
+            clear = Math.min(clear, ap.addScaledVector(ab, -u).length());
+          });
+          var score = Math.min(clear, R + 0.07) - Math.abs(side) * 0.25 - d * 0.06;
+          if (!best || score > best.score) best = { score: score, x: p.x, z: p.z };
+        }
+      }
+      if (best) v.bowlAt.set(best.x, t.top, best.z);
+    }
 
     // ---------- what the chef can do with E ----------------------------------------------------
     play.addInteractables(function(hands){
@@ -284,7 +344,7 @@
       } else if (state.carry === 'stew'){
         if (pot.phase !== 'cooking' && pot.portions < RULES.portions) list.push({ pos: potAt, reach: RULES.reach, label: 'Pour the stew back', use: function(){ act('returnStew'); } });
       } else if (pot.phase === 'ready'){
-        list.push(hands.handsFree ? { pos: potAt, reach: RULES.reach, label: 'Fill a small pot with stew', use: function(){ act('takeStew'); } }
+        list.push(hands.handsFree ? { pos: potAt, reach: RULES.reach, label: 'Fill a bowl with stew', use: function(){ act('takeStew'); } }
                                   : { pos: potAt, reach: RULES.reach, label: 'Hands full' });
       } else {
         list.push({ pos: potAt, reach: RULES.reach, label: pot.phase === 'cooking' ? 'Cooking…' : 'The pot needs vegetables' });
@@ -339,7 +399,8 @@
           s.sp.scale.set(size, size, 1);
         }
         var eating = g.phase === 'eating';
-        if (eating && !v.bowl){ v.bowl = instance('stew'); v.bowl.position.copy(v.bowlAt); v.bowl.rotation.y = rnd(0, 6.28); root.add(v.bowl); }
+        if (eating && !v.bowl){ placeBowl(v); v.bowl = instance('stew'); v.bowl.position.copy(v.bowlAt); v.bowl.rotation.y = rnd(0, 6.28); root.add(v.bowl); }
+        if (eating && v.bowl){ var st = v.bowl.getObjectByName('stew'); if (st) setStew(st, ITEMS.stew, 1 - g.t / RULES.eatTime); }   // the bowl empties
         if (!eating && v.bowl){
           root.remove(v.bowl); v.bowl = null;
           if (g.phase === 'paid') popMoney(V(v.bowlAt.x, v.bowlAt.y + 0.45, v.bowlAt.z), g.pay);

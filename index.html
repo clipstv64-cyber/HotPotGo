@@ -502,7 +502,8 @@
           // the people sitting at the tables: who they are, their chair and table, their head
           getGuests: function(){
             return characters.filter(function(c){ return c.state === 'seated' && c.sit; }).map(function(c){
-              if (!c.guestInfo) c.guestInfo = { id: c.cfg.name, group: c.group, spot: c.sit.spot, head: findBone(c.obj, c.cfg.prefix, 'Head') };
+              if (!c.guestInfo) c.guestInfo = { id: c.cfg.name, group: c.group, spot: c.sit.spot, head: findBone(c.obj, c.cfg.prefix, 'Head'),
+                hands: [findBone(c.obj, c.cfg.prefix, 'LeftHand'), findBone(c.obj, c.cfg.prefix, 'RightHand')] };
               return c.guestInfo;
             });
           } });
