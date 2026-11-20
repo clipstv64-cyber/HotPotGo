@@ -1,4 +1,4 @@
-// Restaurant: the guests at the tables order stew. The chef takes vegetables from the
+// Restaurant: the guests at the tables order stew. The chef takes a lettuce from the
 // shelf in the kitchen, cooks them in the stock pot on the range, fills a bowl, carries
 // it to the guest and serves it; the guest eats, pays and tips for quick service. A
 // guest who waits too long gives up.
@@ -39,7 +39,7 @@
     // ---------- the state and the actions that change it ---------------------------------
     var state = {
       money: 0, served: 0, lost: 0,
-      carry: null,                                  // what the chef carries: null | 'veg' | 'stew'
+      carry: null,                                  // what the chef carries: null | 'lettuce' | 'stew'
       pot: { phase: 'empty', t: 0, portions: 0 },   // 'empty' | 'cooking' | 'ready'
       guests: [],                                   // { id, phase, t, patience, pay }; phase: 'idle' | 'waiting' | 'eating' | 'paid' | 'angry'
       nextOrder: RULES.firstOrder
@@ -48,9 +48,9 @@
     function act(type, arg){
       var pot = state.pot, g;
       switch (type){
-        case 'takeVeg':    if (state.carry) return false; state.carry = 'veg'; return true;
-        case 'returnVeg':  if (state.carry !== 'veg') return false; state.carry = null; return true;
-        case 'fillPot':    if (state.carry !== 'veg' || pot.phase !== 'empty') return false;
+        case 'takeLettuce':   if (state.carry) return false; state.carry = 'lettuce'; return true;
+        case 'returnLettuce': if (state.carry !== 'lettuce') return false; state.carry = null; return true;
+        case 'fillPot':    if (state.carry !== 'lettuce' || pot.phase !== 'empty') return false;
                            state.carry = null; pot.phase = 'cooking'; pot.t = 0; return true;
         case 'takeStew':   if (state.carry || pot.phase !== 'ready') return false;
                            state.carry = 'stew'; if (--pot.portions <= 0){ pot.portions = 0; pot.phase = 'empty'; } return true;
@@ -114,46 +114,13 @@
     // ---------- the things that are carried and served (Meshy models) ----------------------
     var gltf = new T.GLTFLoader();
     if (window.MeshoptDecoder) gltf.setMeshoptDecoder(MeshoptDecoder);
-    // Both are parts of the kitchen's own shelf model, cut out with scripts/cut-model.mjs:
-    // the metal bowl from its top board and a tray of greens.
     // width: its size in the game; carry: how the chef holds it (see gameplay.js)
     var ITEMS = {
-      stew: { file: 'models/d_stew_bowl.glb', width: 0.36, label: 'a bowl of stew',
-              carry: { half: 0.185, fwd: 0.46, drop: -0.25, grip: 0.07, back: 0, curl: 0.4 } },
-      veg:  { file: 'models/d_veg_tray.glb', width: 0.6, label: 'vegetables',
-              carry: { half: 0.31, fwd: 0.53, drop: -0.31, grip: 0.06, back: 0.03, curl: 0.4 } }
+      stew:    { file: 'models/d_stew_bowl.glb', width: 0.4, label: 'a bowl of stew',
+                 carry: { half: 0.17, fwd: 0.46, drop: -0.25, grip: 0.06, back: 0, curl: 0.4 } },
+      lettuce: { file: 'models/d_lettuce.glb', width: 0.34, label: 'a lettuce',
+                 carry: { half: 0.165, fwd: 0.46, drop: -0.27, grip: 0.1, back: 0, curl: 0.35 } }
     };
-    // the stew in the bowl: a glossy surface with bits of carrot, potato and greens
-    var stewTex = (function(){
-      var cv = document.createElement('canvas'); cv.width = cv.height = 128;
-      var g = cv.getContext('2d'), gr = g.createRadialGradient(64, 64, 8, 64, 64, 64);
-      gr.addColorStop(0, '#c2702a'); gr.addColorStop(0.8, '#a9571d'); gr.addColorStop(1, '#7c3c12');
-      g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
-      var bits = ['#e8912e', '#e8912e', '#e6cf93', '#e6cf93', '#6a8f3c', '#8a3f1c'];
-      for (var n = 0; n < 46; n++){
-        var a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * 50, x = 64 + Math.cos(a) * d, y = 64 + Math.sin(a) * d;
-        g.save(); g.translate(x, y); g.rotate(Math.random() * 3.14);
-        g.fillStyle = bits[n % bits.length];
-        if (n % 3 === 0){ g.beginPath(); g.arc(0, 0, 5 + Math.random() * 3, 0, Math.PI * 2); g.fill(); }
-        else g.fillRect(-5, -4, 9 + Math.random() * 4, 7 + Math.random() * 3);
-        g.fillStyle = 'rgba(255,240,210,.22)'; g.fillRect(-3, -3, 4, 2);
-        g.restore();
-      }
-      var t = new T.CanvasTexture(cv); t.encoding = T.sRGBEncoding; return t;
-    })();
-    var STEW_AT = [0.6, 0.76];   // the stew's surface in the bowl: height and radius (shares of the bowl's)
-    function stewSurface(it){
-      var m = new T.Mesh(new T.CircleGeometry(1, 28), new T.MeshStandardMaterial({ map: stewTex, color: 0x8f8780, roughness: 0.3, metalness: 0 }));
-      m.rotation.x = -Math.PI / 2; m.name = 'stew'; m.receiveShadow = true;
-      setStew(m, it, 1);
-      return m;
-    }
-    // how full the bowl is: 1 = just served .. 0 = empty
-    function setStew(m, it, full){
-      var r = it.width / 2 * STEW_AT[1] * (0.55 + 0.45 * full);
-      m.scale.set(r, r, 1); m.position.y = it.height * (0.22 + (STEW_AT[0] - 0.22) * full);
-      m.visible = full > 0.02;
-    }
     Object.keys(ITEMS).forEach(function(key){
       var it = ITEMS[key];
       fetch(it.file).then(function(r){ if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); })
@@ -166,7 +133,6 @@
           var sized = new T.Group(); sized.add(obj); sized.scale.setScalar(k);
           var holder = new T.Group(); holder.add(sized);
           it.height = s.y * k;
-          if (key === 'stew') holder.add(stewSurface(it));
           it.obj = holder;
         }, function(e){ console.error('Could not load ' + it.file + ':', e); }); })
         .catch(function(e){ console.error('Could not load ' + it.file + ':', e); });
@@ -338,8 +304,8 @@
       if (!kitchenReady()) return list;
       var potAt = V(potPlace().x, 0, potPlace().z), shelfAt = k.vegShelf.position;
       // the pot on the range
-      if (state.carry === 'veg'){
-        list.push(pot.phase === 'empty' ? { pos: potAt, reach: RULES.reach, label: 'Put the vegetables in the pot', use: function(){ act('fillPot'); } }
+      if (state.carry === 'lettuce'){
+        list.push(pot.phase === 'empty' ? { pos: potAt, reach: RULES.reach, label: 'Put the lettuce in the pot', use: function(){ act('fillPot'); } }
                                         : { pos: potAt, reach: RULES.reach, label: pot.phase === 'cooking' ? 'The pot is still cooking' : 'There is still stew in the pot' });
       } else if (state.carry === 'stew'){
         if (pot.phase !== 'cooking' && pot.portions < RULES.portions) list.push({ pos: potAt, reach: RULES.reach, label: 'Pour the stew back', use: function(){ act('returnStew'); } });
@@ -347,11 +313,11 @@
         list.push(hands.handsFree ? { pos: potAt, reach: RULES.reach, label: 'Fill a bowl with stew', use: function(){ act('takeStew'); } }
                                   : { pos: potAt, reach: RULES.reach, label: 'Hands full' });
       } else {
-        list.push({ pos: potAt, reach: RULES.reach, label: pot.phase === 'cooking' ? 'Cooking…' : 'The pot needs vegetables' });
+        list.push({ pos: potAt, reach: RULES.reach, label: pot.phase === 'cooking' ? 'Cooking…' : 'The pot needs a lettuce' });
       }
       // the vegetable shelf
-      if (state.carry === 'veg') list.push({ pos: shelfAt, reach: RULES.reach, label: 'Put the vegetables back', use: function(){ act('returnVeg'); } });
-      else if (!state.carry) list.push(hands.handsFree ? { pos: shelfAt, reach: RULES.reach, label: 'Take vegetables', use: function(){ act('takeVeg'); } }
+      if (state.carry === 'lettuce') list.push({ pos: shelfAt, reach: RULES.reach, label: 'Put the lettuce back', use: function(){ act('returnLettuce'); } });
+      else if (!state.carry) list.push(hands.handsFree ? { pos: shelfAt, reach: RULES.reach, label: 'Take a lettuce', use: function(){ act('takeLettuce'); } }
                                                        : { pos: shelfAt, reach: RULES.reach, label: 'Hands full' });
       // guests waiting for their food
       state.guests.forEach(function(g){
@@ -400,7 +366,6 @@
         }
         var eating = g.phase === 'eating';
         if (eating && !v.bowl){ placeBowl(v); v.bowl = instance('stew'); v.bowl.position.copy(v.bowlAt); v.bowl.rotation.y = rnd(0, 6.28); root.add(v.bowl); }
-        if (eating && v.bowl){ var st = v.bowl.getObjectByName('stew'); if (st) setStew(st, ITEMS.stew, 1 - g.t / RULES.eatTime); }   // the bowl empties
         if (!eating && v.bowl){
           root.remove(v.bowl); v.bowl = null;
           if (g.phase === 'paid') popMoney(V(v.bowlAt.x, v.bowlAt.y + 0.45, v.bowlAt.z), g.pay);
