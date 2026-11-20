@@ -590,7 +590,8 @@
       var want = broomAt === 'hand' || broomAt === 'taking' || (broomAt === 'storing' && move.t < 0.6);
       hold.arms = clamp(hold.arms + (want ? 5 : -3.5) * dt);
       var closed = broomAt === 'hand' || (inHands && k > 0.8) ? 1 : carry && !inHands ? (carryOpts.curl || 0.25) : 0;
-      closeFingers(b.lGrip, closed, dt); closeFingers(b.rGrip, closed, dt);
+      var oneHand = carry && carryOpts.tool && !inHands;   // a tool is held in the right hand only
+      closeFingers(b.lGrip, oneHand ? 0 : closed, dt); closeFingers(b.rGrip, oneHand ? 1 : closed, dt);
       var th = chef.rotation.y;
       hold.headShift.set(0, 0, 0);
       if (hold.arms <= 0 && !inHands){
@@ -725,6 +726,13 @@
     // the chest, a hand on either side. opts: half (half its width, where the hands are),
     // fwd / drop (its place from the middle between the shoulders), grip (hands' height
     // above its origin), back (hands this far behind its middle), curl (how far the fingers close).
+    //
+    // A tool (opts.tool, e.g. the knife) is held in the right hand by its handle instead:
+    //   grip  the point on its handle the fist closes around (in the tool's own frame)
+    //   dir   from there toward its working end, up: the side that points up (unit vectors)
+    //   pose  optional function(out): something else leads the tool (cutting). It fills
+    //         out.pos (where the grip point is), out.dir, out.up (world) and returns true;
+    //         the arm then follows the tool as far as it reaches. Otherwise the tool follows the hand.
     var carry = null, carryW = 0, carryOpts = { half: 0.17, fwd: 0.42, drop: -0.16, grip: 0.04, back: 0 };
     function setCarry(obj, opts){
       if (carry) root.remove(carry.obj);
@@ -737,8 +745,9 @@
       if (carryW <= 0) return;
       chef.updateMatrixWorld(true);
       var o = carryOpts, f = V(Math.sin(th), 0, Math.cos(th)), r = V(-Math.cos(th), 0, Math.sin(th));
-      // a little forward lean and the shoulders pushed forward, so the short arms get there
       var headQ = b.neck ? wquat(b.neck) : null, head0 = b.neck ? wpos(b.neck) : null;
+      if (o.tool){ poseTool(b, chef, o, f, r, headQ); finishCarry(b, chef, head0); return; }
+      // a little forward lean and the shoulders pushed forward, so the short arms get there
       [b.spine02, b.spine01].forEach(function(sp){ if (sp) turn(sp, r, -0.07); });
       if (b.lS) turn(b.lS, UP, -0.3);
       if (b.rS) turn(b.rS, UP, 0.3);
@@ -760,6 +769,10 @@
         twistForearm(a[1], g);
       });
       if (carry){ carry.obj.visible = true; carry.obj.position.copy(c); carry.obj.rotation.set(0, th + (o.yaw || 0), 0); }
+      finishCarry(b, chef, head0);
+    }
+    // fade between the animation's pose and the carrying pose
+    function finishCarry(b, chef, head0){
       var w = smooth(carryW);
       b.rig.forEach(function(e){
         if (w < 1) e.bone.quaternion.copy(e.anim.clone().slerp(e.bone.quaternion, w));
@@ -767,6 +780,38 @@
       });
       chef.updateMatrixWorld(true);
       if (head0) hold.headShift.copy(wpos(b.neck)).sub(head0);
+    }
+    var toolOut = { pos: V(), dir: V(), up: V() }, toolLead = 0;
+    function poseTool(b, chef, o, f, r, headQ){
+      var led = !!(carry && o.pose && o.pose(toolOut));
+      toolLead += ((led ? 1 : 0) - toolLead) * 0.25;
+      // leaning over the work when the tool is led there
+      var lean = 0.05 + (o.lean || 0.3) * toolLead;
+      [b.spine02, b.spine01].forEach(function(sp){ if (sp) turn(sp, r, -lean / 2); });
+      if (b.rS) turn(b.rS, UP, 0.35);
+      if (headQ) setWorldQuat(b.neck, headQ);
+      var M = wpos(b.lA).add(wpos(b.rA)).multiplyScalar(0.5);
+      if (!led){   // carried: in front of the right hip, its working end forward and a little up
+        toolOut.pos.copy(M).addScaledVector(r, 0.24).addScaledVector(f, 0.36).addScaledVector(UP, -0.34);
+        toolOut.dir.copy(f).addScaledVector(UP, 0.35).addScaledVector(r, -0.1).normalize();
+        toolOut.up.copy(UP);
+      }
+      var dir = toolOut.dir.clone().normalize();
+      var up = toolOut.up.clone().addScaledVector(dir, -toolOut.up.dot(dir)).normalize();
+      var pole = r.clone().multiplyScalar(0.8).addScaledVector(UP, -0.6);
+      if (b.rGrip){
+        gripAt(b.rA, b.rF, b.rGrip, b.rH, toolOut.pos, dir, pole);
+        twistForearm(b.rF, b.rGrip);
+      } else reach(b.rA, b.rF, b.rH, toolOut.pos, pole, PALM);
+      if (!carry) return;
+      // the tool: led, it is where it is led; carried, it sits in the fist
+      var at = led || !b.rGrip ? toolOut.pos : gripPoint(b.rGrip);
+      basisA.makeBasis(dir, up, V().crossVectors(dir, up));
+      basisB.makeBasis(o.dir, o.up, V().crossVectors(o.dir, o.up));
+      var q = new T.Quaternion().setFromRotationMatrix(basisA.multiply(basisB.transpose()));
+      carry.obj.visible = true;
+      carry.obj.quaternion.copy(q);
+      carry.obj.position.copy(at).sub(o.grip.clone().applyQuaternion(q));
     }
 
     // ---------- stains -----------------------------------------------------------
@@ -948,8 +993,13 @@
       if (!obj.userData.hulls){
         var hulls = obj.userData.hulls = [];
         obj.traverse(function(m){
-          if (!m.isMesh || m.isSprite || m.userData.hull) return;
-          var h = new T.Mesh(m.geometry, outlineMat);
+          if (!m.isMesh || m.isSprite || m.userData.hull || m.userData.noOutline) return;
+          var mat = outlineMat, clip = m.material.clippingPlanes;
+          if (clip && clip.length){   // a clipped piece: its outline is clipped the same way
+            mat = outlineMat.clone(); mat.onBeforeCompile = outlineMat.onBeforeCompile; mat.clippingPlanes = clip;
+          }
+          var h = new T.Mesh(m.geometry, mat);
+          if (mat !== outlineMat) h.onBeforeRender = m.onBeforeRender;
           h.userData.hull = true; h.visible = false; h.frustumCulled = false; h.castShadow = false;
           m.add(h); hulls.push(h);
         });

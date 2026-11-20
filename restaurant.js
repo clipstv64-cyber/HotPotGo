@@ -1,10 +1,13 @@
 // Restaurant: the guests at the tables order stew. The chef fetches potatoes, carrots
-// and onions from their crates in the kitchen's pantry corner, puts them into the big pot on the
-// range and cooks the stew: one pot is 20 portions. With an empty bowl from the stack
+// and onions from their crates in the kitchen's pantry corner, cuts them up on the
+// chopping block with the knife (the mouse leads the knife: sideways to place it, down
+// to cut), puts the pieces into the big pot on the range and cooks the stew: one pot is
+// 20 portions. With an empty bowl from the stack
 // he ladles a portion, carries it to the guest and serves it; the guest eats, pays and
 // tips for quick service. A guest who waits too long gives up.
 //
-// Keys (as in the game's concept): F picks things up and puts them down, E uses things.
+// Keys (as in the game's concept): F picks things up and puts them down, E uses things,
+// the left mouse button works with the tool in hand.
 //
 // Everything the rules know is in `state`, and every change to it goes through act():
 // what is drawn (crates, bowls, the pot, bubbles, the money counter) only follows the
@@ -34,23 +37,37 @@
     eatTime: 14,              // seconds a guest eats
     tip: 3,                   // the tip shrinks with the waiting time
     reach: 2.1,               // how close the chef has to be to a crate, the pot, the bowls
+    cutReach: 1.75,           // ... to the chopping block to cut on it
     itemReach: 1.9,           // ... to something lying on a work surface
     serveReach: 2.7           // ... and to a guest's chair (far enough to serve across the table from the aisle)
   };
   var VEG = ['potato', 'carrot', 'onion'];
+  // How each vegetable is cut: `a` cuts across its length, then (turned by a quarter)
+  // `b` cuts across its width. from / to: the part of its length that is cut (shares,
+  // from its thin end); dropEnd: what lies beyond the last cut is thrown away (the
+  // carrot's leaves); cap: the colours of the cut faces.
+  var CUTS = {
+    carrot: { a: 5, b: 0, from: 0.04, to: 0.68, dropEnd: true, cap: ['#f9b25a', '#ee8f2e'] },
+    potato: { a: 3, b: 3, from: 0.05, to: 0.95, cap: ['#f6e9b4', '#ecd98f'] },
+    onion:  { a: 2, b: 3, from: 0.12, to: 0.9, cap: ['#fbf6e6', '#e6d9bd'] }
+  };
   // what can be carried; carry: how the chef holds it (see gameplay.js)
   var KINDS = {
-    potato: { a: 'a potato', the: 'the potato', many: 'potatoes', carry: { half: 0.105, fwd: 0.44, drop: -0.25, grip: 0.06, back: 0, curl: 0.45 } },
-    carrot: { a: 'a carrot', the: 'the carrot', many: 'carrots', carry: { half: 0.115, fwd: 0.44, drop: -0.25, grip: 0.04, back: 0, curl: 0.45, yaw: 0.5 } },
-    onion:  { a: 'an onion', the: 'the onion', many: 'onions', carry: { half: 0.1, fwd: 0.44, drop: -0.25, grip: 0.07, back: 0, curl: 0.45 } },
+    potato: { a: 'a potato', the: 'the potato', many: 'potatoes', cutName: 'potato cubes', carry: { half: 0.105, fwd: 0.44, drop: -0.25, grip: 0.06, back: 0, curl: 0.45 } },
+    carrot: { a: 'a carrot', the: 'the carrot', many: 'carrots', cutName: 'carrot slices', carry: { half: 0.115, fwd: 0.44, drop: -0.25, grip: 0.04, back: 0, curl: 0.45, yaw: 0.5 } },
+    onion:  { a: 'an onion', the: 'the onion', many: 'onions', cutName: 'chopped onion', carry: { half: 0.1, fwd: 0.44, drop: -0.25, grip: 0.07, back: 0, curl: 0.45 } },
     bowl:   { a: 'an empty bowl', the: 'the bowl', carry: { half: 0.17, fwd: 0.46, drop: -0.25, grip: 0.06, back: 0, curl: 0.4 } },
-    stew:   { a: 'a bowl of stew', the: 'the bowl of stew', carry: { half: 0.17, fwd: 0.46, drop: -0.25, grip: 0.06, back: 0, curl: 0.4 } }
+    stew:   { a: 'a bowl of stew', the: 'the bowl of stew', carry: { half: 0.17, fwd: 0.46, drop: -0.25, grip: 0.06, back: 0, curl: 0.4 } },
+    knife:  { a: 'the knife', the: 'the knife' }   // held in one hand (see knifeHold)
   };
   // Meshy models and parts cut out of the kitchen's own models; width (or height): size in the game
   var MODELS = {
-    potato: { file: 'models/d_potato.glb', width: 0.2 },
-    carrot: { file: 'models/d_carrot.glb', width: 0.32 },
-    onion:  { file: 'models/d_onion.glb', width: 0.17 },
+    // align: laid along its own length (X), its thin end at -X, its flat side down
+    potato: { file: 'models/d_potato.glb', width: 0.2, align: true },
+    carrot: { file: 'models/d_carrot.glb', width: 0.32, align: true },
+    onion:  { file: 'models/d_onion.glb', width: 0.17, align: true },
+    knife:  { file: 'models/d_knife.glb', width: 0.44, align: true },   // the cleaver from the kitchen's chopping block
+    board:  { file: 'models/d_board.glb', width: 0.62 },                // ... and the block without it
     bowl:   { file: 'models/d_bowl_empty.glb', width: 0.4 },
     stew:   { file: 'models/d_stew_bowl.glb', width: 0.4 },
     crate:  { file: 'models/d_crate.glb', width: 0.66 },
@@ -61,6 +78,32 @@
   function clamp(v, a, b){ return Math.max(a === undefined ? 0 : a, Math.min(b === undefined ? 1 : b, v)); }
   function smooth(x){ x = clamp(x); return x * x * (3 - 2 * x); }
   function rnd(a, b){ return a + (b - a) * Math.random(); }
+  function angle(a){ return Math.atan2(Math.sin(a), Math.cos(a)); }   // -PI .. PI
+  // eigenvectors of a symmetric 3x3 matrix [xx, xy, xz, yy, yz, zz], largest eigenvalue first
+  function eigen3(c){
+    var a = [[c[0], c[1], c[2]], [c[1], c[3], c[4]], [c[2], c[4], c[5]]], v = [[1, 0, 0], [0, 1, 0], [0, 0, 1]], k;
+    for (var sweep = 0; sweep < 24; sweep++){
+      for (var p = 0; p < 2; p++) for (var q = p + 1; q < 3; q++){
+        if (Math.abs(a[p][q]) < 1e-14) continue;
+        var th = 0.5 * Math.atan2(2 * a[p][q], a[q][q] - a[p][p]), cs = Math.cos(th), sn = Math.sin(th);
+        for (k = 0; k < 3; k++){ var akp = a[k][p], akq = a[k][q]; a[k][p] = cs * akp - sn * akq; a[k][q] = sn * akp + cs * akq; }
+        for (k = 0; k < 3; k++){ var apk = a[p][k], aqk = a[q][k]; a[p][k] = cs * apk - sn * aqk; a[q][k] = sn * apk + cs * aqk; }
+        for (k = 0; k < 3; k++){ var vkp = v[k][p], vkq = v[k][q]; v[k][p] = cs * vkp - sn * vkq; v[k][q] = sn * vkp + cs * vkq; }
+      }
+    }
+    return [0, 1, 2].map(function(i){ return { val: a[i][i], vec: new T.Vector3(v[0][i], v[1][i], v[2][i]) }; })
+      .sort(function(x, y){ return y.val - x.val; });
+  }
+  // how even a row of cuts is: 1 = all pieces the same length .. 0 = very uneven
+  function evenness(cuts, range, openEnd){
+    var pts = [range[0]].concat(cuts); if (!openEnd) pts.push(range[1]);
+    var len = [], mean = 0, sd = 0, i;
+    for (i = 1; i < pts.length; i++){ len.push(pts[i] - pts[i - 1]); mean += pts[i] - pts[i - 1]; }
+    mean /= len.length;
+    for (i = 0; i < len.length; i++) sd += (len[i] - mean) * (len[i] - mean);
+    sd = Math.sqrt(sd / len.length);
+    return clamp(1 - 1.2 * sd / Math.max(1e-6, mean));   // small slips are forgiven
+  }
 
   function build(ctx){
     var scene = ctx.scene, camera = ctx.camera, play = ctx.gameplay, RECIPE = RECIPES.stew;
@@ -70,20 +113,32 @@
     // ---------- the state and the actions that change it ---------------------------------
     var state = {
       money: RULES.startMoney, served: 0, lost: 0, nextId: 1,
-      items: {},                                    // id -> { id, kind, at: 'hand' | 'surface' | 'table', x, y, z, rot, batch, guest }
+      items: {},                                    // id -> { id, kind, at: 'hand' | 'surface' | 'board' | 'home' | 'table', x, y, z, rot, cut: { a, b, done, q }, batch, q, guest }
+      board: null,                                  // id of the vegetable on the chopping block
+      knife: null,                                  // id of the knife (at 'home' beside the block, or in the hand)
       carry: null,                                  // id of the item in the chef's hands
       crates: { potato: RULES.crateStock, carrot: RULES.crateStock, onion: RULES.crateStock },
       bowls: RULES.bowls,                           // clean bowls on the stack
-      pot: { phase: 'empty', has: { potato: 0, carrot: 0, onion: 0 }, t: 0, portions: 0, batch: 0 },   // 'empty' | 'filling' | 'cooking' | 'ready'
+      pot: { phase: 'empty', has: { potato: 0, carrot: 0, onion: 0 }, cut: {}, qs: [], quality: 1, t: 0, portions: 0, batch: 0 },   // 'empty' | 'filling' | 'cooking' | 'ready'
       guests: [],                                   // { id, phase, t, patience, pay, item }; phase: 'idle' | 'waiting' | 'eating' | 'paid' | 'angry'
       nextOrder: RULES.firstOrder
     };
+    (function(){ var k = { id: state.nextId++, kind: 'knife', at: 'home' }; state.items[k.id] = k; state.knife = k.id; })();
     function guest(id){ for (var i = 0; i < state.guests.length; i++) if (state.guests[i].id === id) return state.guests[i]; return null; }
     function carried(){ return state.carry ? state.items[state.carry] : null; }
     function isVeg(kind){ return VEG.indexOf(kind) >= 0; }
     function missing(){ return VEG.filter(function(k){ return state.pot.has[k] < RECIPE.needs[k]; }); }
     function newItem(kind){ var it = { id: state.nextId++, kind: kind, at: 'hand' }; state.items[it.id] = it; state.carry = it.id; return it; }
     function dropItem(it){ delete state.items[it.id]; if (state.carry === it.id) state.carry = null; }
+    function cutCount(o){ return o.cut ? o.cut.a.length + o.cut.b.length : 0; }
+    function isCut(o){ return !!(o.cut && o.cut.done); }
+    // which way the next cut goes ('a' across the length, 'b' across the width), null when it is cut up
+    function cutAxis(o){ var p = CUTS[o.kind], c = o.cut; if (!p || isCut(o)) return null; return !c || c.a.length < p.a ? 'a' : 'b'; }
+    // where a cut may be made along that way: [lo, hi] in the vegetable's own frame, and how far cuts must be apart
+    function cutLimits(o, ax){
+      var p = CUTS[o.kind], rg = MODELS[o.kind].range[ax], gap = (rg[1] - rg[0]) * 0.09;
+      return { lo: rg[0] + gap, hi: p.dropEnd && ax === 'a' ? rg[1] + gap * 0.5 : rg[1] - gap, gap: gap };
+    }
     // Each action checks by itself whether it is allowed and changes nothing if it is not.
     function act(type, arg){
       var pot = state.pot, it = carried(), g;
@@ -92,7 +147,7 @@
           if (it || !isVeg(arg) || state.crates[arg] <= 0) return false;
           state.crates[arg]--; newItem(arg); return true;
         case 'putBack':    // ... and back into it
-          if (!it || !isVeg(it.kind)) return false;
+          if (!it || !isVeg(it.kind) || it.cut) return false;
           state.crates[it.kind]++; dropItem(it); return true;
         case 'takeBowl':
           if (it || state.bowls <= 0) return false;
@@ -101,21 +156,53 @@
           if (!it || it.kind !== 'bowl') return false;
           state.bowls++; dropItem(it); return true;
         case 'putDown':    // onto a work surface: arg = { x, y, z }
-          if (!it || !arg) return false;
+          if (!it || !arg || it.kind === 'knife') return false;
           it.at = 'surface'; it.x = arg.x; it.y = arg.y; it.z = arg.z; it.rot = arg.rot || 0; state.carry = null; return true;
         case 'pickUp':     // arg = item id
           g = state.items[arg];
-          if (it || !g || g.at !== 'surface') return false;
+          if (it || !g || (g.at !== 'surface' && g.at !== 'board' && g.at !== 'home')) return false;
+          if (g.at === 'board'){
+            if (!isCut(g) && cutCount(g) > 0) return false;   // half cut: it stays until it is done
+            state.board = null;
+          }
           g.at = 'hand'; state.carry = g.id; return true;
+        case 'putKnife':   // back to its place beside the block
+          if (!it || it.kind !== 'knife') return false;
+          it.at = 'home'; state.carry = null; return true;
+        case 'toBoard':    // a vegetable onto the chopping block: arg = which way it lies
+          if (!it || !isVeg(it.kind) || state.board) return false;
+          it.at = 'board'; it.rot = +arg || 0; state.board = it.id; state.carry = null; return true;
+        case 'turnBoard':  // turn what lies on the block
+          g = state.items[state.board]; if (!g) return false;
+          g.rot = +arg || 0; return true;
+        case 'cut':        // arg = where along the vegetable (in its own frame, metres from its middle)
+          g = state.items[state.board];
+          if (!it || it.kind !== 'knife' || !g || typeof arg !== 'number') return false;
+          var ax = cutAxis(g);
+          if (!ax) return false;
+          var lim = cutLimits(g, ax), cut = g.cut || { a: [], b: [], done: false, q: 0 };
+          if (arg < lim.lo - 1e-6 || arg > lim.hi + 1e-6) return false;
+          if (cut[ax].some(function(c){ return Math.abs(c - arg) < lim.gap; })) return false;
+          cut[ax].push(arg); cut[ax].sort(function(x, y){ return x - y; }); g.cut = cut;
+          var plan = CUTS[g.kind], md = MODELS[g.kind];
+          if (cut.a.length >= plan.a && cut.b.length >= plan.b){
+            cut.done = true;
+            var qa = evenness(cut.a, md.range.a, plan.dropEnd);
+            cut.q = plan.b ? (qa + evenness(cut.b, md.range.b, false)) / 2 : qa;
+          }
+          return true;
         case 'addToPot':
-          if (!it || !isVeg(it.kind) || (pot.phase !== 'empty' && pot.phase !== 'filling') || pot.has[it.kind] >= RECIPE.needs[it.kind]) return false;
-          pot.has[it.kind]++; dropItem(it); pot.phase = 'filling';
-          if (!missing().length){ pot.phase = 'cooking'; pot.t = 0; }   // everything is in: it starts to cook
+          if (!it || !isVeg(it.kind) || !isCut(it) || (pot.phase !== 'empty' && pot.phase !== 'filling') || pot.has[it.kind] >= RECIPE.needs[it.kind]) return false;
+          pot.has[it.kind]++; pot.cut[it.kind] = it.cut; pot.qs.push(it.cut.q); dropItem(it); pot.phase = 'filling';
+          if (!missing().length){   // everything is in: it starts to cook
+            pot.phase = 'cooking'; pot.t = 0;
+            pot.quality = pot.qs.reduce(function(x, y){ return x + y; }, 0) / pot.qs.length;   // how well the vegetables were cut
+          }
           return true;
         case 'ladle':      // one portion from the pot into the empty bowl in his hands
           if (!it || it.kind !== 'bowl' || pot.phase !== 'ready' || pot.portions <= 0) return false;
-          it.kind = 'stew'; it.batch = pot.batch;
-          if (--pot.portions <= 0){ pot.portions = 0; pot.phase = 'empty'; VEG.forEach(function(k){ pot.has[k] = 0; }); }
+          it.kind = 'stew'; it.batch = pot.batch; it.q = pot.quality;
+          if (--pot.portions <= 0){ pot.portions = 0; pot.phase = 'empty'; VEG.forEach(function(k){ pot.has[k] = 0; }); pot.cut = {}; pot.qs = []; }
           return true;
         case 'pourBack':
           if (!it || it.kind !== 'stew' || pot.phase !== 'ready' || it.batch !== pot.batch || pot.portions >= RECIPE.portions) return false;
@@ -127,7 +214,7 @@
           g = guest(arg); if (!g || g.phase !== 'waiting' || !it || it.kind !== 'stew') return false;
           it.at = 'table'; it.guest = g.id; state.carry = null;
           g.phase = 'eating'; g.t = 0; g.item = it.id;
-          g.pay = RECIPE.price + Math.round(RULES.tip * g.patience); return true;
+          g.pay = RECIPE.price + Math.round(RULES.tip * g.patience * (0.4 + 0.6 * (it.q === undefined ? 1 : it.q))); return true;   // quick service and a well made stew tip better
       }
       return false;
     }
@@ -193,20 +280,178 @@
       var md = MODELS[key];
       fetch(md.file).then(function(r){ if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); })
         .then(function(buf){ gltf.parse(buf, '', function(g){
-          var obj = g.scene; obj.updateMatrixWorld(true);
-          var bb = new T.Box3().setFromObject(obj), s = bb.getSize(V()), c = bb.getCenter(V());
-          var k = md.height ? md.height / s.y : md.width / Math.max(s.x, s.z);
-          obj.position.x -= c.x; obj.position.y -= bb.min.y; obj.position.z -= c.z;   // standing on the origin
+          var obj = g.scene, pts = pointsOf(obj), n = pts.length / 3, i, al = new T.Group();
+          al.add(obj);
+          if (md.align){   // turn it so its length runs along X, its width along Z and its flat side is down
+            var fix = alignment(pts);
+            al.quaternion.setFromRotationMatrix(fix);
+            var v = V();
+            for (i = 0; i < n; i++){ v.set(pts[i * 3], pts[i * 3 + 1], pts[i * 3 + 2]).applyMatrix4(fix); pts[i * 3] = v.x; pts[i * 3 + 1] = v.y; pts[i * 3 + 2] = v.z; }
+          }
+          var mn = [1e9, 1e9, 1e9], mx = [-1e9, -1e9, -1e9], a;
+          for (i = 0; i < n; i++) for (a = 0; a < 3; a++){ mn[a] = Math.min(mn[a], pts[i * 3 + a]); mx[a] = Math.max(mx[a], pts[i * 3 + a]); }
+          var sx = mx[0] - mn[0], sy = mx[1] - mn[1], sz = mx[2] - mn[2], cx = (mn[0] + mx[0]) / 2, cz = (mn[2] + mx[2]) / 2;
+          var k = md.height ? md.height / sy : md.width / Math.max(sx, sz);
+          al.position.set(-cx, -mn[1], -cz);   // standing on the origin
+          for (i = 0; i < n; i++){ pts[i * 3] = (pts[i * 3] - cx) * k; pts[i * 3 + 1] = (pts[i * 3 + 1] - mn[1]) * k; pts[i * 3 + 2] = (pts[i * 3 + 2] - cz) * k; }
           obj.traverse(function(m){ if (m.isMesh){ m.castShadow = true; m.receiveShadow = true; m.frustumCulled = false; } });
-          var sized = new T.Group(); sized.add(obj); sized.scale.set(k, k * (md.squash || 1), k);
+          var sized = new T.Group(); sized.add(al); sized.scale.setScalar(k);
           var holder = new T.Group(); holder.add(sized);
-          md.size = V(s.x * k, s.y * k * (md.squash || 1), s.z * k);
+          md.size = V(sx * k, sy * k, sz * k);
+          md.pts = pts;   // its vertices in the game's size, standing on the origin
+          if (CUTS[key]){
+            var plan = CUTS[key], x0 = -md.size.x / 2, z0 = -md.size.z / 2;
+            md.range = { a: [x0 + plan.from * md.size.x, x0 + plan.to * md.size.x], b: [z0 + 0.07 * md.size.z, z0 + 0.93 * md.size.z] };
+          }
+          if (key === 'knife') md.tool = measureKnife(md);
           md.obj = holder;
         }, function(e){ console.error('Could not load ' + md.file + ':', e); }); })
         .catch(function(e){ console.error('Could not load ' + md.file + ':', e); });
     });
     function instance(key){ return MODELS[key].obj.clone(true); }
+    // all vertices of a model as [x, y, z, x, y, z, ...] (packed models store whole numbers that stand for fractions)
+    function pointsOf(obj){
+      var out = [], v = V();
+      obj.updateMatrixWorld(true);
+      obj.traverse(function(m){
+        if (!m.isMesh) return;
+        var pos = m.geometry.attributes.position, arr = pos.array;
+        var f = !pos.normalized ? 1 : 1 / (arr instanceof Int16Array ? 32767 : arr instanceof Uint16Array ? 65535 : arr instanceof Int8Array ? 127 : arr instanceof Uint8Array ? 255 : 1);
+        for (var i = 0; i < pos.count; i++){ v.fromBufferAttribute(pos, i).multiplyScalar(f).applyMatrix4(m.matrixWorld); out.push(v.x, v.y, v.z); }
+      });
+      return new Float32Array(out);
+    }
+    // the turn that lays a model along its own length: longest direction -> X (thin end
+    // at -X), second -> Z, flattest -> Y
+    function alignment(pts){
+      var n = pts.length / 3, m = [0, 0, 0], c = [0, 0, 0, 0, 0, 0], i, x, y, z;
+      for (i = 0; i < n; i++){ m[0] += pts[i * 3]; m[1] += pts[i * 3 + 1]; m[2] += pts[i * 3 + 2]; }
+      m[0] /= n; m[1] /= n; m[2] /= n;
+      for (i = 0; i < n; i++){
+        x = pts[i * 3] - m[0]; y = pts[i * 3 + 1] - m[1]; z = pts[i * 3 + 2] - m[2];
+        c[0] += x * x; c[1] += x * y; c[2] += x * z; c[3] += y * y; c[4] += y * z; c[5] += z * z;
+      }
+      var e = eigen3(c), e1 = e[0].vec.normalize(), e2 = e[1].vec.normalize(), e3 = e[2].vec.normalize();
+      // which end is the thin one: how far the points near each end lie from the axis
+      var lo = 1e9, hi = -1e9, t = new Float32Array(n);
+      for (i = 0; i < n; i++){ t[i] = (pts[i * 3] - m[0]) * e1.x + (pts[i * 3 + 1] - m[1]) * e1.y + (pts[i * 3 + 2] - m[2]) * e1.z; lo = Math.min(lo, t[i]); hi = Math.max(hi, t[i]); }
+      var sum = [0, 0], cnt = [0, 0];
+      for (i = 0; i < n; i++){
+        var u = (t[i] - lo) / (hi - lo), end = u < 0.14 ? 0 : u > 0.86 ? 1 : -1;
+        if (end < 0) continue;
+        x = pts[i * 3] - m[0] - e1.x * t[i]; y = pts[i * 3 + 1] - m[1] - e1.y * t[i]; z = pts[i * 3 + 2] - m[2] - e1.z * t[i];
+        sum[end] += x * x + y * y + z * z; cnt[end]++;
+      }
+      if (sum[0] / Math.max(1, cnt[0]) > sum[1] / Math.max(1, cnt[1])){ e1.negate(); e2.negate(); }
+      if (V().crossVectors(e1, e3).dot(e2) < 0) e3.negate();   // keep it a turn, not a mirror image
+      return new T.Matrix4().set(e1.x, e1.y, e1.z, 0, e3.x, e3.y, e3.z, 0, e2.x, e2.y, e2.z, 0, 0, 0, 0, 1);
+    }
+    // the outline of a model where a cut goes through it: the middle and half-sizes of
+    // its cross-section at `at` along X ('a') or along Z ('b')
+    function section(md, axis, at){
+      var pts = md.pts, n = pts.length / 3, ia = axis === 'a' ? 0 : 2, ib = axis === 'a' ? 2 : 0;
+      var tol = (axis === 'a' ? md.size.x : md.size.z) * 0.06, lo = [1e9, 1e9], hi = [-1e9, -1e9];
+      for (var i = 0; i < n; i++){
+        if (Math.abs(pts[i * 3 + ia] - at) > tol) continue;
+        var u = pts[i * 3 + ib], y = pts[i * 3 + 1];
+        if (u < lo[0]) lo[0] = u; if (u > hi[0]) hi[0] = u; if (y < lo[1]) lo[1] = y; if (y > hi[1]) hi[1] = y;
+      }
+      if (lo[0] > hi[0]) return { cu: 0, cy: md.size.y / 2, ru: 0.001, ry: 0.001 };
+      return { cu: (lo[0] + hi[0]) / 2, cy: (lo[1] + hi[1]) / 2, ru: (hi[0] - lo[0]) / 2 * 0.97, ry: (hi[1] - lo[1]) / 2 * 0.97 };
+    }
+    // the knife lies along X, handle at -X: where to hold it, where its blade and its edge are
+    function measureKnife(md){
+      var pts = md.pts, n = pts.length / 3, N = 24, L = md.size.x, x0 = -L / 2, i, k;
+      var zlo = new Array(N).fill(1e9), zhi = new Array(N).fill(-1e9), ylo = new Array(N).fill(1e9), yhi = new Array(N).fill(-1e9);
+      for (i = 0; i < n; i++){
+        k = clamp(Math.floor((pts[i * 3] - x0) / L * N), 0, N - 1);
+        zlo[k] = Math.min(zlo[k], pts[i * 3 + 2]); zhi[k] = Math.max(zhi[k], pts[i * 3 + 2]);
+        ylo[k] = Math.min(ylo[k], pts[i * 3 + 1]); yhi[k] = Math.max(yhi[k], pts[i * 3 + 1]);
+      }
+      var wide = 0; for (k = 0; k < N; k++) wide = Math.max(wide, zhi[k] - zlo[k]);
+      var first = 0; while (first < N - 1 && zhi[first] - zlo[first] < wide * 0.55) first++;   // the first slice of the blade
+      var h0 = Math.max(0, Math.round(first * 0.3)), h1 = Math.max(h0 + 1, Math.round(first * 0.85));   // the part of the handle the fist closes around
+      var gz = 0, gy = 0, cnt = 0;
+      for (k = h0; k < h1; k++){ gz += (zlo[k] + zhi[k]) / 2; gy += (ylo[k] + yhi[k]) / 2; cnt++; }
+      gz /= cnt; gy /= cnt;
+      var bz0 = 1e9, bz1 = -1e9; for (k = first; k < N; k++){ bz0 = Math.min(bz0, zlo[k]); bz1 = Math.max(bz1, zhi[k]); }
+      var edge = (bz0 + bz1) / 2 >= gz ? 1 : -1;   // the blade hangs below the handle's line: that side is its edge
+      var gx = x0 + (h0 + h1) / 2 / N * L, bx = x0 + (first + N) / 2 / N * L;
+      return { grip: V(gx, gy, gz), dir: V(1, 0, 0), up: V(0, 0, -edge),
+               edgeDrop: Math.abs((edge > 0 ? bz1 : bz0) - gz),     // from the handle's line down to the edge
+               bladeMid: bx - gx, bladeLen: (N - first) / N * L };  // from the fist to the middle of the blade
+    }
     function allLoaded(){ return Object.keys(MODELS).every(function(k){ return MODELS[k].obj; }); }
+
+    // ---------- cut vegetables ------------------------------------------------------------------
+    // A cut vegetable is drawn as its own model once per piece, each clipped to its piece
+    // and moved a little apart, with a flat face where a cut went through.
+    var capGeo = new T.CircleGeometry(1, 24), capTexs = {};
+    function capTex(kind){
+      if (capTexs[kind]) return capTexs[kind];
+      var cv = document.createElement('canvas'); cv.width = cv.height = 64;
+      var g = cv.getContext('2d'), col = CUTS[kind].cap, gr = g.createRadialGradient(32, 32, 2, 32, 32, 32);
+      gr.addColorStop(0, col[0]); gr.addColorStop(1, col[1]);
+      g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+      g.strokeStyle = kind === 'onion' ? 'rgba(170,150,110,.5)' : 'rgba(120,70,20,.22)'; g.lineWidth = kind === 'onion' ? 1.6 : 1.2;
+      (kind === 'onion' ? [8, 14, 20, 26] : kind === 'carrot' ? [11] : []).forEach(function(r){ g.beginPath(); g.arc(32, 32, r, 0, Math.PI * 2); g.stroke(); });
+      var t = new T.CanvasTexture(cv); t.encoding = T.sRGBEncoding;
+      return (capTexs[kind] = t);
+    }
+    // the clipping planes are kept in the piece's own frame and brought into the world right before it is drawn
+    function clipTo(mesh, cell, local){
+      if (!local.length) return;
+      var world = local.map(function(){ return new T.Plane(); });
+      mesh.material = mesh.material.clone(); mesh.material.clippingPlanes = world;
+      mesh.onBeforeRender = function(){ for (var k = 0; k < local.length; k++) world[k].copy(local[k]).applyMatrix4(cell.matrixWorld); };
+    }
+    function capFace(kind, axis, at, side, cell, clip){
+      var sc = section(MODELS[kind], axis, at);
+      var m = new T.Mesh(capGeo, new T.MeshStandardMaterial({ map: capTex(kind), roughness: 0.78, metalness: 0, side: T.DoubleSide }));
+      if (axis === 'a'){ m.rotation.y = Math.PI / 2; m.position.set(at - side * 0.0005, sc.cy, sc.cu); }
+      else m.position.set(sc.cu, sc.cy, at - side * 0.0005);
+      m.scale.set(sc.ru, sc.ry, 1); m.receiveShadow = true; m.userData.noOutline = true;
+      clipTo(m, cell, clip);
+      return m;
+    }
+    // apart: the pieces have fallen apart (cut up completely): slices lean on one another
+    // like fallen dominoes, cubes and chunks spread out and turn a little
+    function makeCut(kind, cut, apart){
+      var plan = CUTS[kind], md = MODELS[kind], grp = new T.Group();
+      if (!cut || !(cut.a.length + cut.b.length)){ grp.add(instance(kind)); return grp; }
+      var xs = [-Infinity].concat(cut.a, [Infinity]), zs = [-Infinity].concat(cut.b, [Infinity]);
+      var nx = xs.length - 1 - (plan.dropEnd && cut.done ? 1 : 0), nz = zs.length - 1, gap = 0.007;
+      var hx = md.size.x / 2, hz = md.size.z / 2, slices = !plan.b;
+      for (var i = 0; i < nx; i++) for (var j = 0; j < nz; j++){
+        // each piece hangs in a pivot at its own middle, so it can turn and lean there
+        var cx = (Math.max(xs[i], -hx) + Math.min(xs[i + 1], hx)) / 2, cz = (Math.max(zs[j], -hz) + Math.min(zs[j + 1], hz)) / 2;
+        var pivot = new T.Group(), cell = new T.Group(), px = [], pz = [];
+        cell.position.set(-cx, 0, -cz); pivot.add(cell);
+        pivot.position.set(cx + (i - (nx - 1) / 2) * gap, 0, cz + (j - (nz - 1) / 2) * gap);
+        if (apart && slices){
+          var sec = section(md, 'a', cx), low = Math.max(0, sec.cy - sec.ry);
+          cell.position.y = -low; pivot.position.y = low;                       // it leans around its lowest point
+          pivot.rotation.z = -(0.5 + rnd(-0.08, 0.08)); pivot.rotation.y = rnd(-0.12, 0.12);
+          pivot.position.x += (i - (nx - 1) / 2) * 0.006; pivot.position.z += rnd(-0.006, 0.006);
+        } else if (apart){
+          pivot.position.x += cx * 0.42 + rnd(-0.004, 0.004); pivot.position.z += cz * 0.42 + rnd(-0.004, 0.004);   // spread out from the middle
+          pivot.rotation.y = rnd(-0.3, 0.3);
+        }
+        if (isFinite(xs[i])) px.push(new T.Plane(V(1, 0, 0), -xs[i]));
+        if (isFinite(xs[i + 1])) px.push(new T.Plane(V(-1, 0, 0), xs[i + 1]));
+        if (isFinite(zs[j])) pz.push(new T.Plane(V(0, 0, 1), -zs[j]));
+        if (isFinite(zs[j + 1])) pz.push(new T.Plane(V(0, 0, -1), zs[j + 1]));
+        var body = instance(kind), all = px.concat(pz), firstCell = i === 0 && j === 0;
+        body.traverse(function(m){ if (m.isMesh){ clipTo(m, cell, all); m.castShadow = firstCell; } });
+        cell.add(body);
+        if (isFinite(xs[i])) cell.add(capFace(kind, 'a', xs[i], -1, cell, pz));
+        if (isFinite(xs[i + 1])) cell.add(capFace(kind, 'a', xs[i + 1], 1, cell, pz));
+        if (isFinite(zs[j])) cell.add(capFace(kind, 'b', zs[j], -1, cell, px));
+        if (isFinite(zs[j + 1])) cell.add(capFace(kind, 'b', zs[j + 1], 1, cell, px));
+        grp.add(pivot);
+      }
+      return grp;
+    }
 
     // ---------- signs above heads and above the pot --------------------------------------------
     // small pictures drawn on a canvas, always facing the camera
@@ -332,11 +577,20 @@
 
     // ---------- the places: crates in the storeroom, pot on the range, bowls on the island ------
     // built once the models and the kitchen are there
-    var place = { pot: null, crates: {}, stacks: null };
+    var place = { pot: null, crates: {}, stacks: null, board: null, knifeHome: null };
+    var knifeHold = null;   // how the knife is held (see gameplay.js: a tool)
     var CRATE_GRID = [[-0.19, -0.075], [0, -0.075], [0.19, -0.075], [-0.19, 0.085], [0, 0.085], [0.19, 0.085]];
     function buildPlaces(){
       var k = ctx.getKitchen();
-      if (place.pot || !allLoaded() || !k || !k.potAt || !k.bowlsAt) return;
+      if (place.pot || !allLoaded() || !k || !k.potAt || !k.bowlsAt || !k.board) return;
+      // the chopping block is the cutting station; the cleaver that lay on it is the knife.
+      // (the kitchen's own block model has the cleaver fixed to it: ours replaces it)
+      k.board.obj.visible = false;
+      var bo = instance('board'); bo.position.copy(k.board.pos); bo.rotation.y = 0.6; root.add(bo);
+      place.board = { obj: bo, r: MODELS.board.size.x / 2, pos: V(k.board.pos.x, k.board.pos.y + MODELS.board.size.y, k.board.pos.z) };
+      place.knifeHome = V(k.board.pos.x, k.board.pos.y, k.board.pos.z - place.board.r - 0.17);
+      var kt = MODELS.knife.tool;
+      knifeHold = { tool: true, grip: kt.grip, dir: kt.dir, up: kt.up, lean: 0.34, pose: knifePose };
       // the pantry corner: three crates side by side at the kitchen's back wall, between
       // the door to the back rooms and the side counter, right beside the range
       var cs = MODELS.crate.size, wallZ = -10;
@@ -369,7 +623,7 @@
       stew.rotation.x = -Math.PI / 2; stew.visible = false; stew.receiveShadow = true; pg.add(stew);
       var veg = {};
       VEG.forEach(function(kind, i){
-        var v = instance(kind), a = i * 2.1;
+        var v = new T.Group(), a = i * 2.1;   // filled with the cut pieces when they are put in
         v.position.set(Math.cos(a) * inner * 0.45, size.y * 0.23, Math.sin(a) * inner * 0.45); v.rotation.y = a; v.visible = false;
         pg.add(v); veg[kind] = v;
       });
@@ -441,6 +695,8 @@
       var k = ctx.getKitchen(), ok = true;
       (k.taken || []).forEach(function(c){ if (Math.hypot(c.x - x, c.z - z) < c.r + 0.1) ok = false; });
       if (place.stacks && Math.abs(x - place.stacks.pos.x) < 0.34 && Math.abs(z - place.stacks.pos.z) < 0.55) ok = false;   // the bowl stacks
+      if (place.board && Math.hypot(place.board.pos.x - x, place.board.pos.z - z) < place.board.r + 0.12) ok = false;      // the chopping block
+      if (place.knifeHome && Math.abs(place.knifeHome.x - x) < 0.34 && Math.abs(place.knifeHome.z - z) < 0.2) ok = false;   // the knife's place
       Object.keys(state.items).forEach(function(id){
         var o = state.items[id];
         if (o.at === 'surface' && Math.hypot(o.x - x, o.z - z) < (o.kind === 'bowl' || o.kind === 'stew' ? 0.36 : 0.24)) ok = false;
@@ -452,17 +708,96 @@
     var scoop = null;   // { t: 0..1, item }
     var SCOOP_TIME = 1.25, POUR_AT = 0.68;
 
+    // ---------- cutting: the mouse leads the knife over the vegetable on the block --------------
+    // Sideways it moves the knife along the vegetable, pulling it down brings the blade
+    // down through it: that is a cut. The vegetable lies across in front of the chef;
+    // when the cuts across its length are done it is turned by a quarter for the others.
+    var cutting = null;   // { look (where he faces), th, f, r (the knife's direction and the vegetable's, see below), x (along the vegetable), h (blade height 1..0), armed, cool, end }
+    var CUT = { side: 0.00075, down: 0.0055, lift: 0.14, slant: 0.42 };   // slant: the knife is held a little across, so its blade can be seen
+    var note = { text: '', t: 0 };   // a short message, e.g. how well it was cut
+    function say(text){ note.text = text; note.t = 3.2; }
+    function lieAcross(){   // the next cuts go across what lies left to right in front of him
+      var o = state.items[state.board], ax = o && cutAxis(o);
+      if (ax) act('turnBoard', ax === 'b' ? cutting.th - Math.PI / 2 : cutting.th + Math.PI);
+    }
+    function startCutting(){
+      var chef = ctx.getChef(), o = state.items[state.board];
+      if (cutting || !o || !cutAxis(o)) return;
+      var f0 = V(place.board.pos.x - chef.position.x, 0, place.board.pos.z - chef.position.z).normalize(), look = Math.atan2(f0.x, f0.z);
+      // the blade points away from him and a little to the left (he holds it in his right
+      // hand); the vegetable lies square to the blade
+      var th = look + CUT.slant;
+      cutting = { look: look, th: th, f: V(Math.sin(th), 0, Math.cos(th)), r: V(-Math.cos(th), 0, Math.sin(th)), x: 0, h: 1, armed: true, cool: 0.15, end: -1 };
+      lieAcross();
+      var lim = cutLimits(o, cutAxis(o)); cutting.x = clamp(0, lim.lo, lim.hi);
+    }
+    function stopCutting(){ cutting = null; }
+    function chop(){
+      var o = state.items[state.board], before = cutAxis(o), ok = act('cut', cutting.x);
+      chopSound(ok);
+      if (!ok){ cutting.cool = 0.22; say('Too close to another cut'); return; }
+      cutting.cool = 0.3;
+      if (isCut(o)){
+        cutting.end = 0.75;
+        say(o.cut.q >= 0.75 ? 'Evenly cut – very good!' : o.cut.q >= 0.45 ? 'Decently cut' : 'Roughly cut');
+      } else if (cutAxis(o) !== before){   // turn it for the cuts the other way
+        lieAcross(); cutting.cool = 0.65;
+        var lim = cutLimits(o, cutAxis(o)); cutting.x = clamp(0, lim.lo, lim.hi);
+      }
+    }
+    // the mouse while cutting (called from index.html; true = the movement was used here)
+    function mouse(dx, dy){
+      if (!cutting) return false;
+      var o = state.items[state.board];
+      if (!o || cutting.cool > 0 || cutting.end >= 0 || !cutAxis(o)) return true;
+      var lim = cutLimits(o, cutAxis(o));
+      if (cutting.h > 0.55) cutting.x = clamp(cutting.x + dx * CUT.side, lim.lo, lim.hi);   // the blade is clear of the vegetable
+      cutting.h = clamp(cutting.h - dy * CUT.down);
+      if (cutting.h >= 0.6) cutting.armed = true;
+      if (cutting.h <= 0.03 && cutting.armed){ cutting.armed = false; chop(); }
+      return true;
+    }
+    window.addEventListener('mousedown', function(e){ if (e.button === 2 && cutting) stopCutting(); });
+    // where the knife is while it is led (see knifeHold): its blade above the cut, the handle toward the chef
+    function knifePose(out){
+      if (!cutting || !place.board) return false;
+      var kt = MODELS.knife.tool, B = place.board.pos;
+      out.pos.copy(B).addScaledVector(cutting.r, cutting.x).addScaledVector(cutting.f, -kt.bladeMid);
+      out.pos.y = B.y + 0.004 + cutting.h * CUT.lift + kt.edgeDrop;
+      out.dir.copy(cutting.f); out.dir.y = 0.12 * cutting.h; out.dir.normalize();   // the tip a little up while it is lifted
+      out.up.set(0, 1, 0);
+      return true;
+    }
+    // a short chop: the blade going through, then hitting the wood
+    var audio = null;
+    function chopSound(ok){
+      try {
+        audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+        var t = audio.currentTime, n = Math.floor(audio.sampleRate * 0.09), buf = audio.createBuffer(1, n, audio.sampleRate), d = buf.getChannelData(0);
+        for (var i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 3);
+        var src = audio.createBufferSource(); src.buffer = buf;
+        var flt = audio.createBiquadFilter(); flt.type = 'bandpass'; flt.frequency.value = ok ? 1700 : 520; flt.Q.value = 0.8;
+        var gn = audio.createGain(); gn.gain.value = ok ? 0.5 : 0.28;
+        src.connect(flt); flt.connect(gn); gn.connect(audio.destination); src.start(t);
+        var osc = audio.createOscillator(), og = audio.createGain();
+        osc.frequency.setValueAtTime(150, t); osc.frequency.exponentialRampToValueAtTime(60, t + 0.08);
+        og.gain.setValueAtTime(0.32, t); og.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+        osc.connect(og); og.connect(audio.destination); osc.start(t); osc.stop(t + 0.11);
+      } catch (e) { /* no sound then */ }
+    }
+
     // ---------- what the chef can do: F picks up / puts down, E uses ---------------------------
     function list(words){ return words.join(', ').replace(/, ([^,]*)$/, ' and $1'); }
     play.addInteractables(function(hands){
       var out = [], it = carried(), pot = state.pot;
       if (!place.pot) return out;
+      if (cutting) return [{ pos: place.board.pos, reach: 9, key: 'E', label: 'Stop cutting', use: stopCutting }];
       function add(e){ out.push(e); }
       var free = !it && hands.handsFree;
       // the crates
       VEG.forEach(function(kind){
         var c = place.crates[kind], K = KINDS[kind], e = { pos: c.pos, reach: RULES.reach, key: 'F' };
-        if (it && it.kind === kind){ e.label = 'Put ' + K.the + ' back'; e.use = function(){ act('putBack'); }; }
+        if (it && it.kind === kind && !it.cut){ e.label = 'Put ' + K.the + ' back'; e.use = function(){ act('putBack'); }; }
         else if (it) return;
         else if (!free) e.label = 'Hands full';
         else if (state.crates[kind] <= 0) e.label = 'No ' + K.many + ' left';
@@ -482,21 +817,40 @@
       Object.keys(state.items).forEach(function(id){
         var o = state.items[id];
         if (o.at !== 'surface' || !free) return;
-        add({ pos: V(o.x, 0, o.z), reach: RULES.itemReach, key: 'F', label: 'Pick up ' + KINDS[o.kind].the, use: function(){ act('pickUp', o.id); }, obj: objs[o.id] && objs[o.id].obj });
+        add({ pos: V(o.x, 0, o.z), reach: RULES.itemReach, key: 'F', label: 'Pick up ' + nameOf(o, 'the'), use: function(){ act('pickUp', o.id); }, obj: objs[o.id] && objs[o.id].obj });
       });
       // putting down what he carries, where he looks
-      if (it && aim && !scoop){
-        if (aim.free) add({ pos: V(aim.x, 0, aim.z), reach: 2.4, key: 'F', bias: 0.35, label: 'Put ' + KINDS[it.kind].the + ' down', use: function(){ if (aim && aim.free) act('putDown', aim); } });
+      // the chopping block and the knife beside it
+      var B = place.board, onBoard = state.board ? state.items[state.board] : null, knife = state.items[state.knife];
+      function see(o){ return objs[o.id] && objs[o.id].obj; }
+      if (it && isVeg(it.kind)){
+        add(onBoard ? { pos: B.pos, reach: RULES.reach, key: 'F', label: 'The block is taken' }
+                    : { pos: B.pos, reach: RULES.reach, key: 'F', label: 'Put ' + nameOf(it, 'the') + ' on the block', use: function(){ act('toBoard', ctx.getChef().rotation.y + Math.PI); }, obj: B.obj });
+      } else if (it && it.kind === 'knife'){
+        add({ pos: place.knifeHome, reach: RULES.reach, key: 'F', label: 'Put the knife down', use: function(){ act('putKnife'); } });
+        if (onBoard && cutAxis(onBoard)) add({ pos: B.pos, reach: RULES.cutReach, key: 'LMB', label: 'Cut ' + KINDS[onBoard.kind].the, use: startCutting, obj: see(onBoard) });
+        else add({ pos: B.pos, reach: RULES.reach, key: 'LMB', label: onBoard ? 'It is cut up already' : 'Put a vegetable on the block first' });
+      } else if (free){
+        if (knife.at === 'home') add({ pos: place.knifeHome, reach: RULES.reach, key: 'F', label: 'Take the knife', use: function(){ act('pickUp', knife.id); }, obj: see(knife) });
+        if (onBoard){
+          add(!isCut(onBoard) && cutCount(onBoard) > 0
+            ? { pos: B.pos, reach: RULES.reach, key: 'F', label: 'Finish cutting ' + KINDS[onBoard.kind].the + ' first' }
+            : { pos: B.pos, reach: RULES.reach, key: 'F', label: 'Pick up ' + nameOf(onBoard, 'the'), use: function(){ act('pickUp', onBoard.id); }, obj: see(onBoard) });
+        }
+      }
+      if (it && it.kind !== 'knife' && aim && !scoop){
+        if (aim.free) add({ pos: V(aim.x, 0, aim.z), reach: 2.4, key: 'F', bias: 0.35, label: 'Put ' + nameOf(it, 'the') + ' down', use: function(){ if (aim && aim.free) act('putDown', aim); } });
         else add({ pos: V(aim.x, 0, aim.z), reach: 2.4, key: 'F', bias: 0.35, label: 'No room here' });
       }
       // the pot
       var pe = { pos: place.pot.pos, reach: RULES.reach, key: 'E' }, cooking = pot.phase === 'cooking', ready = pot.phase === 'ready';
       if (scoop) pe = null;
       else if (it && isVeg(it.kind)){
-        if (cooking) pe.label = 'The stew is already cooking';
+        if (!isCut(it)) pe.label = 'Cut ' + KINDS[it.kind].the + ' up first';
+        else if (cooking) pe.label = 'The stew is already cooking';
         else if (ready) pe.label = 'There is still stew in the pot';
         else if (pot.has[it.kind] >= RECIPE.needs[it.kind]) pe.label = 'There is enough ' + it.kind + ' in the pot';
-        else { pe.label = 'Put ' + KINDS[it.kind].the + ' in the pot'; pe.use = function(){ act('addToPot'); }; pe.obj = place.pot.model; }
+        else { pe.label = 'Put ' + nameOf(it, 'the') + ' in the pot'; pe.use = function(){ act('addToPot'); }; pe.obj = place.pot.model; }
       } else if (it && it.kind === 'bowl'){
         if (ready){ pe.label = 'Ladle a portion'; pe.use = function(){ if (act('ladle')) scoop = { t: 0, item: it.id }; }; pe.obj = place.pot.model; }
         else pe.label = cooking ? 'The stew is not ready yet' : 'The pot is empty';
@@ -505,7 +859,7 @@
         else pe = null;
       } else if (cooking) pe.label = 'Cooking…';
       else if (ready) pe.label = pot.portions + (pot.portions === 1 ? ' portion' : ' portions') + ' left – bring an empty bowl';
-      else pe.label = 'Still needed: ' + list(missing().map(function(k){ return KINDS[k].a; }));
+      else pe.label = 'Still needed, cut up: ' + list(missing().map(function(k){ return KINDS[k].a; }));
       if (pe) add(pe);
       // guests waiting for their food
       state.guests.forEach(function(g){
@@ -519,30 +873,54 @@
 
     // ---------- the things themselves: one object per item, following the state --------------
     var objs = {};   // item id -> { obj, kind }
-    function syncItems(){
+    function nameOf(o, form){
+      var K = KINDS[o.kind];
+      if (isVeg(o.kind) && isCut(o)) return (form === 'the' ? 'the ' : '') + K.cutName;
+      return K[form];
+    }
+    // what an item looks like right now (a bowl being filled still looks empty until the ladle has poured)
+    function lookOf(o){
+      var kind = scoop && scoop.item === o.id && scoop.t < POUR_AT ? 'bowl' : o.kind;
+      return kind + (o.cut ? '#' + o.cut.a.length + '.' + o.cut.b.length + (o.cut.done ? 'd' : '') : '');
+    }
+    function syncItems(dt){
       var it = carried();
-      // a bowl being filled still looks empty until the ladle has poured
-      function look(o){ return scoop && scoop.item === o.id && scoop.t < POUR_AT ? 'bowl' : o.kind; }
       Object.keys(objs).forEach(function(id){
         if (state.items[id]) return;
         if (objs[id].obj.parent) objs[id].obj.parent.remove(objs[id].obj);
         delete objs[id];
       });
       Object.keys(state.items).forEach(function(id){
-        var o = state.items[id], want = look(o), v = objs[id];
-        if (v && v.kind !== want){ if (v.obj.parent) v.obj.parent.remove(v.obj); if (shown.carry === o.id) shown.carry = null; v = null; }
-        if (!v) v = objs[id] = { obj: instance(want), kind: want, placed: false };
+        var o = state.items[id], want = lookOf(o), v = objs[id], rot;
+        if (v && v.look !== want){ rot = v.rot; if (v.obj.parent) v.obj.parent.remove(v.obj); if (shown.carry === o.id) shown.carry = null; v = null; }
+        if (!v){
+          var kind = want.split('#')[0];
+          v = objs[id] = { obj: o.cut && isVeg(kind) ? makeCut(kind, o.cut, o.cut.done) : instance(kind), look: want, placed: false, rot: rot };
+        }
         if (o.at === 'hand'){
-          if (shown.carry !== o.id){ shown.carry = o.id; v.placed = false; play.setCarry(v.obj, KINDS[want].carry); }
-        } else if (!v.placed){
+          if (shown.carry !== o.id){ shown.carry = o.id; v.placed = false; v.rot = undefined; play.setCarry(v.obj, o.kind === 'knife' ? knifeHold : KINDS[o.kind].carry); }
+          return;
+        }
+        if (!v.placed){
           if (o.at === 'table'){ var gv = views[o.guest]; placeBowl(gv); v.obj.position.copy(gv.bowlAt); v.obj.rotation.set(0, rnd(0, 6.28), 0); }
+          else if (o.at === 'home'){ v.obj.position.copy(place.knifeHome); v.obj.rotation.set(0, 0.25, 0); }
+          else if (o.at === 'board'){ v.obj.position.copy(place.board.pos); if (v.rot === undefined) v.rot = o.rot || 0; v.obj.rotation.set(0, v.rot, 0); }
           else { v.obj.position.set(o.x, o.y, o.z); v.obj.rotation.set(0, o.rot || 0, 0); }
           v.obj.visible = true; root.add(v.obj); v.placed = true;
         }
+        if (o.at === 'board'){   // it turns to how it is laid
+          v.rot += angle((o.rot || 0) - v.rot) * Math.min(1, dt * 9);
+          v.obj.rotation.y = v.rot;
+        }
       });
       if (!it && shown.carry !== null){ shown.carry = null; play.setCarry(null); }
-      var label = it ? 'Carrying ' + KINDS[it.kind].a : '';
-      if (carryEl.textContent !== label){ carryEl.textContent = label; carryEl.classList.toggle('on', !!it); }
+      // the line above the hint: cutting, a short message, or what he carries
+      var label = it ? 'Carrying ' + nameOf(it, 'a') : '', ob = state.board && state.items[state.board];
+      if (cutting && ob && cutAxis(ob)){
+        var pl = CUTS[ob.kind];
+        label = 'Slide the mouse sideways, pull it down to cut   \u00b7   cut ' + (cutCount(ob) + 1) + ' of ' + (pl.a + pl.b);
+      } else if (note.t > 0) label = note.text;
+      if (carryEl.textContent !== label){ carryEl.textContent = label; carryEl.classList.toggle('on', !!label); }
     }
 
     // ---------- every frame: time passes, then everything shown follows the state -------------
@@ -555,7 +933,25 @@
       if (!place.pot) return;
       aim = aimSpot();
       if (scoop){ scoop.t += dt / SCOOP_TIME; if (scoop.t >= 1) scoop = null; }
-      syncItems();
+      if (note.t > 0) note.t -= dt;
+      if (cutting){
+        var cit = carried(), cb = state.board && state.items[state.board];
+        if (!cb || !cit || cit.kind !== 'knife' || ctx.isMoving()) stopCutting();
+        else {
+          if (cutting.cool > 0){   // after a cut the blade comes up by itself
+            cutting.cool -= dt; cutting.h = Math.min(1, cutting.h + dt * 5);
+            if (cutting.h >= 0.6) cutting.armed = true;
+          }
+          if (cutting.end >= 0){ cutting.end -= dt; if (cutting.end <= 0) stopCutting(); }
+        }
+      }
+      if (cutting){   // the view goes to the block
+        var L = ctx.look.get(), bp = place.board.pos, cam = camera.position;
+        var ahead = (bp.x - cam.x) * Math.sin(cutting.look) + (bp.z - cam.z) * Math.cos(cutting.look);
+        var pitch = clamp(-Math.atan2(cam.y - bp.y, Math.max(0.12, ahead)), -1.3, -0.5), e = 1 - Math.exp(-7 * dt);
+        ctx.look.set(L.yaw + angle(cutting.look - Math.PI - L.yaw) * e, L.pitch + (pitch - L.pitch) * e);
+      }
+      syncItems(dt);
 
       if (state.money !== shown.money){
         var first = shown.money === null;
@@ -593,7 +989,14 @@
 
       // the pot: vegetables in it, the stew's level, the ladle, its sign and the steam
       var P = place.pot, pot = state.pot, cooking = pot.phase === 'cooking', ready = pot.phase === 'ready';
-      VEG.forEach(function(kind){ P.veg[kind].visible = pot.phase === 'filling' && pot.has[kind] > 0; });
+      VEG.forEach(function(kind){
+        var v = P.veg[kind], show = pot.phase === 'filling' && pot.has[kind] > 0 && !!pot.cut[kind];
+        if (show && v.userData.cut !== pot.cut[kind]){   // the pieces as they were cut
+          while (v.children.length) v.remove(v.children[0]);
+          v.add(makeCut(kind, pot.cut[kind], true)); v.userData.cut = pot.cut[kind];
+        }
+        v.visible = show;
+      });
       P.stew.visible = cooking || ready;
       if (P.stew.visible){
         var level = cooking ? 1 : pot.portions / RECIPE.portions;
@@ -628,7 +1031,7 @@
     }
 
     return {
-      update: update,
+      update: update, mouse: mouse,
       // ---- for tests only ----
       debugState: function(){
         var it = carried();
@@ -638,9 +1041,14 @@
                       ' has ' + VEG.map(function(k){ return state.pot.has[k]; }).join(''),
                  items: Object.keys(state.items).map(function(id){ return state.items[id].kind + '@' + state.items[id].at; }).join(' '),
                  guests: state.guests.map(function(g){ return g.id + ':' + g.phase + (g.phase === 'waiting' ? ' ' + g.patience.toFixed(2) : ''); }).join(' '),
+                 board: (function(){ var o = state.board && state.items[state.board]; return o ? o.kind + ' ' + (o.cut ? o.cut.a.length + '+' + o.cut.b.length + (o.cut.done ? ' done q=' + o.cut.q.toFixed(2) : '') : 'whole') : null; })(),
+                 knife: state.items[state.knife].at, quality: +state.pot.quality.toFixed(2),
+                 cutting: cutting ? { x: +cutting.x.toFixed(3), h: +cutting.h.toFixed(2), cool: +cutting.cool.toFixed(2) } : null, note: note.t > 0 ? note.text : '',
                  ready: !!place.pot, aim: aim ? [+aim.x.toFixed(2), +aim.z.toFixed(2)] : null };
       },
       debugAct: act,
+      debugCut: { start: startCutting, stop: stopCutting, limits: function(){ var o = state.items[state.board]; return o && cutAxis(o) ? cutLimits(o, cutAxis(o)) : null; },
+                  ranges: function(kind){ return MODELS[kind].range; }, knife: function(){ return MODELS.knife.tool; }, sizes: function(){ var o = {}; Object.keys(MODELS).forEach(function(k){ o[k] = MODELS[k].size.toArray().map(function(x){ return +x.toFixed(3); }); }); return o; } },
       debugEat: function(){ Object.keys(state.items).forEach(function(id){ var o = state.items[id]; if (o.kind === 'stew' && o.at === 'surface'){ delete state.items[id]; state.bowls++; } }); },
       debugIds: function(kind){ return Object.keys(state.items).filter(function(id){ return state.items[id].kind === kind; }).map(Number); },
       debugRules: RULES, debugRecipe: RECIPE,

@@ -25,9 +25,9 @@ Rest dran kommt. Er wird nach jeder Etappe aktualisiert.
 | 2 | Spielerbewegung und Kamera | fertig |
 | 3 | Gegenstände aufnehmen und ablegen | fertig: F nimmt auf und legt ab (Zutaten, Schüsseln auf den Arbeitsflächen; Besen überall), E benutzt |
 | 4 | Kühlschrank und Zutaten | teilweise: Kartoffeln, Karotten, Zwiebeln als einzelne Gegenstände aus drei Kisten in der Vorratsecke der Küche, mit Vorrat (je 6); Kühlschrank noch ohne Funktion |
-| 5 | Interaktives Schneidebrett | fehlt (ein Brett mit Beil steht als Deko auf der Arbeitsinsel) |
-| 6 | Gemüse schneiden | fehlt |
-| 7 | Zutaten in den Topf geben | teilweise: jede Zutat einzeln, sie liegt sichtbar im Topf, der Topf kennt das Rezept; noch ungeschnitten |
+| 5 | Interaktives Schneidebrett | fertig: das Hackbrett auf der Arbeitsinsel; Gemüse mit F darauflegen, das Beil daneben mit F nehmen |
+| 6 | Gemüse schneiden | fertig: linke Maustaste startet, Maus seitwärts setzt das Messer, Maus nach unten schneidet; Karotte in Scheiben (5 Schnitte), Kartoffel in Würfel (3 + 3, wird gedreht), Zwiebel in Stücke (2 + 3); Schnittgeräusch; gleichmäßige Schnitte geben bessere Qualität |
+| 7 | Zutaten in den Topf geben | fertig: nur geschnittenes Gemüse, die Stücke liegen so im Topf, wie sie geschnitten wurden |
 | 8 | Brühe hinzufügen | fehlt |
 | 9 | Herdtemperatur einstellen | fehlt |
 | 10 | Umrühren und Garzeit überwachen | teilweise: fester Zeitablauf von 12 Sekunden, kein Rühren |
@@ -52,8 +52,8 @@ dem der Gastgeber die Aktionen prüft.
 ## Reihenfolge der nächsten Etappen
 
 1. **Kochen, Teil 1 – Zutaten und 20 Portionen.** Erledigt (20.11.2026).
-2. **Kochen, Teil 2 – Schneiden.** Gemüse aufs Schneidebrett legen, Messer nehmen, mit
-   der Mausbewegung schneiden; die Stücke kommen in den Topf und sind dort zu sehen.
+2. **Kochen, Teil 2 – Schneiden.** Erledigt (20.11.2026). Die Schnittqualität aller Zutaten
+   bestimmt die Qualität des Topfes und damit das Trinkgeld.
 3. **Kochen, Teil 3 – Brühe, Hitze, Rühren.** Brühe eingießen, Herdstufe wählen,
    umrühren; zu viel Hitze oder kein Rühren lässt den Eintopf anbrennen; daraus ergibt
    sich die Qualität.

@@ -194,7 +194,8 @@
     lookYaw = yaw || 0; lookPitch = pitch || 0;
   };
   window.__hotpotClock = { frozen: false, pending: 0, time: 0 };
-  window.__hotpotKeys = function(k, down){ if (k === 'jump') jumpRequested = true; else keys[k] = !!down; };   // for tests: hold a movement key, or jump
+  window.__hotpotKeys = function(k, down){ if (k === 'jump') jumpRequested = true; else keys[k] = !!down; };
+  window.__hotpotMouse = function(dx, dy){ return !!(restaurant && restaurant.mouse && restaurant.mouse(dx, dy)); };   // for tests: move the mouse   // for tests: hold a movement key, or jump
   window.__hotpotCam = function(){
     return { pos: camera.position.toArray().map(function(v){ return +v.toFixed(2); }), yaw: +lookYaw.toFixed(2), pitch: +lookPitch.toFixed(2),
              chef: model ? model.position.toArray().map(function(v){ return +v.toFixed(2); }) : null };
@@ -304,6 +305,7 @@
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));   // capped: big screens stay smooth
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.shadowMap.enabled = true;
+    renderer.localClippingEnabled = true;   // cut vegetables are drawn as clipped pieces (restaurant.js)
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     if (renderer.outputEncoding !== undefined) renderer.outputEncoding = THREE.sRGBEncoding;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;       // filmic contrast instead of flat clipped colours
@@ -342,6 +344,7 @@
     window.addEventListener('mouseup', function(){ dragging = false; });
     window.addEventListener('mousemove', function(e){
       if (document.pointerLockElement !== canvas && !dragging) return;
+      if (restaurant && restaurant.mouse && restaurant.mouse(e.movementX, e.movementY)) return;   // the mouse leads a tool
       lookYaw -= e.movementX * LOOK_SENSITIVITY;
       lookPitch -= e.movementY * LOOK_SENSITIVITY;
       lookPitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, lookPitch));
@@ -500,6 +503,9 @@
         restaurant = HotPotRestaurant.build({ scene: scene, camera: camera, gameplay: gameplay,
           getChef: function(){ return model; },
           getKitchen: function(){ return kitchen; }, BACKROOMS: BACKROOMS, addBox: addBox,
+          // where the player looks, and whether a movement key is held
+          look: { get: function(){ return { yaw: lookYaw, pitch: lookPitch }; }, set: function(yaw, pitch){ lookYaw = yaw; lookPitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, pitch)); } },
+          isMoving: function(){ return !!(keys.w || keys.a || keys.s || keys.d); },
           // the people sitting at the tables: who they are, their chair and table, their head
           getGuests: function(){
             return characters.filter(function(c){ return c.state === 'seated' && c.sit; }).map(function(c){
@@ -755,7 +761,8 @@
           // work surfaces things can be put down on, and where the clean bowls are stacked
           [iz, 4.2].forEach(function(sz){ kitchen.surfaces.push({ minX: ix - il.s.z / 2 + 0.12, maxX: ix + il.s.z / 2 - 0.12, minZ: sz - il.s.x / 2 + 0.12, maxZ: sz + il.s.x / 2 - 0.12, y: il.s.y }); });
           kitchen.bowlsAt = new THREE.Vector3(ix + 0.3, il.s.y, iz + 0.14);
-          if (bl){ var bz = iz - il.s.x * 0.2; bl.h.position.set(ix, surfaceY(il.h, ix, bz), bz); bl.h.rotation.y = 0.6; scene.add(bl.h); kitchen.taken.push({ x: ix, z: bz, r: 0.36 }); }
+          if (bl){ var bz = iz - il.s.x * 0.2; bl.h.position.set(ix, surfaceY(il.h, ix, bz), bz); bl.h.rotation.y = 0.6; scene.add(bl.h);
+            kitchen.board = { obj: bl.h, pos: new THREE.Vector3(ix, il.s.y, bz) }; }   // the chopping block: the cutting station (restaurant.js)
           if (cd){ var cz2 = iz + il.s.x * 0.27, cx2 = ix + 0.05; cd.h.position.set(cx2, surfaceY(il.h, cx2, cz2), cz2); cd.h.rotation.y = -Math.PI / 2; scene.add(cd.h); kitchen.taken.push({ x: cx2, z: cz2 - 0.2, r: 0.3 }, { x: cx2, z: cz2 + 0.2, r: 0.3 }); }
           // a second prep table further toward the +Z wall, with the stock pot set on it
           var i2 = copy(il), jz = 4.2;
