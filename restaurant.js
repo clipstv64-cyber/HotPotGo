@@ -39,6 +39,7 @@
     tip: 3,                   // the tip shrinks with the waiting time
     reach: 2.1,               // how close the chef has to be to a crate, the pot, the bowls
     cutReach: 1.75,           // ... to the chopping block to cut on it
+    shelfReach: 1.75,         // ... to the shelf with jug and shaker
     itemReach: 1.9,           // ... to something lying on a work surface
     serveReach: 2.7           // ... and to a guest's chair (far enough to serve across the table from the aisle)
   };
@@ -46,12 +47,12 @@
   // temperature goes. It cooks from `slow` (at half speed), properly from `simmer`. From
   // `catchAt` it catches on the bottom unless it is stirred, and then it burns.
   var COOK = {
-    heat: ['off', 'low', 'medium', 'high'],
-    target: [20, 84, 97, 122],                 // degrees the pot goes to at each heat
+    heat: ['off', 'on'],                       // the stove is simply on or off
+    target: [20, 97],                          // degrees the pot goes to
     warm: 0.16, cool: 0.08,                    // how fast (share of the difference per second)
     slow: 80, simmer: 90, hot: 108,
-    catchAt: 86, catchTime: [[86, 26], [97, 16], [122, 6]],   // seconds without stirring until it catches, by temperature
-    burnTime: 18,                              // seconds it may catch until it is burnt
+    catchAt: 86, catchTime: [[86, 34], [97, 24], [122, 6]],   // seconds without stirring until it catches, by temperature
+    burnTime: 22,                              // seconds it may catch until it is burnt
     dry: 1.5, thick: 1.4,                      // it catches this much faster without broth / with too little
     hotBurn: 45,                               // above `hot` it burns slowly anyway (seconds)
     stirTurn: 0.75,                            // one full turn of the ladle loosens this much of the catching
@@ -92,6 +93,7 @@
     board:  { file: 'models/d_board.glb', width: 0.62 },                // ... and the block without it
     broth:  { file: 'models/d_broth_jug.glb', height: 0.36 },
     spice:  { file: 'models/d_spice.glb', height: 0.2 },
+    shelf:  { file: 'models/d_wall_shelf.glb', width: 0.86 },             // on the wall beside the pot, for jug and shaker
     bowl:   { file: 'models/d_bowl_empty.glb', width: 0.4 },
     stew:   { file: 'models/d_stew_bowl.glb', width: 0.4 },
     crate:  { file: 'models/d_crate.glb', width: 0.66 },
@@ -271,8 +273,8 @@
           pot.stick = Math.max(0, pot.stick - arg / (Math.PI * 2) * COOK.stirTurn); return true;
         case 'open':       // the front door: open or close the restaurant (arg: true / false, else the other way round)
           state.open = typeof arg === 'boolean' ? arg : !state.open; return true;
-        case 'heat':       // the range: one step up, after 'high' it is off again (or arg = the level)
-          pot.heat = typeof arg === 'number' ? clamp(Math.round(arg), 0, 3) : (pot.heat + 1) % COOK.heat.length; return true;
+        case 'heat':       // the stove: on / off (or arg = 0 / 1)
+          pot.heat = typeof arg === 'number' ? clamp(Math.round(arg), 0, COOK.heat.length - 1) : (pot.heat + 1) % COOK.heat.length; return true;
         case 'dumpPot':    // throw away what burnt
           if (it || pot.phase !== 'burnt') return false;
           emptyPot(); return true;
@@ -632,58 +634,55 @@
       bowlIcon(g, 64, 72, 0.7);
       s.tex.needsUpdate = true;
     }
-    // The pot's panel: heat and temperature (with the range it cooks in), what is still
-    // missing or how far it has cooked, when to stir, how much it is seasoned, and the
-    // portions left when it is done.
-    function drawPanel(pn, pot, blink){
-      var need = missing().map(function(k){ return KINDS[k].many; });
-      if (pot.broth < COOK.brothOk[0] - 0.02) need.push('broth');
-      var warn = pot.stick >= 1 ? 2 : pot.stick >= 0.6 ? 1 : 0;
-      var key = [pot.phase, pot.heat, Math.round(pot.temp), Math.round(pot.cooked * 60), warn, warn === 2 && blink ? 1 : 0, pot.spice, pot.portions, need.join(), Math.round(pot.burn * 10)].join('|');
-      if (pn.drawn === key) return; pn.drawn = key;
-      var g = pn.g, W = 256, H = 168;
-      g.clearRect(0, 0, W, H);
-      g.fillStyle = 'rgba(255,252,244,.95)'; g.strokeStyle = 'rgba(40,28,20,.5)'; g.lineWidth = 3;
-      g.beginPath(); g.moveTo(16, 3); g.arcTo(W - 3, 3, W - 3, H - 3, 14); g.arcTo(W - 3, H - 3, 3, H - 3, 14); g.arcTo(3, H - 3, 3, 3, 14); g.arcTo(3, 3, W - 3, 3, 14); g.closePath(); g.fill(); g.stroke();
-      g.textBaseline = 'middle';
-      // heat and temperature
-      g.font = '700 21px system-ui,"Segoe UI",sans-serif'; g.fillStyle = '#3a2a20'; g.textAlign = 'left';
-      g.fillText('Heat: ' + COOK.heat[pot.heat], 16, 24);
-      g.textAlign = 'right'; g.fillText(Math.round(pot.temp) + '\u00b0', W - 16, 24);
-      // the thermometer: too cool, slow, simmering (good), too hot
-      var x0 = 16, x1 = W - 16, t0 = 20, t1 = 125, by = 42, bh = 13;
-      function tx(t){ return x0 + (x1 - x0) * clamp((t - t0) / (t1 - t0)); }
-      [[t0, COOK.slow, '#c3ccd2'], [COOK.slow, COOK.simmer, '#e6c34a'], [COOK.simmer, COOK.hot, '#62a646'], [COOK.hot, t1, '#cf4a32']].forEach(function(z){
-        g.fillStyle = z[2]; g.fillRect(tx(z[0]), by, tx(z[1]) - tx(z[0]), bh);
+    // The recipe: a sheet of paper on the wall behind the range. What is done is ticked off.
+    function drawRecipe(rc){
+      var pot = state.pot, okBroth = pot.broth >= COOK.brothOk[0] - 0.02, cooking = pot.phase === 'filling' && pot.cooked > 0;
+      var lines = [
+        ['1 potato, cut into cubes', pot.has.potato > 0],
+        ['1 carrot, cut into slices', pot.has.carrot > 0],
+        ['1 onion, chopped', pot.has.onion > 0],
+        ['Broth up to the line', okBroth],
+        ['3 shakes of seasoning' + (pot.spice > 0 && pot.spice !== COOK.spice ? '  (' + pot.spice + ')' : ''), pot.spice === COOK.spice, pot.spice > COOK.spice],
+        ['Stove on, stir now and then', cooking || pot.phase === 'ready']
+      ];
+      var done = pot.phase === 'ready' || pot.phase === 'burnt';
+      var key = lines.map(function(l){ return (l[1] ? 1 : 0) + (l[2] ? 'x' : '') + l[0].length; }).join('') + pot.phase;
+      if (rc.drawn === key) return; rc.drawn = key;
+      var g = rc.g, W = 512, H = 640;
+      g.fillStyle = '#f4ead2'; g.fillRect(0, 0, W, H);
+      g.fillStyle = 'rgba(120,90,40,.10)'; for (var i = 0; i < 40; i++) g.fillRect(Math.random() * W, Math.random() * H, 30 + Math.random() * 90, 1.5);   // a little worn
+      g.strokeStyle = 'rgba(90,60,30,.35)'; g.lineWidth = 6; g.strokeRect(3, 3, W - 6, H - 6);
+      g.fillStyle = '#9a2f22'; g.beginPath(); g.arc(W / 2, 30, 13, 0, Math.PI * 2); g.fill();   // the pin
+      g.fillStyle = '#3b2a1c'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.font = 'italic 700 50px Georgia,"Times New Roman",serif'; g.fillText('Vegetable stew', W / 2, 96);
+      g.font = 'italic 400 27px Georgia,"Times New Roman",serif'; g.fillStyle = '#6b513a'; g.fillText('one pot gives 20 portions', W / 2, 142);
+      g.strokeStyle = 'rgba(90,60,30,.4)'; g.lineWidth = 2; g.beginPath(); g.moveTo(60, 172); g.lineTo(W - 60, 172); g.stroke();
+      g.textAlign = 'left';
+      lines.forEach(function(l, n){
+        var y = 222 + n * 62;
+        g.strokeStyle = '#5a4230'; g.lineWidth = 3; g.strokeRect(44, y - 17, 34, 34);
+        if (l[1]){ g.strokeStyle = '#3f8a2c'; g.lineWidth = 7; g.lineCap = 'round'; g.beginPath(); g.moveTo(49, y); g.lineTo(60, y + 12); g.lineTo(84, y - 20); g.stroke(); }
+        g.font = '400 31px Georgia,"Times New Roman",serif'; g.fillStyle = l[2] ? '#b3321f' : l[1] ? '#7b6a58' : '#3b2a1c';
+        g.fillText(l[0], 98, y + 1);
       });
-      var mx = tx(pot.temp);
-      g.fillStyle = '#2a1d15'; g.beginPath(); g.moveTo(mx, by + bh + 2); g.lineTo(mx - 7, by + bh + 13); g.lineTo(mx + 7, by + bh + 13); g.closePath(); g.fill();
-      g.fillRect(mx - 1.5, by - 2, 3, bh + 4);
-      // what is going on
-      g.textAlign = 'left'; g.font = '600 18px system-ui,"Segoe UI",sans-serif'; g.fillStyle = '#3a2a20';
-      if (pot.phase === 'burnt'){ g.fillStyle = '#b3321f'; g.font = '800 24px system-ui,"Segoe UI",sans-serif'; g.fillText('BURNT', 16, 96); }
-      else if (pot.phase === 'ready'){ g.font = '800 23px system-ui,"Segoe UI",sans-serif'; g.fillStyle = '#3f7d2c'; g.fillText('READY  \u00d7' + pot.portions, 16, 96); }
-      else if (need.length){
-        g.fillText('Needs:', 16, 88); g.font = '500 16px system-ui,"Segoe UI",sans-serif';
-        g.fillText(need.join(', '), 16, 109);
-      } else {   // cooking: how far it is
-        g.fillText(pot.temp < COOK.slow ? 'Too cool to cook' : 'Cooking', 16, 86);
-        g.fillStyle = 'rgba(60,45,35,.16)'; g.fillRect(16, 100, W - 32, 12);
-        g.fillStyle = '#d9862a'; g.fillRect(16, 100, (W - 32) * clamp(pot.cooked), 12);
-      }
-      // seasoning: a dot per shake, the right amount marked
-      var sy = 142;
-      for (var i = 0; i < 6; i++){
-        g.beginPath(); g.arc(24 + i * 19, sy, 6, 0, Math.PI * 2);
-        g.fillStyle = i < pot.spice ? (pot.spice > COOK.spice + 1 ? '#cf4a32' : '#7a5a2a') : 'rgba(60,45,35,.14)'; g.fill();
-      }
-      g.strokeStyle = '#3f7d2c'; g.lineWidth = 2.5; g.beginPath(); g.arc(24 + (COOK.spice - 1) * 19, sy, 9.5, 0, Math.PI * 2); g.stroke();
-      // stir!
-      if (warn && pot.phase !== 'burnt' && !(warn === 2 && blink)){
-        g.textAlign = 'right'; g.font = '800 22px system-ui,"Segoe UI",sans-serif'; g.fillStyle = warn === 2 ? '#cf4a32' : '#d9862a';
-        g.fillText(pot.broth < 0.05 ? 'ADD BROTH!' : 'STIR!', W - 16, sy);
-      }
-      pn.tex.needsUpdate = true;
+      g.textAlign = 'center'; g.font = 'italic 700 31px Georgia,"Times New Roman",serif';
+      g.fillStyle = pot.phase === 'burnt' ? '#b3321f' : done ? '#3f8a2c' : '#6b513a';
+      g.fillText(pot.phase === 'burnt' ? 'Burnt! Throw it away.' : done ? 'Ready: ladle it into bowls.' : 'It is ready when it is thick.', W / 2, 600);
+      rc.tex.needsUpdate = true;
+    }
+    // how the pot is doing, in a few words (shown when he stands at it with free hands)
+    function potStatus(){
+      var pot = state.pot, chef = ctx.getChef(), P = place.pot;
+      if (!chef || !P || Math.hypot(chef.position.x - P.pos.x, chef.position.z - P.pos.z) > 2.6) return '';
+      var veg = VEG.some(function(k){ return pot.has[k] > 0; });
+      if (pot.phase === 'burnt') return 'The stew is burnt';
+      if (pot.stick >= 0.6 && veg) return pot.broth < 0.05 ? 'It is catching \u2013 add broth!' : 'It is catching \u2013 stir!';
+      if (pot.phase === 'ready') return 'The stew is ready \u2013 ' + pot.portions + (pot.portions === 1 ? ' portion' : ' portions') + ' left' + (pot.heat ? '   \u00b7   turn the stove off' : '');
+      if (pot.phase !== 'filling') return '';
+      if (missing().length || pot.broth < COOK.brothOk[0] - 0.02) return '';   // the recipe on the wall says what is missing
+      if (!pot.heat) return 'Everything is in \u2013 turn the stove on';
+      if (pot.temp < COOK.slow) return 'Heating up\u2026';
+      return 'Cooking\u2026 ' + Math.round(pot.cooked * 100) + '%';
     }
     // "+€11" floating up from a table
     var pops = [];
@@ -709,13 +708,6 @@
       var p = new T.Sprite(new T.SpriteMaterial({ map: puffTex, transparent: true, depthWrite: false, opacity: 0 }));
       p.visible = false; root.add(p); puffs.push({ sp: p, t: i / 8, dx: rnd(-1, 1), dz: rnd(-1, 1) });
     }
-    var panel = (function(){
-      var cv = document.createElement('canvas'); cv.width = 256; cv.height = 168;
-      var tex = new T.CanvasTexture(cv); tex.encoding = T.sRGBEncoding;
-      var sp = new T.Sprite(new T.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
-      sp.scale.set(0.58, 0.38, 1); sp.visible = false; sp.renderOrder = 6; root.add(sp);
-      return { sp: sp, g: cv.getContext('2d'), tex: tex, drawn: '' };
-    })();
     // flames under the pot
     var flameTex = (function(){
       var cv = document.createElement('canvas'); cv.width = 32; cv.height = 64;
@@ -745,7 +737,7 @@
 
     // ---------- the places: crates in the storeroom, pot on the range, bowls on the island ------
     // built once the models and the kitchen are there
-    var place = { pot: null, crates: {}, stacks: null, board: null, knifeHome: null };
+    var place = { pot: null, crates: {}, stacks: null, board: null, knifeHome: null, recipe: null };
     var knifeHold = null, toolHold = {};   // how the tools are held (see gameplay.js: a tool)
     var STEW_COL = new T.Color(0x9a938c), BURNT_COL = new T.Color(0x1d1612);
     var CRATE_GRID = [[-0.19, -0.075], [0, -0.075], [0.19, -0.075], [-0.19, 0.085], [0, 0.085], [0.19, 0.085]];
@@ -758,11 +750,21 @@
       var bo = instance('board'); bo.position.copy(k.board.pos); bo.rotation.y = 0.6; root.add(bo);
       place.board = { obj: bo, r: MODELS.board.size.x / 2, pos: V(k.board.pos.x, k.board.pos.y + MODELS.board.size.y, k.board.pos.z) };
       place.knifeHome = V(k.board.pos.x, k.board.pos.y, k.board.pos.z - place.board.r - 0.17);
-      // where the tools lie: the knife beside the block, jug and shaker on the range beside the pot
+      // the wall behind the range (x = WALL): a shelf to the right of the pot for jug and
+      // shaker, and the recipe above the pot
+      var WALL = 9.97, SHELF_Y = 1.6, ss = MODELS.shelf.size, shelfX = WALL - ss.z / 2, shelfZ = k.potAt.z + 0.93;
+      var sh = instance('shelf'); sh.position.set(shelfX, SHELF_Y - ss.y, shelfZ); sh.rotation.y = -Math.PI / 2; root.add(sh);
+      var rcv = document.createElement('canvas'); rcv.width = 512; rcv.height = 640;
+      var rtex = new T.CanvasTexture(rcv); rtex.encoding = T.sRGBEncoding; rtex.anisotropy = 4;
+      var sheet = new T.Mesh(new T.PlaneGeometry(0.52, 0.65), new T.MeshStandardMaterial({ map: rtex, roughness: 1, metalness: 0 }));
+      sheet.position.set(WALL - 0.012, 1.95, k.potAt.z - 0.54);   // at eye level, left of the ladle's handle
+      sheet.rotation.set(0, -Math.PI / 2, 0.02); sheet.receiveShadow = true; root.add(sheet);
+      place.recipe = { mesh: sheet, g: rcv.getContext('2d'), tex: rtex, drawn: '' };
+      // where the tools lie: the knife beside the block, jug and shaker on that shelf
       var jt = MODELS.broth.tool;
       place.home = { knife: { pos: place.knifeHome, rot: 0.25 },
-                     broth: { pos: V(k.potAt.x - 0.03, k.potAt.y, k.potAt.z + 0.8), rot: Math.atan2(jt.up.z, jt.up.x) },   // its handle toward the aisle
-                     spice: { pos: V(k.potAt.x - 0.3, k.potAt.y, k.potAt.z + 0.53), rot: 0.4 } };
+                     broth: { pos: V(shelfX, SHELF_Y, shelfZ - 0.17), rot: Math.atan2(jt.up.z, jt.up.x) },   // its handle toward the aisle
+                     spice: { pos: V(shelfX, SHELF_Y, shelfZ + 0.24), rot: 0.4 } };
       function holdOf(kind, pose, more){
         var t = MODELS[kind].tool, o = { tool: true, grip: t.grip, dir: t.dir, up: t.up, lean: 0.3, pose: pose };
         Object.keys(more || {}).forEach(function(key){ o[key] = more[key]; });
@@ -1126,8 +1128,8 @@
       ['broth', 'spice'].forEach(function(kind){
         var o = state.items[state.tools[kind]], at = place.home[kind].pos;
         var more = kind === 'broth' && o.left < COOK.jug - 0.05 && state.broth > 0.01;
-        if (it === o) add({ pos: at, reach: RULES.reach, key: 'F', label: 'Put ' + KINDS[kind].the + ' back' + (more ? ' and fill it up' : ''), use: function(){ act('putHome'); } });
-        else if (free && o.at === 'home') add({ pos: at, reach: RULES.reach, key: 'F', label: 'Take ' + KINDS[kind].the, use: function(){ act('pickUp', o.id); }, obj: see(o) });
+        if (it === o) add({ pos: at, reach: RULES.shelfReach, key: 'F', label: 'Put ' + KINDS[kind].the + ' back' + (more ? ' and fill it up' : ''), use: function(){ act('putHome'); } });
+        else if (free && o.at === 'home') add({ pos: at, reach: RULES.shelfReach, key: 'F', label: 'Take ' + KINDS[kind].the, use: function(){ act('pickUp', o.id); }, obj: see(o) });
       });
       if (it && !HOME[it.kind] && aim && !scoop){
         if (aim.free) add({ pos: V(aim.x, 0, aim.z), reach: 2.4, key: 'F', bias: 0.35, label: 'Put ' + nameOf(it, 'the') + ' down', use: function(){ if (aim && aim.free) act('putDown', aim); } });
@@ -1167,7 +1169,7 @@
       if (pe) add(pe);
       // the heat (with free hands, or with jug or shaker in hand)
       if (!burnt && !scoop && (free || (it && (it.kind === 'broth' || it.kind === 'spice')))){
-        add({ pos: place.pot.knob, reach: RULES.reach, key: 'E', label: 'Heat: ' + COOK.heat[pot.heat] + ' \u2192 ' + COOK.heat[(pot.heat + 1) % COOK.heat.length], use: function(){ act('heat'); } });
+        add({ pos: place.pot.knob, reach: RULES.reach, key: 'E', label: pot.heat ? 'Turn the stove off' : 'Turn the stove on', use: function(){ act('heat'); } });
       }
       // the front door: opening and closing the restaurant
       add({ pos: DOOR, reach: 2.4, key: 'E', label: state.open ? 'Close the restaurant' : 'Open the restaurant', use: function(){ act('open'); } });
@@ -1232,6 +1234,7 @@
       } else if (pouring) label = 'Pull the mouse down to tip the jug, push it up to stop   \u00b7   broth: ' + Math.round(state.pot.broth * 100) + '% of what is needed';
       else if (stirring) label = 'Move the mouse in circles to stir';
       else if (note.t > 0) label = note.text;
+      else if (!it) label = potStatus();
       if (carryEl.textContent !== label){ carryEl.textContent = label; carryEl.classList.toggle('on', !!label); }
     }
 
@@ -1353,7 +1356,7 @@
       }
       sk.mesh.visible = wet && pot.spice > 0; sk.mesh.position.y = P.level + 0.004;
       P.flames.forEach(function(fl, i){
-        var size = [0, 0.07, 0.11, 0.17][pot.heat] * (0.85 + 0.25 * Math.sin(clock * 17 + i * 2.1));
+        var size = [0, 0.11][pot.heat] * (0.85 + 0.25 * Math.sin(clock * 17 + i * 2.1));
         fl.visible = pot.heat > 0; fl.scale.set(size * 0.55, size, 1); fl.position.y = size * 0.42 - 0.01;
       });
       // the broth running from the jug
@@ -1377,13 +1380,8 @@
         L.position.lerp(lift, a).lerp(over, b).lerp(V(R.x, R.y, R.z), d);
         L.rotation.z = -R.tilt * (1 - a) - 1.25 * c * (1 - d) - R.tilt * d;
       }
-      var top = P.pos.y + P.size.y, chef = ctx.getChef();
-      panel.sp.visible = (pot.phase !== 'empty' || pot.heat > 0) && !!chef && Math.hypot(chef.position.x - P.pos.x, chef.position.z - P.pos.z) < 5;
-      if (panel.sp.visible){   // behind the pot as he sees it, just above its rim
-        drawPanel(panel, pot, Math.sin(clock * 9) > 0);
-        var away = V(P.pos.x - chef.position.x, 0, P.pos.z - chef.position.z).normalize();
-        panel.sp.position.set(P.pos.x + away.x * P.inner * 1.3, top + 0.15, P.pos.z + away.z * P.inner * 1.3);
-      }
+      var top = P.pos.y + P.size.y;
+      if (place.recipe) drawRecipe(place.recipe);
       var smoke = burnt || pot.stick >= 1, strength = burnt ? 0.8 : wet ? clamp((pot.temp - 62) / 35) * (ready ? 0.7 : 1) : 0;
       puffs.forEach(function(pf){
         pf.t += dt * 0.55; if (pf.t >= 1){ pf.t -= 1; pf.dx = rnd(-1, 1); pf.dz = rnd(-1, 1); }

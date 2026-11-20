@@ -29,7 +29,7 @@ Rest dran kommt. Er wird nach jeder Etappe aktualisiert.
 | 6 | Gemüse schneiden | fertig: linke Maustaste startet, Maus seitwärts setzt das Messer, Maus nach unten schneidet; Karotte in Scheiben (5 Schnitte), Kartoffel in Würfel (3 + 3, wird gedreht), Zwiebel in Stücke (2 + 3); Schnittgeräusch; gleichmäßige Schnitte geben bessere Qualität |
 | 7 | Zutaten in den Topf geben | fertig: nur geschnittenes Gemüse, die Stücke liegen so im Topf, wie sie geschnitten wurden |
 | 8 | Brühe hinzufügen | fertig: Krug vom Herd nehmen (F), linke Maustaste, Maus nach unten kippt den Krug; im Topf zeigt eine Linie die nötige Menge; zu wenig Brühe lässt es schneller ansetzen, zu viel macht es wässrig |
-| 9 | Herdtemperatur einstellen | fertig: E am Herd schaltet aus, niedrig, mittel, hoch; die Temperatur steigt und fällt; niedrig kocht langsam und sicher, hoch schnell mit Anbrenngefahr; Flammen und Anzeige am Topf |
+| 9 | Herdtemperatur einstellen | vereinfacht auf Wunsch: E am Herd schaltet an und aus; ohne Rühren setzt es an |
 | 10 | Umrühren und Garzeit überwachen | fertig: linke Maustaste am Topf, Maus im Kreis führt die Kelle; ohne Rühren setzt der Eintopf an und brennt dann an; 40 Sekunden Köcheln; Würzen mit dem Streuer (3 Stöße sind richtig) |
 | 11 | Fertiger Eintopf mit genau 20 Portionen | fertig: genau 20 Portionen (getestet), Füllstand sinkt sichtbar; angebrannter Eintopf muss weggeworfen werden; Qualität aus Schnitt, Brühe, Würze und Anbrennen bestimmt das Trinkgeld |
 | 12 | Schüssel nehmen und Portion einfüllen | fertig: leere Schüssel vom Stapel, Schöpfkelle füllt eine Portion ein; Schüsseln kommen nach dem Essen von selbst zurück (Spülen folgt später) |
@@ -72,6 +72,10 @@ und Möbel kaufen, Bewertungen, weitere Gerichte), dann Mehrspieler und Mitarbei
   mit dem Werkzeug. Anvisierte Gegenstände bekommen eine dünne Umrandung.
 - **Zutaten liegen in der Küche** (Vorratsecke neben dem Herd). Das Konzept erlaubt
   Kühlschrank oder Lager; das Lager wird mit den Lieferungen in Phase 2 gebraucht.
+- **Kochen einfacher als im Konzept** (Wunsch vom 20.11.2026): Der Herd kennt nur an und
+  aus, es gibt keine Anzeige über dem Topf. Das Rezept hängt als Zettel an der Wand hinter
+  dem Herd und hakt ab, was erledigt ist; eine Textzeile sagt, wie es dem Topf geht.
+  Krug und Gewürzstreuer stehen auf einem Wandbrett rechts neben dem Topf.
 - **Technik bleibt, wie sie ist.** Das Spiel läuft als Desktop-Programm auf Three.js und
   Electron. Ein Wechsel der Technik würde alles Bisherige wegwerfen.
 - **Reihenfolge wie im Konzept:** Mitarbeiter, freies Möbelstellen, neue Räume und
