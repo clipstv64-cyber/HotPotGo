@@ -22,6 +22,7 @@
       "index.html",
       "decor.js",
       "gameplay.js",
+      "restaurant.js",
       "models/**/*",
       "textures/**/*",
       "vendor/**/*"

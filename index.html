@@ -17,6 +17,7 @@
 <script src="vendor/three/meshopt_decoder.js"></script>
 <script src="decor.js"></script>
 <script src="gameplay.js"></script>
+<script src="restaurant.js"></script>
 <script>
 (function(){
   "use strict";
@@ -185,6 +186,8 @@
   var scene, camera, renderer, clock;
   var decor = null;          // furnishing of the guest room (decor.js)
   var gameplay = null;       // stains, broom and interaction hints (gameplay.js)
+  var restaurant = null;     // guests' orders, cooking, serving, money (restaurant.js)
+  var kitchen = {};          // things in the kitchen the game rules use: { pot, vegShelf }
   // for tests: put the chef somewhere and make him look in a direction
   window.__hotpotView = function(x, z, yaw, pitch){
     if (model){ model.position.x = x; model.position.z = z; }
@@ -289,6 +292,7 @@
   function init(){
     clock = new THREE.Clock();
     scene = new THREE.Scene();
+    window.__hotpotScene = scene;   // for tests
     scene.background = new THREE.Color(0xbfe3ff);
     scene.fog = new THREE.Fog(0xbfe3ff, 20, 60);
 
@@ -490,6 +494,21 @@
         window.__hotpotGameplay = gameplay;   // for tests
       } catch (e){ console.error('Setting up the gameplay failed:', e); }
     }
+    if (window.HotPotRestaurant && gameplay){
+      try {
+        restaurant = HotPotRestaurant.build({ scene: scene, camera: camera, gameplay: gameplay,
+          getChef: function(){ return model; },
+          getKitchen: function(){ return kitchen; },
+          // the people sitting at the tables: who they are, their chair and table, their head
+          getGuests: function(){
+            return characters.filter(function(c){ return c.state === 'seated' && c.sit; }).map(function(c){
+              if (!c.guestInfo) c.guestInfo = { id: c.cfg.name, group: c.group, spot: c.sit.spot, head: findBone(c.obj, c.cfg.prefix, 'Head') };
+              return c.guestInfo;
+            });
+          } });
+        window.__hotpotRestaurant = restaurant;   // for tests
+      } catch (e){ console.error('Setting up the restaurant failed:', e); }
+    }
 
     // restaurant seating on one side of the room: tables with 4 chairs each
     // (from the Meshy table/chair models, simplified and scaled to real size)
@@ -580,12 +599,25 @@
         done(holder, size.clone().multiplyScalar(k));
       }).catch(function(err){ console.error('Could not load ' + name + ':', err); fail(); });
     }
-    var surfaceRay = new THREE.Raycaster();
+    // Height of the top surface of an object at (x, z): the highest vertex close to that
+    // spot. (Ray casting cannot be used: the packed models store their vertices as whole
+    // numbers, which three.js r128 does not convert when it tests triangles.)
     function surfaceY(obj, x, z){
       obj.updateMatrixWorld(true);
-      surfaceRay.set(new THREE.Vector3(x, 20, z), new THREE.Vector3(0, -1, 0));
-      var hit = surfaceRay.intersectObject(obj, true)[0];
-      return hit ? hit.point.y : 0;
+      var v = new THREE.Vector3(), top = { near: -Infinity, wide: -Infinity, all: -Infinity };
+      obj.traverse(function(o){
+        if (!o.isMesh || o.userData.shadowProxy) return;
+        var pos = o.geometry.attributes.position, a = pos.array;
+        var k = !pos.normalized ? 1 : 1 / (a instanceof Int16Array ? 32767 : a instanceof Uint16Array ? 65535 : a instanceof Int8Array ? 127 : a instanceof Uint8Array ? 255 : 1);
+        for (var i = 0; i < pos.count; i++){
+          v.fromBufferAttribute(pos, i).multiplyScalar(k).applyMatrix4(o.matrixWorld);
+          var d = Math.max(Math.abs(v.x - x), Math.abs(v.z - z));
+          if (d < 0.12 && v.y > top.near) top.near = v.y;
+          if (d < 0.35 && v.y > top.wide) top.wide = v.y;
+          if (v.y > top.all) top.all = v.y;
+        }
+      });
+      return top.near > -Infinity ? top.near : top.wide > -Infinity ? top.wide : top.all > -Infinity ? top.all : 0;
     }
     // doors that can open later in the game: each door hangs in a pivot at
     // its hinge; kitchenDoors[name].set(0..1) swings it shut .. open
@@ -738,6 +770,9 @@
             pl.position.set(7.0, KBEAM_Y - ln.s.y * 0.55, lz); scene.add(pl);
           });
         }
+        // what the game rules need: the stock pot on the range and the vegetable shelf
+        kitchen.pot = rg && sp ? sp.h : null; kitchen.potSize = sp ? sp.s : null;
+        kitchen.vegShelf = sv ? sv.h : null;
         window.__KITCHEN8 = true;   // everything placed (used by the test renders)
       });
     }
@@ -2549,6 +2584,7 @@
     if (window.kitchenDoors && kitchenDoors.kitchenDoor && kitchenDoors.kitchenDoor.tick) kitchenDoors.kitchenDoor.tick(delta);
     if (decor) decor.update(delta, clock.elapsedTime);
     if (gameplay) gameplay.update(delta, clock.elapsedTime);
+    if (restaurant) restaurant.update(delta);
 
     if (model){
       // desired direction from the keys, relative to where the camera looks

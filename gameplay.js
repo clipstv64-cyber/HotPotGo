@@ -588,11 +588,15 @@
       hold.k = k;
       var want = broomAt === 'hand' || broomAt === 'taking' || (broomAt === 'storing' && move.t < 0.6);
       hold.arms = clamp(hold.arms + (want ? 5 : -3.5) * dt);
-      var closed = broomAt === 'hand' || (inHands && k > 0.8) ? 1 : 0;
+      var closed = broomAt === 'hand' || (inHands && k > 0.8) ? 1 : carry && !inHands ? 0.25 : 0;
       closeFingers(b.lGrip, closed, dt); closeFingers(b.rGrip, closed, dt);
       var th = chef.rotation.y;
       hold.headShift.set(0, 0, 0);
-      if (hold.arms <= 0 && !inHands){ hold.prev = null; hold.yaw = th; hold.err = 0; if (b.lGrip) b.lGrip.way = 0; if (b.rGrip) b.rGrip.way = 0; return; }
+      if (hold.arms <= 0 && !inHands){
+        hold.prev = null; hold.yaw = th; hold.err = 0; if (b.lGrip) b.lGrip.way = 0; if (b.rGrip) b.rGrip.way = 0;
+        poseCarry(b, chef, dt, th);   // no broom: maybe something else in both hands
+        return;
+      }
       chef.updateMatrixWorld(true);
 
       // how he is moving: lifted while walking, turning or jumping
@@ -715,6 +719,55 @@
       if (head0) hold.headShift.copy(wpos(b.neck)).sub(head0);
     }
 
+    // ---------- carrying something with both hands (a bowl, a basket) ------------------
+    // Other parts of the game hand over an object with setCarry(); it is held in front of
+    // the chest, a hand on either side. opts: half (half its width, where the hands are),
+    // fwd / drop (its place from the middle between the shoulders), grip (hands' height
+    // above its origin), back (hands this far behind its middle).
+    var carry = null, carryW = 0, carryOpts = { half: 0.17, fwd: 0.42, drop: -0.16, grip: 0.04, back: 0 };
+    function setCarry(obj, opts){
+      if (carry) root.remove(carry.obj);
+      carry = obj ? { obj: obj } : null;
+      if (obj){ carryOpts = opts || carryOpts; obj.visible = false; root.add(obj); }
+    }
+    function handsFree(){ return !carry && hold.arms <= 0 && (broomAt === 'closet' || broomAt === 'floor'); }
+    function poseCarry(b, chef, dt, th){
+      carryW = clamp(carryW + (carry ? 5 : -4) * dt);
+      if (carryW <= 0) return;
+      chef.updateMatrixWorld(true);
+      var o = carryOpts, f = V(Math.sin(th), 0, Math.cos(th)), r = V(-Math.cos(th), 0, Math.sin(th));
+      // a little forward lean and the shoulders pushed forward, so the short arms get there
+      var headQ = b.neck ? wquat(b.neck) : null, head0 = b.neck ? wpos(b.neck) : null;
+      [b.spine02, b.spine01].forEach(function(sp){ if (sp) turn(sp, r, -0.07); });
+      if (b.lS) turn(b.lS, UP, -0.3);
+      if (b.rS) turn(b.rS, UP, 0.3);
+      if (headQ) setWorldQuat(b.neck, headQ);
+      var M = wpos(b.lA).add(wpos(b.rA)).multiplyScalar(0.5);
+      var c = M.clone().addScaledVector(f, o.fwd).addScaledVector(UP, o.drop);
+      [[b.lA, b.lF, b.lH, b.lGrip, -1], [b.rA, b.rF, b.rH, b.rGrip, 1]].forEach(function(a){
+        var side = a[4], g = a[3];
+        var palm = c.clone().addScaledVector(r, side * o.half).addScaledVector(UP, o.grip || 0).addScaledVector(f, -(o.back || 0));
+        var fingers = f.clone().addScaledVector(r, -side * 0.3).normalize();   // pointing forward and a little inward
+        reach(a[0], a[1], a[2], palm.clone().addScaledVector(fingers, -0.09), r.clone().multiplyScalar(side * 0.8).addScaledVector(UP, -0.6), 0);
+        if (!g) return;
+        // palms toward the thing and a little upward, as if cradling it
+        var p = r.clone().multiplyScalar(-side).addScaledVector(UP, 0.45);
+        p.addScaledVector(fingers, -p.dot(fingers)).normalize();
+        basisA.makeBasis(fingers, p, V().crossVectors(fingers, p));
+        basisB.makeBasis(g.finger, g.palm, g.knuckles);
+        setWorldQuat(a[2], new T.Quaternion().setFromRotationMatrix(basisA.multiply(basisB.transpose())));
+        twistForearm(a[1], g);
+      });
+      if (carry){ carry.obj.visible = true; carry.obj.position.copy(c); carry.obj.rotation.set(0, th + (o.yaw || 0), 0); }
+      var w = smooth(carryW);
+      b.rig.forEach(function(e){
+        if (w < 1) e.bone.quaternion.copy(e.anim.clone().slerp(e.bone.quaternion, w));
+        e.set.copy(e.bone.quaternion); e.own = true;
+      });
+      chef.updateMatrixWorld(true);
+      if (head0) hold.headShift.copy(wpos(b.neck)).sub(head0);
+    }
+
     // ---------- stains -----------------------------------------------------------
     var stainTex = new T.TextureLoader().load('textures/stains.png');
     stainTex.encoding = T.sRGBEncoding;
@@ -810,20 +863,27 @@
     }
 
     // ---------- things you can use with E ---------------------------------------------
+    // An entry: { pos, reach, label, use }. Without `use` it is only a note shown in passing
+    // (like "Hands full"). Other parts of the game add their own with addInteractables(fn);
+    // fn gets { handsFree } and returns such entries.
+    var moreInteractables = [];
     function interactables(){
-      var list = [];
-      if (broomAt === 'closet') list.push({ pos: broomSpot, reach: USE_REACH, label: 'Pick up broom', use: takeBroom });
+      var list = [], full = { reach: USE_REACH, label: 'Hands full' };
+      if (broomAt === 'closet') list.push(carry ? { pos: broomSpot, reach: full.reach, label: full.label } : { pos: broomSpot, reach: USE_REACH, label: 'Pick up broom', use: takeBroom });
       if (broomAt === 'hand') list.push({ pos: broomSpot, reach: USE_REACH, label: 'Put the broom back', use: storeBroom });
       if (broomAt === 'floor'){   // any part of it within reach will do
         var chef = ctx.getChef(), a = held.position, d = V(0, 1, 0).applyQuaternion(held.quaternion);
         var t = clamp((chef.position.x - a.x) * d.x + (chef.position.z - a.z) * d.z, 0, BROOM_LEN);
-        list.push({ pos: V(a.x + d.x * t, 0, a.z + d.z * t), reach: FLOOR_REACH, label: 'Pick up broom', use: takeBroom });
+        var at = V(a.x + d.x * t, 0, a.z + d.z * t);
+        list.push(carry ? { pos: at, reach: FLOOR_REACH, label: full.label } : { pos: at, reach: FLOOR_REACH, label: 'Pick up broom', use: takeBroom });
       }
       var door = ctx.getDoor && ctx.getDoor();
       if (door && door.center){
         list.push({ pos: door.center, reach: 2.2, label: door.target > 0.5 ? 'Close door' : 'Open door',
                     use: function(){ door.target = door.target > 0.5 ? 0 : 1; } });
       }
+      var info = { handsFree: handsFree() };
+      moreInteractables.forEach(function(fn){ (fn(info) || []).forEach(function(it){ list.push(it); }); });
       return list;
     }
     var focused = null;
@@ -836,14 +896,16 @@
         var dx = it.pos.x - chef.position.x, dz = it.pos.z - chef.position.z, d = Math.hypot(dx, dz);
         if (d > it.reach) return;
         var facing = d < 0.8 || (dx * fx + dz * fz) / d > 0.35;
-        if (facing && d < bestD){ best = it; bestD = d; }
+        if (!facing) return;
+        var rank = d + (it.use ? 0 : 100);   // something to do comes before a mere note
+        if (rank < bestD){ best = it; bestD = rank; }
       });
       return best;
     }
     function interact(){
       if (sweep || move || broomAt === 'falling') return;
       var it = findFocus();
-      if (it) it.use();
+      if (it){ if (it.use) it.use(); }
       else if (holding) dropBroom();   // drop it right here
     }
 
@@ -877,7 +939,8 @@
       var locked = document.pointerLockElement === canvas;
       dot.classList.toggle('on', holding && locked);
       dot.classList.toggle('hit', !!(holding && aimed && !tooClose));
-      if (focused) setHint(keyHint('E', focused.label));
+      if (focused && focused.use) setHint(keyHint('E', focused.label));
+      else if (focused) setHint('<span>' + focused.label + '</span>', true);
       else if (aimed && holding && tooClose) setHint('<span>Step back a little</span>', true);
       else if (aimed && holding) setHint(MOUSE_SVG + '<span>Sweep</span>');
       else if (aimed && !move) setHint('<span>Get ' + (broomAt === 'closet' ? 'a broom from the cleaning closet' : 'the broom') + '</span>', true);
@@ -891,6 +954,9 @@
     return {
       interact: interact, update: update, afterAnimation: afterAnimation,
       isHolding: function(){ return holding; },
+      // for the other parts of the game (restaurant.js)
+      addInteractables: function(fn){ moreInteractables.push(fn); },
+      setCarry: setCarry, handsFree: handsFree,
       headShift: function(){ return hold.headShift; },   // world vector, for the camera stainCount: function(){ return stains.length; },
       // ---- for tests only ----
       // the broom straight into the hands / dropped / taken / put back from anywhere

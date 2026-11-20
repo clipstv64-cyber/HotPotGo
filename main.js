@@ -5,6 +5,11 @@ const { pathToFileURL } = require('url');
 
 // On PCs with two graphics cards (e.g. Intel + NVIDIA) use the powerful one
 app.commandLine.appendSwitch('force_high_performance_gpu');
+// Self-test: keep drawing frames even when the window is covered or the screen is off
+if (process.env.HOTPOT_SELFTEST) {
+  ['disable-renderer-backgrounding', 'disable-background-timer-throttling', 'disable-backgrounding-occluded-windows']
+    .forEach((sw) => app.commandLine.appendSwitch(sw));
+}
 
 // Own app:// protocol so the game can load its files (models/, textures/)
 // with fetch(), which does not work with file://.
