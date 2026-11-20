@@ -62,6 +62,7 @@
       '.hp-key{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 5px;border-radius:5px;' +
       'border:1px solid rgba(255,255,255,.55);font:600 12px/1 system-ui,"Segoe UI",sans-serif;box-sizing:border-box}' +
       '.hp-mouse{width:14px;height:20px;display:inline-block}' +
+      '.hp-sep{width:1px;height:16px;background:rgba(255,255,255,.28);margin:0 4px}' +
       '.hp-dot{position:fixed;left:50%;top:50%;width:4px;height:4px;margin:-2px 0 0 -2px;border-radius:50%;background:rgba(255,255,255,.55);' +
       'box-shadow:0 0 2px rgba(0,0,0,.6);opacity:0;transition:opacity .15s;pointer-events:none}' +
       '.hp-dot.on{opacity:1}.hp-dot.hit{background:rgba(255,255,255,.9);width:6px;height:6px;margin:-3px 0 0 -3px}';
@@ -834,7 +835,7 @@
       if (s && stainDist(s) >= STAIN.near) startSweep(s);
     }
     window.addEventListener('mousedown', function(e){
-      if (e.button === 0 && document.pointerLockElement === canvas) trySweep();
+      if (e.button === 0 && document.pointerLockElement === canvas) click();
     });
     // The bristles move onto the stain, go back and forth over it (pressed down one
     // way, a little lifted on the way back), the upper body turning along; the stain
@@ -863,19 +864,26 @@
     }
 
     // ---------- things you can use with E ---------------------------------------------
-    // An entry: { pos, reach, label, use }. Without `use` it is only a note shown in passing
-    // (like "Hands full"). Other parts of the game add their own with addInteractables(fn);
-    // fn gets { handsFree } and returns such entries.
+    // An entry: { pos, reach, label, use, key, obj, bias }.
+    //   key   'F' picks something up or puts it down, 'E' uses something, 'LMB' works with
+    //         a tool (as in the game's concept); 'E' if not given
+    //   use   what happens; without it the entry is only a note shown in passing ("Hands full")
+    //   obj   the thing itself: it gets a thin outline while it can be used
+    //   bias  makes it lose against other things nearby (in metres)
+    // Other parts of the game add their own with addInteractables(fn); fn gets { handsFree }
+    // and returns such entries.
     var moreInteractables = [];
     function interactables(){
-      var list = [], full = { reach: USE_REACH, label: 'Hands full' };
-      if (broomAt === 'closet') list.push(carry ? { pos: broomSpot, reach: full.reach, label: full.label } : { pos: broomSpot, reach: USE_REACH, label: 'Pick up broom', use: takeBroom });
-      if (broomAt === 'hand') list.push({ pos: broomSpot, reach: USE_REACH, label: 'Put the broom back', use: storeBroom });
+      var list = [], full = { reach: USE_REACH, label: 'Hands full', key: 'F' };
+      if (broomAt === 'closet') list.push(carry ? { pos: broomSpot, reach: full.reach, label: full.label, key: 'F' }
+                                               : { pos: broomSpot, reach: USE_REACH, label: 'Pick up broom', use: takeBroom, key: 'F', obj: standing });
+      if (broomAt === 'hand') list.push({ pos: broomSpot, reach: USE_REACH, label: 'Put the broom back', use: storeBroom, key: 'F' });
       if (broomAt === 'floor'){   // any part of it within reach will do
         var chef = ctx.getChef(), a = held.position, d = V(0, 1, 0).applyQuaternion(held.quaternion);
         var t = clamp((chef.position.x - a.x) * d.x + (chef.position.z - a.z) * d.z, 0, BROOM_LEN);
         var at = V(a.x + d.x * t, 0, a.z + d.z * t);
-        list.push(carry ? { pos: at, reach: FLOOR_REACH, label: full.label } : { pos: at, reach: FLOOR_REACH, label: 'Pick up broom', use: takeBroom });
+        list.push(carry ? { pos: at, reach: FLOOR_REACH, label: full.label, key: 'F' }
+                        : { pos: at, reach: FLOOR_REACH, label: 'Pick up broom', use: takeBroom, key: 'F', obj: held });
       }
       var door = ctx.getDoor && ctx.getDoor();
       if (door && door.center){
@@ -886,27 +894,72 @@
       moreInteractables.forEach(function(fn){ (fn(info) || []).forEach(function(it){ list.push(it); }); });
       return list;
     }
-    var focused = null;
+    // what each key would act on right now: the nearest thing in front of him
+    var focus = { E: null, F: null, LMB: null };
     function findFocus(){
-      var chef = ctx.getChef();
-      if (!chef) return null;
+      var chef = ctx.getChef(), out = { E: null, F: null, LMB: null }, rank = { E: 1e9, F: 1e9, LMB: 1e9 };
+      if (!chef) return out;
       var fx = Math.sin(chef.rotation.y), fz = Math.cos(chef.rotation.y);   // he faces where you look
-      var best = null, bestD = 1e9;
       interactables().forEach(function(it){
         var dx = it.pos.x - chef.position.x, dz = it.pos.z - chef.position.z, d = Math.hypot(dx, dz);
         if (d > it.reach) return;
         var facing = d < 0.8 || (dx * fx + dz * fz) / d > 0.35;
         if (!facing) return;
-        var rank = d + (it.use ? 0 : 100);   // something to do comes before a mere note
-        if (rank < bestD){ best = it; bestD = rank; }
+        // the nearest thing he is looking at; something to do comes before a mere note
+        var cos = d > 1e-4 ? (dx * fx + dz * fz) / d : 1;
+        var key = it.key || 'E', r = d + 6 * (1 - cos) + (it.bias || 0) + (it.use ? 0 : 100);
+        if (r < rank[key]){ out[key] = it; rank[key] = r; }
       });
-      return best;
+      return out;
     }
-    function interact(){
-      if (sweep || move || broomAt === 'falling') return;
-      var it = findFocus();
+    function busy(){ return !!sweep || !!move || broomAt === 'falling'; }
+    function interact(){   // E: use something
+      if (busy()) return;
+      var it = findFocus().E;
+      if (it && it.use) it.use();
+    }
+    function grab(){       // F: pick up / put down
+      if (busy()) return;
+      var it = findFocus().F;
       if (it){ if (it.use) it.use(); }
       else if (holding) dropBroom();   // drop it right here
+    }
+    function click(){      // left mouse button: work with what he holds
+      if (holding){ trySweep(); if (sweep) return; }
+      if (busy()) return;
+      var it = findFocus().LMB;
+      if (it && it.use) it.use();
+    }
+
+    // A thin light outline around a thing: its own shape again, drawn inside out behind
+    // it and pushed outward on the screen by a few pixels (the same width near and far).
+    var outlined = [], OUTLINE_PX = 2.2, outlinePx = { value: new T.Vector2(0.003, 0.005) };
+    var outlineMat = new T.MeshBasicMaterial({ color: 0xfff1c4, side: T.BackSide });
+    outlineMat.onBeforeCompile = function(sh){
+      sh.uniforms.hpPx = outlinePx;
+      sh.vertexShader = 'uniform vec2 hpPx;\n' + sh.vertexShader.replace('#include <project_vertex>',
+        '#include <project_vertex>\n' +
+        '  vec4 hpC = projectionMatrix * vec4(mvPosition.xyz + normalize(normalMatrix * normal) * 0.01, 1.0);\n' +
+        '  vec2 hpD = hpC.xy / hpC.w - gl_Position.xy / gl_Position.w;\n' +
+        '  float hpL = length(hpD);\n' +
+        '  if (hpL > 1e-7) gl_Position.xy += hpD / hpL * hpPx * gl_Position.w;');
+    };
+    function hullsOf(obj){
+      if (!obj.userData.hulls){
+        var hulls = obj.userData.hulls = [];
+        obj.traverse(function(m){
+          if (!m.isMesh || m.isSprite || m.userData.hull) return;
+          var h = new T.Mesh(m.geometry, outlineMat);
+          h.userData.hull = true; h.visible = false; h.frustumCulled = false; h.castShadow = false;
+          m.add(h); hulls.push(h);
+        });
+      }
+      return obj.userData.hulls;
+    }
+    function showOutlines(objs){
+      outlined.forEach(function(h){ h.visible = false; });
+      outlined = [];
+      objs.forEach(function(o){ if (o) hullsOf(o).forEach(function(h){ h.visible = true; outlined.push(h); }); });
     }
 
     // ---------- every frame ---------------------------------------------------------------
@@ -935,16 +988,25 @@
       // hint and aim dot
       var aimed = sweep ? null : aimedStain();
       var tooClose = !!aimed && stainDist(aimed) < STAIN.near;
-      focused = sweep || move ? null : findFocus();
+      focus = busy() ? { E: null, F: null, LMB: null } : findFocus();
       var locked = document.pointerLockElement === canvas;
       dot.classList.toggle('on', holding && locked);
       dot.classList.toggle('hit', !!(holding && aimed && !tooClose));
-      if (focused && focused.use) setHint(keyHint('E', focused.label));
-      else if (focused) setHint('<span>' + focused.label + '</span>', true);
+      // what can be done right now, one entry per key; else a note; else what the broom offers
+      var parts = [], notes = [], glow = [];
+      [['F', keyHint('F', '')], ['E', keyHint('E', '')], ['LMB', MOUSE_SVG]].forEach(function(k){
+        var it = focus[k[0]];
+        if (it && it.use){ parts.push(k[0] === 'LMB' ? MOUSE_SVG + '<span>' + it.label + '</span>' : keyHint(k[0], it.label)); glow.push(it.obj); }
+        else if (it) notes.push(it.label);
+      });
+      if (aimed && holding && !tooClose) parts.push(MOUSE_SVG + '<span>Sweep</span>');
+      outlinePx.value.set(2 * OUTLINE_PX / Math.max(1, canvas.clientWidth), 2 * OUTLINE_PX / Math.max(1, canvas.clientHeight));
+      showOutlines(glow);
+      if (parts.length) setHint(parts.join('<span class="hp-sep"></span>'));
+      else if (notes.length) setHint('<span>' + notes[0] + '</span>', true);
       else if (aimed && holding && tooClose) setHint('<span>Step back a little</span>', true);
-      else if (aimed && holding) setHint(MOUSE_SVG + '<span>Sweep</span>');
-      else if (aimed && !move) setHint('<span>Get ' + (broomAt === 'closet' ? 'a broom from the cleaning closet' : 'the broom') + '</span>', true);
-      else if (holding && !sweep) setHint(keyHint('E', 'Drop broom'), true);
+      else if (aimed && !move && !holding) setHint('<span>Get ' + (broomAt === 'closet' ? 'a broom from the cleaning closet' : 'the broom') + '</span>', true);
+      else if (holding && !sweep) setHint(keyHint('F', 'Drop broom'), true);
       else setHint('');
     }
 
@@ -952,7 +1014,7 @@
     function afterAnimation(dt){ posePlayer(dt); }
 
     return {
-      interact: interact, update: update, afterAnimation: afterAnimation,
+      interact: interact, grab: grab, click: click, update: update, afterAnimation: afterAnimation,
       isHolding: function(){ return holding; },
       // for the other parts of the game (restaurant.js)
       addInteractables: function(fn){ moreInteractables.push(fn); },
@@ -965,7 +1027,7 @@
         if (bones){ [bones.lGrip, bones.rGrip].forEach(function(g){ if (g) g.curl = 1; }); }
       },
       debugDrop: function(){ if (holding) dropBroom(); },
-      debugClick: function(){ trySweep(); return !!sweep; },   // a left click without the mouse
+      debugClick: function(){ click(); return !!sweep; },   // a left click without the mouse
       debugHint: function(){ return hint.classList.contains('on') ? hint.textContent : ''; },
       debugTake: function(){ if (broomAt === 'closet' || broomAt === 'floor') takeBroom(); },
       debugStore: function(){ if (holding) storeBroom(); },

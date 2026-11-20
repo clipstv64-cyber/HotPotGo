@@ -23,20 +23,20 @@ Rest dran kommt. Er wird nach jeder Etappe aktualisiert.
 |---|---|---|
 | 1 | Begehbares Restaurant mit Küche und Gastraum | fertig |
 | 2 | Spielerbewegung und Kamera | fertig |
-| 3 | Gegenstände aufnehmen und ablegen | teilweise: Besen überall ablegbar; Salat und Schüssel nur an ihren Stationen |
-| 4 | Kühlschrank und Zutaten | teilweise: ein Salatkopf vom Regal, kein Vorrat, Kühlschrank ohne Funktion |
+| 3 | Gegenstände aufnehmen und ablegen | fertig: F nimmt auf und legt ab (Zutaten, Schüsseln auf den Arbeitsflächen; Besen überall), E benutzt |
+| 4 | Kühlschrank und Zutaten | teilweise: Kartoffeln, Karotten, Zwiebeln als einzelne Gegenstände aus drei Kisten in der Vorratsecke der Küche, mit Vorrat (je 6); Kühlschrank noch ohne Funktion |
 | 5 | Interaktives Schneidebrett | fehlt (ein Brett mit Beil steht als Deko auf der Arbeitsinsel) |
 | 6 | Gemüse schneiden | fehlt |
-| 7 | Zutaten in den Topf geben | teilweise: ein Tastendruck, im Topf ist nichts zu sehen |
+| 7 | Zutaten in den Topf geben | teilweise: jede Zutat einzeln, sie liegt sichtbar im Topf, der Topf kennt das Rezept; noch ungeschnitten |
 | 8 | Brühe hinzufügen | fehlt |
 | 9 | Herdtemperatur einstellen | fehlt |
-| 10 | Umrühren und Garzeit überwachen | teilweise: fester Zeitablauf von 10 Sekunden |
-| 11 | Fertiger Eintopf mit genau 20 Portionen | teilweise: 4 Portionen mit Zähler, Füllstand nicht sichtbar |
-| 12 | Schüssel nehmen und Portion einfüllen | teilweise: ein Schritt, die Schüssel ist sofort voll |
+| 10 | Umrühren und Garzeit überwachen | teilweise: fester Zeitablauf von 12 Sekunden, kein Rühren |
+| 11 | Fertiger Eintopf mit genau 20 Portionen | fertig: genau 20 Portionen (getestet), Füllstand sinkt sichtbar, jeder Topf hat eine eigene Kennung |
+| 12 | Schüssel nehmen und Portion einfüllen | fertig: leere Schüssel vom Stapel, Schöpfkelle füllt eine Portion ein; Schüsseln kommen nach dem Essen von selbst zurück (Spülen folgt später) |
 | 13 | Kunden treten ein und setzen sich | fehlt: acht Gäste sitzen fest an ihren Plätzen |
 | 14 | Bestellung entgegennehmen | teilweise: Gäste bestellen von selbst mit einer Blase |
 | 15 | Essen zum Tisch bringen | fertig |
-| 16 | Kunden bezahlen lassen | fertig (mit Trinkgeld für schnelle Bedienung) |
+| 16 | Kunden bezahlen lassen | fertig: 9 € pro Portion plus Trinkgeld für schnelle Bedienung, Startgeld 250 € |
 | 17 | Geduldsanzeige und Verlassen des Restaurants | teilweise: Geduld läuft ab und der Gast gibt auf, bleibt aber sitzen |
 | 18 | Einfache Tagesabrechnung | fehlt: es gibt noch keinen Tag und keine Uhr |
 | 19 | Speichern und Laden | fehlt |
@@ -51,9 +51,7 @@ dem der Gastgeber die Aktionen prüft.
 
 ## Reihenfolge der nächsten Etappen
 
-1. **Kochen, Teil 1 – Zutaten und 20 Portionen.** Kartoffeln, Karotten und Zwiebeln als
-   eigene Gegenstände aus Kühlschrank und Regal; der große Topf fasst 20 Portionen, der
-   Füllstand ist sichtbar; man nimmt eine leere Schüssel und schöpft eine Portion.
+1. **Kochen, Teil 1 – Zutaten und 20 Portionen.** Erledigt (20.11.2026).
 2. **Kochen, Teil 2 – Schneiden.** Gemüse aufs Schneidebrett legen, Messer nehmen, mit
    der Mausbewegung schneiden; die Stücke kommen in den Topf und sind dort zu sehen.
 3. **Kochen, Teil 3 – Brühe, Hitze, Rühren.** Brühe eingießen, Herdstufe wählen,
@@ -66,15 +64,17 @@ dem der Gastgeber die Aktionen prüft.
 Danach folgt Phase 2 des Konzepts (Computer mit Bestellungen und Lieferungen, Geräte
 und Möbel kaufen, Bewertungen, weitere Gerichte), dann Mehrspieler und Mitarbeiter.
 
-## Wo ich vom Konzept abweichen würde
+## Absprachen
 
-- **Arbeitsansicht an den Stationen.** Für Schneiden, Gießen und Rühren schaut die
-  Kamera auf Brett oder Topf, und die Maus führt das Werkzeug. Jede Bewegung frei mit
-  den Armen des Kochs zu spielen wäre sehr viel aufwendiger und ungenauer.
+- **Nicht vom Konzept abweichen** (Wunsch vom 20.11.2026). Wo das Konzept etwas offen
+  lässt, wird die Entscheidung hier festgehalten.
+- **Tasten wie im Konzept:** F nimmt auf und legt ab, E benutzt, linke Maustaste arbeitet
+  mit dem Werkzeug. Anvisierte Gegenstände bekommen eine dünne Umrandung.
+- **Zutaten liegen in der Küche** (Vorratsecke neben dem Herd). Das Konzept erlaubt
+  Kühlschrank oder Lager; das Lager wird mit den Lieferungen in Phase 2 gebraucht.
 - **Technik bleibt, wie sie ist.** Das Spiel läuft als Desktop-Programm auf Three.js und
   Electron. Ein Wechsel der Technik würde alles Bisherige wegwerfen.
-- **Später, nicht jetzt:** Mitarbeiter mit eigener Aufgaben-KI, freies Möbelstellen,
-  neue Räume, zehn Gerichte. Das sind große Brocken, die erst Sinn ergeben, wenn ein
-  Tag mit einem Gericht Spaß macht.
+- **Reihenfolge wie im Konzept:** Mitarbeiter, freies Möbelstellen, neue Räume und
+  weitere Gerichte kommen in den Phasen 2 bis 4.
 - **Werte aus dem Konzept** (250 € Startgeld, 9 € pro Portion, 35 € Zutaten pro Topf)
   übernehme ich mit der Tages- und Geld-Etappe als Ausgangspunkt.

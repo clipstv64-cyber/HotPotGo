@@ -187,7 +187,7 @@
   var decor = null;          // furnishing of the guest room (decor.js)
   var gameplay = null;       // stains, broom and interaction hints (gameplay.js)
   var restaurant = null;     // guests' orders, cooking, serving, money (restaurant.js)
-  var kitchen = {};          // things in the kitchen the game rules use: { pot, vegShelf }
+  var kitchen = { surfaces: [], taken: [] };   // what the game rules use in the kitchen: { potAt, surfaces, taken (spots on them that are occupied: x, z, r), bowlsAt }
   // for tests: put the chef somewhere and make him look in a direction
   window.__hotpotView = function(x, z, yaw, pitch){
     if (model){ model.position.x = x; model.position.z = z; }
@@ -246,7 +246,8 @@
     var k = e.key.toLowerCase();
     if (k in keys) keys[k] = true;
     if (e.key === 'Shift') shiftDown = true;
-    if (k === 'e' && !e.repeat){ if (gameplay) gameplay.interact(); else toggleNearDoor(); }
+    if (k === 'e' && !e.repeat){ if (gameplay) gameplay.interact(); else toggleNearDoor(); }   // use
+    if (k === 'f' && !e.repeat && gameplay) gameplay.grab();                                    // pick up / put down
     if (e.code === 'Space' || e.key === ' '){
       e.preventDefault(); // don't scroll the page
       if (!e.repeat) jumpRequested = true;
@@ -498,7 +499,7 @@
       try {
         restaurant = HotPotRestaurant.build({ scene: scene, camera: camera, gameplay: gameplay,
           getChef: function(){ return model; },
-          getKitchen: function(){ return kitchen; },
+          getKitchen: function(){ return kitchen; }, BACKROOMS: BACKROOMS, addBox: addBox,
           // the people sitting at the tables: who they are, their chair and table, their head
           getGuests: function(){
             return characters.filter(function(c){ return c.state === 'seated' && c.sit; }).map(function(c){
@@ -730,8 +731,9 @@
         if (wall(sc) && pr){ pr.h.position.set(e - pr.s.z / 2, 2.55 - pr.s.y, sc.h.position.z); pr.h.rotation.y = -Math.PI / 2; scene.add(pr.h); }
         if (wall(rg, -0.1)){
           if (hd){ hd.h.position.set(e - hd.s.z / 2, WALL_HEIGHT - 0.01 - hd.s.y, rg.h.position.z); hd.h.rotation.y = -Math.PI / 2; scene.add(hd.h); }
-          if (sp){ var x = rg.h.position.x - rg.s.z * 0.05, zz = rg.h.position.z - rg.s.x * 0.22;
-            sp.h.position.set(x, surfaceY(rg.h, x, zz), zz); sp.h.rotation.y = -Math.PI / 2 + 0.5; scene.add(sp.h); }
+          // the cooking pot (restaurant.js) stands on a burner of the range
+          var px = rg.h.position.x, pz = rg.h.position.z - rg.s.x * 0.22;
+          kitchen.potAt = new THREE.Vector3(px, surfaceY(rg.h, px, pz), pz);
         }
         wall(fr, 0.05); wall(sj, 0.1);
         if (wall(sk, 0.15) && ws){ ws.h.position.set(e - ws.s.z / 2, 1.95, sk.h.position.z); ws.h.rotation.y = -Math.PI / 2; scene.add(ws.h); }
@@ -750,14 +752,17 @@
           var ix = 7.0, iz = -3.0;
           il.h.position.set(ix, 0, iz); il.h.rotation.y = -Math.PI / 2; scene.add(il.h);
           addBox(ix, iz, il.s.z, il.s.x, il.s.y);
-          if (bl){ var bz = iz - il.s.x * 0.2; bl.h.position.set(ix, surfaceY(il.h, ix, bz), bz); bl.h.rotation.y = 0.6; scene.add(bl.h); }
-          if (cd){ var cz2 = iz + il.s.x * 0.27, cx2 = ix + 0.05; cd.h.position.set(cx2, surfaceY(il.h, cx2, cz2), cz2); cd.h.rotation.y = -Math.PI / 2; scene.add(cd.h); }
+          // work surfaces things can be put down on, and where the clean bowls are stacked
+          [iz, 4.2].forEach(function(sz){ kitchen.surfaces.push({ minX: ix - il.s.z / 2 + 0.12, maxX: ix + il.s.z / 2 - 0.12, minZ: sz - il.s.x / 2 + 0.12, maxZ: sz + il.s.x / 2 - 0.12, y: il.s.y }); });
+          kitchen.bowlsAt = new THREE.Vector3(ix + 0.3, il.s.y, iz + 0.14);
+          if (bl){ var bz = iz - il.s.x * 0.2; bl.h.position.set(ix, surfaceY(il.h, ix, bz), bz); bl.h.rotation.y = 0.6; scene.add(bl.h); kitchen.taken.push({ x: ix, z: bz, r: 0.36 }); }
+          if (cd){ var cz2 = iz + il.s.x * 0.27, cx2 = ix + 0.05; cd.h.position.set(cx2, surfaceY(il.h, cx2, cz2), cz2); cd.h.rotation.y = -Math.PI / 2; scene.add(cd.h); kitchen.taken.push({ x: cx2, z: cz2 - 0.2, r: 0.3 }, { x: cx2, z: cz2 + 0.2, r: 0.3 }); }
           // a second prep table further toward the +Z wall, with the stock pot set on it
           var i2 = copy(il), jz = 4.2;
           i2.h.position.set(ix, 0, jz); i2.h.rotation.y = Math.PI / 2; scene.add(i2.h);
           addBox(ix, jz, il.s.z, il.s.x, il.s.y);
-          if (bl){ var b2 = copy(bl), bz2 = jz + il.s.x * 0.22; b2.h.position.set(ix, surfaceY(i2.h, ix, bz2), bz2); b2.h.rotation.y = -0.4; scene.add(b2.h); }
-          if (sp){ var p2 = copy(sp), pz2 = jz - il.s.x * 0.22; p2.h.position.set(ix, surfaceY(i2.h, ix, pz2), pz2); p2.h.rotation.y = 2.2; scene.add(p2.h); }
+          if (bl){ var b2 = copy(bl), bz2 = jz + il.s.x * 0.22; b2.h.position.set(ix, surfaceY(i2.h, ix, bz2), bz2); b2.h.rotation.y = -0.4; scene.add(b2.h); kitchen.taken.push({ x: ix, z: bz2, r: 0.36 }); }
+          if (sp){ var p2 = copy(sp), pz2 = jz - il.s.x * 0.22; p2.h.position.set(ix, surfaceY(i2.h, ix, pz2), pz2); p2.h.rotation.y = 2.2; scene.add(p2.h); kitchen.taken.push({ x: ix, z: pz2, r: 0.5 }); }
         }
         // paper lanterns hanging from the long beam, each with its own warm light
         if (ln){
@@ -771,9 +776,6 @@
             pl.position.set(7.0, KBEAM_Y - ln.s.y * 0.55, lz); scene.add(pl);
           });
         }
-        // what the game rules need: the stock pot on the range and the vegetable shelf
-        kitchen.pot = rg && sp ? sp.h : null; kitchen.potSize = sp ? sp.s : null;
-        kitchen.vegShelf = sv ? sv.h : null;
         window.__KITCHEN8 = true;   // everything placed (used by the test renders)
       });
     }
