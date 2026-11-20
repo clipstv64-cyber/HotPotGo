@@ -9,6 +9,14 @@
 // he ladles a portion, carries it to the guest and serves it; the guest eats, pays and
 // tips for quick service. A guest who waits too long gives up.
 //
+// The day: in the morning the chef cooks in peace, the clock stands still. Opening the
+// front door starts the opening hours; at closing time (or when he closes himself) nobody
+// new comes in, the last guests finish, and "End the day" at the door shows the day's
+// accounts. Overnight the crates and the broth are filled up again and paid for.
+//
+// The game saves itself (every few seconds, at every change of the day and when the
+// window is closed) and offers to continue when it is started again.
+//
 // Keys (as in the game's concept): F picks things up and puts them down, E uses things,
 // the left mouse button works with the tool in hand.
 //
@@ -40,6 +48,12 @@
     rest: 25,                 // seconds until a guest who has left may come again
     eatTime: 14,              // seconds a guest eats
     tip: 3,                   // the tip shrinks with the waiting time
+    // the opening hours (minutes of the day) and how many seconds of play they take;
+    // before the restaurant is opened the clock stands at `opens`
+    day: { opens: 11 * 60, closes: 21 * 60, length: 720 },
+    // euros for filling the stock up again overnight: one vegetable, broth for one pot (about 35 a pot)
+    cost: { potato: 8, carrot: 8, onion: 8, broth: 11 },
+    autosave: 20,             // seconds between two automatic saves
     reach: 2.1,               // how close the chef has to be to a crate, the pot, the bowls
     cutReach: 1.75,           // ... to the chopping block to cut on it
     shelfReach: 1.75,         // ... to the shelf with jug and shaker
@@ -140,31 +154,58 @@
     var V = function(x, y, z){ return new T.Vector3(x || 0, y || 0, z || 0); };
 
     // ---------- the state and the actions that change it ---------------------------------
-    var state = {
-      money: RULES.startMoney, served: 0, lost: 0, nextId: 1,
-      items: {},                                    // id -> { id, kind, at: 'hand' | 'surface' | 'board' | 'home' | 'table', x, y, z, rot, cut: { a, b, done, q }, batch, q, guest }
-      board: null,                                  // id of the vegetable on the chopping block
-      knife: null,                                  // id of the knife (at 'home' beside the block, or in the hand)
-      tools: {},                                    // ids of the tools: knife, broth (the jug: item.left = what is in it), spice
-      carry: null,                                  // id of the item in the chef's hands
-      crates: { potato: RULES.crateStock, carrot: RULES.crateStock, onion: RULES.crateStock },
-      bowls: RULES.bowls,                           // clean bowls on the stack
-      // the pot: 'empty' | 'filling' (things are put in, it cooks) | 'ready' | 'burnt'
-      pot: { phase: 'empty', has: { potato: 0, carrot: 0, onion: 0 }, cut: {}, qs: [], broth: 0, spice: 0,
-             heat: 0, temp: 20, cooked: 0, stick: 0, burn: 0, quality: 1, portions: 0, batch: 0 },
-      // { id, phase, t, patience, pay, item, rest }; phase: 'away' -> 'coming' -> 'deciding' -> 'waiting' -> 'eating' -> 'paid' -> 'leaving' -> 'away'
-      // (from 'waiting' also -> 'angry' -> 'leaving' when the patience runs out)
-      guests: [],
-      open: false,                                  // the restaurant is opened and closed at the front door; guests only order while it is open
-      broth: 0,                                     // broth in stock (1 = what one pot needs), besides what is in the jug
-      nextGuest: RULES.firstGuest
-    };
-    ['knife', 'broth', 'spice'].forEach(function(kind){
-      var o = { id: state.nextId++, kind: kind, at: 'home' };
-      if (kind === 'broth'){ o.left = COOK.jug; state.broth = COOK.stock - COOK.jug; }
-      state.items[o.id] = o; state.tools[kind] = o.id;
-    });
-    state.knife = state.tools.knife;
+    // the day: 'prep' (before opening) -> 'open' -> 'closed' (the last guests finish) -> 'done' (the accounts are shown)
+    function newDay(n){ return { n: n, phase: 'prep', time: RULES.day.opens, served: 0, lost: 0, sales: 0, tips: 0, report: null }; }
+    function newState(){
+      var st = {
+        money: RULES.startMoney, served: 0, lost: 0, nextId: 1,
+        items: {},                                    // id -> { id, kind, at: 'hand' | 'surface' | 'board' | 'home' | 'table', x, y, z, rot, cut: { a, b, done, q }, batch, q, guest }
+        board: null,                                  // id of the vegetable on the chopping block
+        knife: null,                                  // id of the knife (at 'home' beside the block, or in the hand)
+        tools: {},                                    // ids of the tools: knife, broth (the jug: item.left = what is in it), spice
+        carry: null,                                  // id of the item in the chef's hands
+        crates: { potato: RULES.crateStock, carrot: RULES.crateStock, onion: RULES.crateStock },
+        bowls: RULES.bowls,                           // clean bowls on the stack
+        // the pot: 'empty' | 'filling' (things are put in, it cooks) | 'ready' | 'burnt'
+        pot: { phase: 'empty', has: { potato: 0, carrot: 0, onion: 0 }, cut: {}, qs: [], broth: 0, spice: 0,
+               heat: 0, temp: 20, cooked: 0, stick: 0, burn: 0, quality: 1, portions: 0, batch: 0 },
+        // { id, phase, t, patience, pay, item, rest }; phase: 'away' -> 'coming' -> 'deciding' -> 'waiting' -> 'eating' -> 'paid' -> 'leaving' -> 'away'
+        // (from 'waiting' also -> 'angry' -> 'leaving' when the patience runs out)
+        guests: [],
+        open: false,                                  // guests come in (the same as day.phase === 'open')
+        broth: 0,                                     // broth in stock (1 = what one pot needs), besides what is in the jug
+        nextGuest: RULES.firstGuest,
+        day: newDay(1)
+      };
+      ['knife', 'broth', 'spice'].forEach(function(kind){
+        var o = { id: st.nextId++, kind: kind, at: 'home' };
+        if (kind === 'broth'){ o.left = COOK.jug; st.broth = COOK.stock - COOK.jug; }
+        st.items[o.id] = o; st.tools[kind] = o.id;
+      });
+      st.knife = st.tools.knife;
+      return st;
+    }
+    var state = newState();
+    function inside(){ return state.guests.some(function(g){ return g.phase !== 'away'; }); }   // is a guest still in the restaurant?
+    // Overnight the crates and the broth are filled up again, as far as the money goes
+    // (until supplies are ordered at the computer). Returns what it cost.
+    function restock(){
+      var P = RULES.cost, cost = 0, short = false;
+      VEG.forEach(function(k){
+        while (state.crates[k] < RULES.crateStock){
+          if (state.money - cost < P[k]){ short = true; break; }
+          state.crates[k]++; cost += P[k];
+        }
+      });
+      var jug = state.items[state.tools.broth], need = Math.max(0, COOK.stock - state.broth - jug.left);
+      var full = Math.round(need * P.broth), pay = Math.min(full, Math.max(0, state.money - cost));
+      if (pay < full) short = true;
+      if (full > 0) state.broth += need * pay / full;
+      cost += pay;
+      if (jug.at === 'home'){ var fillUp = Math.min(COOK.jug - jug.left, state.broth); jug.left += fillUp; state.broth -= fillUp; }
+      state.money -= cost;
+      return { cost: cost, short: short };
+    }
     function emptyPot(){
       var pot = state.pot;
       VEG.forEach(function(k){ pot.has[k] = 0; });
@@ -206,7 +247,7 @@
     }
     // Each action checks by itself whether it is allowed and changes nothing if it is not.
     function act(type, arg){
-      var pot = state.pot, it = carried(), g;
+      var pot = state.pot, it = carried(), day = state.day, g;
       switch (type){
         case 'take':       // a vegetable out of its crate
           if (it || !isVeg(arg) || state.crates[arg] <= 0) return false;
@@ -276,8 +317,22 @@
         case 'stir':       // with the ladle: arg = how far it went round (radians)
           if (it || !(arg > 0) || !inPot() || pot.phase === 'burnt') return false;
           pot.stick = Math.max(0, pot.stick - arg / (Math.PI * 2) * COOK.stirTurn); return true;
-        case 'open':       // the front door: open or close the restaurant (arg: true / false, else the other way round)
-          state.open = typeof arg === 'boolean' ? arg : !state.open; return true;
+        case 'open':       // the front door: the opening hours begin
+          if (day.phase !== 'prep') return false;
+          day.phase = 'open'; state.open = true; state.nextGuest = RULES.firstGuest; return true;
+        case 'close':      // ... and end: nobody new comes in, who is inside finishes the meal
+          if (day.phase !== 'open') return false;
+          day.phase = 'closed'; state.open = false; return true;
+        case 'endDay':     // everybody has gone: the day's accounts, and the stock is filled up for tomorrow
+          if (day.phase !== 'closed' || inside()) return false;
+          var bill = restock();
+          day.report = { n: day.n, served: day.served, lost: day.lost, sales: day.sales, tips: day.tips, cost: bill.cost, short: bill.short,
+                         profit: day.sales + day.tips - bill.cost, money: state.money };
+          day.phase = 'done'; return true;
+        case 'nextDay':    // the next morning
+          if (day.phase !== 'done') return false;
+          state.day = newDay(day.n + 1);
+          state.guests.forEach(function(x){ x.rest = 0; }); state.nextGuest = RULES.firstGuest; return true;
         case 'heat':       // the stove: on / off (or arg = 0 / 1)
           pot.heat = typeof arg === 'number' ? clamp(Math.round(arg), 0, COOK.heat.length - 1) : (pot.heat + 1) % COOK.heat.length; return true;
         case 'dumpPot':    // throw away what burnt
@@ -313,7 +368,12 @@
     }
     // what happens by itself as time passes
     function tick(dt){
-      var pot = state.pot, C = COOK, target = C.target[pot.heat];
+      var pot = state.pot, C = COOK, target = C.target[pot.heat], day = state.day;
+      // the clock runs during the opening hours; at closing time the restaurant closes by itself
+      if (day.phase === 'open'){
+        day.time += dt * (RULES.day.closes - RULES.day.opens) / RULES.day.length;
+        if (day.time >= RULES.day.closes){ day.time = RULES.day.closes; act('close'); }
+      }
       // the temperature follows the heat
       pot.temp += (target - pot.temp) * Math.min(1, (target > pot.temp ? C.warm : C.cool) * dt);
       if (pot.phase === 'filling' || pot.phase === 'ready'){
@@ -339,11 +399,12 @@
           if (g.t <= 0) act('order', g.id);
         } else if (g.phase === 'waiting'){
           g.patience -= dt / RULES.patience;
-          if (g.patience <= 0){ g.phase = 'angry'; g.t = 0; state.lost++; }
+          if (g.patience <= 0){ g.phase = 'angry'; g.t = 0; state.lost++; day.lost++; }
         } else if (g.phase === 'eating'){
           g.t += dt;
           if (g.t >= RULES.eatTime){
             g.phase = 'paid'; g.t = 0; state.money += g.pay; state.served++;
+            day.served++; day.sales += RECIPE.price; day.tips += g.pay - RECIPE.price;
             if (state.items[g.item]){ dropItem(state.items[g.item]); state.bowls++; }   // the bowl goes back to the clean stack (washing up comes later)
             g.item = null;
           }
@@ -376,8 +437,32 @@
       'color:rgba(255,255,255,.75);font:500 12.5px/1.2 system-ui,"Segoe UI",sans-serif;letter-spacing:.2px;opacity:0;transition:opacity .2s;pointer-events:none;user-select:none}' +
       '.hp-carry.on{opacity:1}' +
       '.hp-open{position:fixed;right:22px;top:58px;display:flex;align-items:center;gap:7px;padding:5px 12px;border-radius:999px;background:rgba(15,12,10,.36);' +
-      'color:rgba(255,255,255,.85);font:600 13px/1.2 system-ui,"Segoe UI",sans-serif;letter-spacing:.3px;pointer-events:none;user-select:none}' +
-      '.hp-open i{width:9px;height:9px;border-radius:50%;background:#9a9a9a}.hp-open.on i{background:#6fd24f;box-shadow:0 0 6px rgba(111,210,79,.8)}';
+      'color:rgba(255,255,255,.85);font:600 13px/1.2 system-ui,"Segoe UI",sans-serif;letter-spacing:.3px;pointer-events:none;user-select:none;white-space:pre}' +
+      '.hp-open i{width:9px;height:9px;border-radius:50%;background:#9a9a9a}.hp-open.on i{background:#6fd24f;box-shadow:0 0 6px rgba(111,210,79,.8)}.hp-open.late i{background:#e0a23a}' +
+      // the day's accounts: a slip of paper in the middle of the screen
+      '.hp-paper{width:360px;padding:26px 30px 22px;background:#f4ead2;color:#4a3626;font:500 17px/1.5 Georgia,"Times New Roman",serif;' +
+      'box-shadow:0 18px 50px rgba(0,0,0,.5);border-radius:2px;font-variant-numeric:lining-nums}' +
+      '.hp-paper h2{margin:0;font:italic 700 30px/1.2 Georgia,"Times New Roman",serif;text-align:center}' +
+      '.hp-paper .sub{text-align:center;font-style:italic;color:#8a6f55;margin:0 0 14px}' +
+      '.hp-paper .row{display:flex;justify-content:space-between;gap:16px;border-bottom:1px dotted rgba(74,54,38,.4);padding:3px 0}' +
+      '.hp-paper .row b{font-weight:700}.hp-paper .row.minus b{color:#b3321f}' +
+      '.hp-paper .row.sum{border-bottom:none;border-top:2px solid #4a3626;margin-top:9px;padding-top:7px;font-size:19px;font-weight:700}' +
+      '.hp-paper .row.plus b{color:#3f8a2c}' +
+      '.hp-paper .small{font-size:13.5px;font-style:italic;color:#b3321f;padding:2px 0}' +
+      '.hp-paper .go{margin-top:16px;text-align:center;font:600 14px/1.3 system-ui,"Segoe UI",sans-serif;letter-spacing:.3px;color:#6b513a}' +
+      '.hp-paper kbd{display:inline-block;min-width:22px;padding:2px 6px;margin-right:7px;border-radius:5px;background:#4a3626;color:#f4ead2;font:700 13px/1.3 system-ui,"Segoe UI",sans-serif}' +
+      '.hp-day{position:fixed;left:50%;top:45%;transform:translate(-50%,-50%) rotate(-1.2deg) scale(.94);opacity:0;transition:opacity .35s,transform .35s;' +
+      'pointer-events:none;user-select:none;z-index:15}' +
+      '.hp-day.on{opacity:1;transform:translate(-50%,-50%) rotate(-1.2deg) scale(1)}' +
+      // continue or start over, when the game starts with a saved restaurant
+      '.hp-start{position:fixed;left:0;top:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;background:rgba(15,12,10,.5);z-index:20;user-select:none}' +
+      '.hp-start .hp-paper{text-align:center;transform:rotate(-1deg)}' +
+      '.hp-start h2{font-size:36px}.hp-start p{margin:6px 0 0;font-style:italic;color:#6b513a}.hp-start p.warn{color:#b3321f;font-size:14.5px}' +
+      '.hp-start button{display:block;width:100%;margin-top:11px;padding:10px 12px;border:2px solid #4a3626;border-radius:3px;background:#4a3626;color:#f4ead2;' +
+      'font:700 18px/1.2 Georgia,"Times New Roman",serif;cursor:pointer}' +
+      '.hp-start button:first-of-type{margin-top:20px}.hp-start button.quiet{background:transparent;color:#4a3626}' +
+      '.hp-start button:hover{background:#6b513a;color:#f4ead2}' +
+      '.hp-hold .hp-money,.hp-hold .hp-open,.hp-hold .hp-carry,.hp-hold .hp-hint{visibility:hidden}';   // nothing of the game on screen while it waits
     document.head.appendChild(css);
     var moneyEl = document.createElement('div'); moneyEl.className = 'hp-money';
     moneyEl.innerHTML = '<span class="hp-coin"></span><span class="hp-amount"></span>'; document.body.appendChild(moneyEl);
@@ -385,7 +470,21 @@
     var carryEl = document.createElement('div'); carryEl.className = 'hp-carry'; document.body.appendChild(carryEl);
     function euro(n){ return '€' + n; }
     var openEl = document.createElement('div'); openEl.className = 'hp-open'; openEl.innerHTML = '<i></i><span></span>'; document.body.appendChild(openEl);
-    var shown = { money: null, carry: null, open: null };
+    var shown = { money: null, carry: null, hud: null };
+    function signed(n){ return (n < 0 ? '\u2212' : '') + euro(Math.abs(n)); }
+    // the day's accounts (null: put the slip away)
+    var dayEl = document.createElement('div'); dayEl.className = 'hp-day hp-paper'; document.body.appendChild(dayEl);
+    function dayPanel(r){
+      dayEl.classList.toggle('on', !!r);
+      if (!r) return;
+      function row(name, value, cls){ return '<div class="row' + (cls ? ' ' + cls : '') + '"><span>' + name + '</span><b>' + value + '</b></div>'; }
+      dayEl.innerHTML = '<h2>Day ' + r.n + '</h2><div class="sub">The day\u2019s accounts</div>' +
+        row('Guests served', r.served) + row('Guests who left hungry', r.lost, r.lost ? 'minus' : '') +
+        row('Stew sold', euro(r.sales)) + row('Tips', euro(r.tips)) + row('Ingredients for tomorrow', signed(-r.cost), r.cost ? 'minus' : '') +
+        (r.short ? '<div class="small">Not enough money to fill up everything.</div>' : '') +
+        row('Profit today', signed(r.profit), 'sum ' + (r.profit < 0 ? 'minus' : 'plus')) + row('In the till', signed(r.money)) +
+        '<div class="go"><kbd>E</kbd>Start day ' + (r.n + 1) + '</div>';
+    }
 
     // ---------- models ------------------------------------------------------------------------
     var gltf = new T.GLTFLoader();
@@ -870,6 +969,8 @@
       if (!v){
         var sp = info.spot, t = sp.table, toTable = sp.z < t.z ? 1 : -1;
         v = views[info.id] = { info: info, sign: sign(0.62), toTable: toTable, bowlAt: V(sp.x, t.top, t.z - toTable * (t.halfZ - 0.34)) };
+      }
+      if (!guest(info.id)){   // (a saved game brings what its guests were doing)
         state.guests.push({ id: info.id, phase: 'away', t: 0, patience: 0, pay: 0, rest: 0, item: null });
       }
       return v;
@@ -945,7 +1046,7 @@
     var cutting = null;   // { look (where he faces), th, f, r (the knife's direction and the vegetable's, see below), x (along the vegetable), h (blade height 1..0), armed, cool, end }
     var CUT = { side: 0.00075, down: 0.0055, lift: 0.14, slant: 0.42 };   // slant: the knife is held a little across, so its blade can be seen
     var note = { text: '', t: 0 };   // a short message, e.g. how well it was cut
-    function say(text){ note.text = text; note.t = 3.2; }
+    function say(text, secs){ note.text = text; note.t = secs || 3.2; }
     function lieAcross(){   // the next cuts go across what lies left to right in front of him
       var o = state.items[state.board], ax = o && cutAxis(o);
       if (ax) act('turnBoard', ax === 'b' ? cutting.th - Math.PI / 2 : cutting.th + Math.PI);
@@ -1098,7 +1199,11 @@
     function list(words){ return words.join(', ').replace(/, ([^,]*)$/, ' and $1'); }
     play.addInteractables(function(hands){
       var out = [], it = carried(), pot = state.pot;
-      if (!place.pot) return out;
+      if (!place.pot || hold) return out;
+      if (state.day.phase === 'done'){   // the accounts are on screen: on to the next morning
+        var me = ctx.getChef();
+        return me ? [{ pos: me.position, reach: 9, key: 'E', label: 'Start day ' + (state.day.n + 1), use: function(){ act('nextDay'); } }] : out;
+      }
       if (cutting) return [{ pos: place.board.pos, reach: 9, key: 'E', label: 'Stop cutting', use: stopCutting }];
       if (pouring) return [{ pos: place.pot.pos, reach: 9, key: 'E', label: 'Stop pouring', use: stopPour }];
       if (stirring) return [{ pos: place.pot.pos, reach: 9, key: 'E', label: 'Stop stirring', use: stopStir }];
@@ -1196,7 +1301,12 @@
         add({ pos: place.pot.knob, reach: RULES.reach, key: 'E', label: pot.heat ? 'Turn the stove off' : 'Turn the stove on', use: function(){ act('heat'); } });
       }
       // the front door: opening and closing the restaurant
-      add({ pos: DOOR, reach: 2.4, key: 'E', label: state.open ? 'Close the restaurant' : 'Open the restaurant', use: function(){ act('open'); } });
+      var phase = state.day.phase, de = { pos: DOOR, reach: 2.4, key: 'E' };
+      if (phase === 'prep'){ de.label = 'Open the restaurant'; de.use = function(){ act('open'); }; }
+      else if (phase === 'open'){ de.label = 'Close for today'; de.use = function(){ act('close'); }; }
+      else if (inside()) de.label = 'Closed \u2013 the last guests are still here';
+      else { de.label = 'End the day'; de.use = function(){ act('endDay'); }; }
+      add(de);
       // guests waiting for their food
       state.guests.forEach(function(g){
         if (g.phase !== 'waiting') return;
@@ -1237,6 +1347,7 @@
           if (shown.carry !== o.id){ shown.carry = o.id; v.placed = false; v.rot = undefined; play.setCarry(v.obj, toolHold[o.kind] || KINDS[o.kind].carry); }
           return;
         }
+        if (o.at === 'table' && !(views[o.guest] && views[o.guest].info.where() === 'seated')) return;   // (right after loading: once the guest sits)
         if (!v.placed){
           if (o.at === 'table'){ var gv = views[o.guest]; placeBowl(gv); v.obj.position.copy(gv.bowlAt); v.obj.rotation.set(0, rnd(0, 6.28), 0); }
           else if (o.at === 'home'){ v.obj.position.copy(place.home[o.kind].pos); v.obj.rotation.set(0, place.home[o.kind].rot, 0); }
@@ -1268,7 +1379,15 @@
       clock += dt;
       buildPlaces();
       ctx.getGuests().forEach(view);
-      tick(dt);
+      if (!hold){
+        tick(dt);
+        sinceSave += dt;
+        if (sinceSave >= RULES.autosave) saveNow(false);
+      }
+      if (pendingChef && ctx.chefAt && ctx.chefAt.set(pendingChef.x, pendingChef.z)){   // a loaded game: he stands where he stood
+        if (num(pendingChef.yaw) && num(pendingChef.pitch)) ctx.look.set(pendingChef.yaw, pendingChef.pitch);
+        pendingChef = null;
+      }
       if (!place.pot) return;
       aim = aimSpot();
       if (scoop){ scoop.t += dt / SCOOP_TIME; if (scoop.t >= 1) scoop = null; }
@@ -1304,12 +1423,30 @@
       }
       syncItems(dt);
 
-      if (state.open !== shown.open){
-        if (shown.open !== null) say(state.open ? 'The restaurant is open' : 'The restaurant is closed');
-        shown.open = state.open; openEl.classList.toggle('on', state.open); openEl.lastChild.textContent = state.open ? 'Open' : 'Closed';
+      // the day: what changed is said (and saved), the clock, the accounts at the end
+      var day = state.day;
+      if (shown.phase !== day.phase || shown.dayN !== day.n){
+        if (shown.phase !== undefined){   // (not when the game starts or was just loaded)
+          if (day.phase === 'open') say('The restaurant is open');
+          else if (day.phase === 'closed' && inside()) say((day.time >= RULES.day.closes ? 'Closing time' : 'Closed for today') + ' \u2013 the last guests finish their meal', 5);
+          else if (day.phase === 'prep'){
+            shown.told = state.pot.phase === 'ready';
+            say('Day ' + day.n + ' \u2013 ' + (shown.told ? 'there is stew left: open the restaurant when you are ready' : 'cook a pot of stew, then open the restaurant'), 6);
+          }
+          saveNow(day.phase === 'prep');   // a new day: the save from before is kept as the backup
+        }
+        shown.phase = day.phase; shown.dayN = day.n; shown.empty = false;
+        dayPanel(day.phase === 'done' ? day.report : null);
+      }
+      if (day.phase === 'closed' && !shown.empty && !inside()){ shown.empty = true; say('Everybody has gone \u2013 end the day at the front door', 6); }
+      var mins = Math.floor(day.time + 1e-6), hud = 'Day ' + day.n + '   \u00b7   ' + Math.floor(mins / 60) + ':' + (mins % 60 < 10 ? '0' : '') + (mins % 60) + '   \u00b7   ' +
+                (day.phase === 'open' ? 'Open' : day.phase === 'prep' ? 'Closed' : 'Closed for today');
+      if (hud !== shown.hud){
+        shown.hud = hud; openEl.lastChild.textContent = hud;
+        openEl.classList.toggle('on', day.phase === 'open'); openEl.classList.toggle('late', day.phase === 'closed' || day.phase === 'done');
       }
       // the first pot is ready and nobody can come in yet: say what to do
-      if (state.pot.phase === 'ready' && !state.open && !shown.told){ shown.told = true; say('The stew is ready \u2013 open the restaurant at the front door'); }
+      if (state.pot.phase === 'ready' && day.phase === 'prep' && !shown.told){ shown.told = true; say('The stew is ready \u2013 open the restaurant at the front door'); }
       if (state.money !== shown.money){
         var first = shown.money === null;
         shown.money = state.money; amountEl.textContent = euro(state.money);
@@ -1321,7 +1458,11 @@
 
       // the guests: sent in and out as the rules say, and their signs (menu, order, eating, angry)
       state.guests.forEach(function(g){
-        var v = views[g.id], s = v.sign, where = v.info.where();
+        var v = views[g.id];
+        if (!v) return;
+        var s = v.sign, where = v.info.where();
+        // (a loaded game: who sat at the table sits there again)
+        if (where === 'away' && (g.phase === 'deciding' || g.phase === 'waiting' || g.phase === 'eating')){ v.info.seatNow(); where = v.info.where(); }
         if (g.phase === 'coming'){ if (where === 'away') v.info.come(); else if (where === 'seated') act('seated', g.id); }
         if (g.phase === 'leaving'){ if (where === 'seated') v.info.leave(); else if (where === 'away') act('left', g.id); }
         var show = where === 'seated' && (g.phase === 'deciding' || g.phase === 'waiting' || g.phase === 'angry' || g.phase === 'eating');
@@ -1425,12 +1566,148 @@
       });
     }
 
+    // ---------- the saved game ---------------------------------------------------------------
+    // Everything the rules know (`state`), where the chef stands and the stains on the
+    // floor, as one text. `hold`: the game waits for "Continue" or "New restaurant".
+    var store = window.hotpotSave || null, SAVE_VERSION = 1, hold = false, sinceSave = 0, pendingChef = null, saved = null, startEl = null;
+    function num(v){ return typeof v === 'number' && isFinite(v); }
+    function snapshot(){
+      var at = ctx.chefAt && ctx.chefAt.get(), L = ctx.look.get();
+      return JSON.stringify({ game: 'Hot Pot Go', version: SAVE_VERSION, saved: new Date().toISOString(), state: state,
+                              chef: at ? { x: at.x, z: at.z, yaw: L.yaw, pitch: L.pitch } : null, stains: play.getStains ? play.getStains() : [] });
+    }
+    function saveNow(keepBackup){
+      sinceSave = 0;
+      if (!store || hold) return false;
+      try { return !!store.write(snapshot(), !!keepBackup); }
+      catch (e){ console.error('Saving the game failed:', e); return false; }
+    }
+    // Checks a saved game and tidies it: returns it ready to use, or null if it cannot be used.
+    function readSave(text){
+      var d, st;
+      try { d = JSON.parse(text); } catch (e){ return null; }
+      if (!d || d.game !== 'Hot Pot Go' || d.version !== SAVE_VERSION || !d.state) return null;   // (an older version would be brought up to date here)
+      st = d.state;
+      function oneOf(v, list){ return list.indexOf(v) >= 0; }
+      function okCut(c){ return !!c && Array.isArray(c.a) && Array.isArray(c.b) && c.a.every(num) && c.b.every(num); }
+      var ok = num(st.money) && num(st.nextId) && num(st.bowls) && num(st.broth) && !!st.items && typeof st.items === 'object' && Array.isArray(st.guests) &&
+        !!st.crates && !!st.pot && !!st.pot.has && !!st.tools && !!st.day && num(st.day.n) && st.day.n >= 1 && num(st.day.time) &&
+        oneOf(st.day.phase, ['prep', 'open', 'closed', 'done']) && oneOf(st.pot.phase, ['empty', 'filling', 'ready', 'burnt']);
+      ok = ok && VEG.every(function(k){ return num(st.crates[k]) && num(st.pot.has[k]); });
+      ok = ok && Object.keys(HOME).every(function(k){ var o = st.items[st.tools[k]]; return !!o && o.kind === k; });
+      ok = ok && Object.keys(st.items).every(function(id){
+        var o = st.items[id];
+        return !!o && o.id === +id && !!KINDS[o.kind] && oneOf(o.at, ['hand', 'surface', 'board', 'home', 'table']) &&
+               (o.at !== 'surface' || (num(o.x) && num(o.y) && num(o.z))) && (!o.cut || (isVeg(o.kind) && okCut(o.cut)));
+      });
+      ok = ok && num(st.items[st.tools.broth].left) && (st.day.phase !== 'done' || (!!st.day.report && num(st.day.report.n)));
+      if (!ok) return null;
+      // what a newer game knows and this save does not: as in a new game
+      var fresh = newState();
+      Object.keys(fresh).forEach(function(k){ if (st[k] === undefined || st[k] === null && fresh[k] !== null) st[k] = fresh[k]; });
+      Object.keys(fresh.pot).forEach(function(k){ if (typeof fresh.pot[k] === 'number' && !num(st.pot[k])) st.pot[k] = fresh.pot[k]; });
+      Object.keys(fresh.day).forEach(function(k){ if (typeof fresh.day[k] === 'number' && !num(st.day[k])) st.day[k] = fresh.day[k]; });
+      if (!Array.isArray(st.pot.qs)) st.pot.qs = [];
+      if (!st.pot.cut || typeof st.pot.cut !== 'object') st.pot.cut = {};
+      VEG.forEach(function(k){ if (st.pot.cut[k] && !okCut(st.pot.cut[k])) delete st.pot.cut[k]; });
+      st.pot.heat = st.pot.heat ? 1 : 0;
+      st.day.time = clamp(st.day.time, RULES.day.opens, RULES.day.closes);
+      // what was in the middle of happening is settled: guests on their way in or out are
+      // outside, a bowl without its guest is back on the stack, a thing in nobody's hand is gone
+      st.guests = st.guests.filter(function(g){ return !!g && typeof g.id === 'string'; });
+      st.guests.forEach(function(g){
+        var bowl = st.items[g.item], sits = g.phase === 'deciding' || g.phase === 'waiting' || (g.phase === 'eating' && !!bowl && bowl.at === 'table' && bowl.guest === g.id);
+        if (!sits){ g.phase = 'away'; g.rest = 0; g.item = null; }
+        if (!num(g.t)) g.t = 0;
+        if (!num(g.patience)) g.patience = 1;
+        if (!num(g.pay)) g.pay = RECIPE.price;
+        if (!num(g.rest)) g.rest = 0;
+        g.popped = false;
+      });
+      if (st.carry !== null && !(st.items[st.carry] && st.items[st.carry].at === 'hand')) st.carry = null;
+      if (st.board !== null && !(st.items[st.board] && st.items[st.board].at === 'board')) st.board = null;
+      Object.keys(st.items).forEach(function(id){
+        var o = st.items[id], lost = false;
+        if (o.at === 'table') lost = !st.guests.some(function(g){ return g.phase === 'eating' && g.item === o.id; });
+        else if (o.at === 'hand') lost = st.carry !== o.id;
+        else if (o.at === 'board') lost = st.board !== o.id;
+        if (!lost) return;
+        if (HOME[o.kind]) o.at = 'home';
+        else { if (o.kind === 'bowl' || o.kind === 'stew') st.bowls++; delete st.items[id]; }
+      });
+      st.knife = st.tools.knife; st.open = st.day.phase === 'open';
+      return d;
+    }
+    // the game goes on from a saved one: everything shown is built again from its state
+    function applySave(d){
+      state = d.state;
+      Object.keys(objs).forEach(function(id){ if (objs[id].obj.parent) objs[id].obj.parent.remove(objs[id].obj); delete objs[id]; });
+      play.setCarry(null);
+      cutting = null; pouring = null; stirring = null; shake = null; scoop = null; note.t = 0;
+      shown.carry = null; shown.money = null; shown.hud = null; shown.phase = undefined; shown.told = true;
+      if (play.setStains) play.setStains(d.stains);
+      pendingChef = d.chef && num(d.chef.x) && num(d.chef.z) ? d.chef : null;
+    }
+    // 'continue' with the saved restaurant, or a 'new' one (the saved one stays as the backup)
+    function begin(what){
+      if (!hold) return false;
+      if (what === 'continue') applySave(saved.data);
+      hold = false;
+      if (startEl){ startEl.parentNode.removeChild(startEl); startEl = null; }
+      document.body.classList.remove('hp-hold');
+      if (what !== 'continue') saveNow(true);
+      return true;
+    }
+    function showStart(){
+      var el = startEl = document.createElement('div'), st = saved.data.state;
+      el.className = 'hp-start';
+      function card(html){ el.innerHTML = '<div class="hp-paper">' + html + '</div>'; }
+      function first(){
+        card('<h2>Hot Pot Go</h2><p>Your restaurant \u00b7 day ' + st.day.n + ' \u00b7 ' + signed(Math.round(st.money)) + ' in the till</p>' +
+             (saved.backup ? '<p class="warn">The last save could not be read. This is the one from before.</p>' : '') +
+             '<button data-do="continue">Continue</button><button class="quiet" data-do="ask">New restaurant</button>');
+      }
+      el.addEventListener('click', function(e){
+        var what = e.target && e.target.getAttribute && e.target.getAttribute('data-do');
+        if (what === 'ask') card('<h2>Start over?</h2><p>A new restaurant takes the place of the saved one.</p>' +
+                                 '<button data-do="new">Yes, start over</button><button class="quiet" data-do="back">Back</button>');
+        else if (what === 'back') first();
+        else if (what){
+          begin(what);
+          var cv = document.querySelector('canvas');   // straight back into the game
+          try { var lock = cv && cv.requestPointerLock && cv.requestPointerLock(); if (lock && lock.catch) lock.catch(function(){}); } catch (err){}
+        }
+      });
+      first(); document.body.appendChild(el); document.body.classList.add('hp-hold');
+    }
+    if (store){
+      try {
+        var files = store.read() || {}, main = files.main ? readSave(files.main) : null, backup = !main && files.backup ? readSave(files.backup) : null;
+        if (main) saved = { data: main };
+        else if (backup) saved = { data: backup, backup: true };
+        if (files.main && !main){   // it is kept beside the new save, not overwritten
+          console.error('The saved game could not be read' + (backup ? '; using the backup.' : '; starting a new restaurant.'));
+          if (store.setAside) store.setAside();
+        }
+      } catch (e){ console.error('Loading the saved game failed:', e); }
+      if (saved){ hold = true; showStart(); }
+      window.addEventListener('keydown', function(e){ if (hold && e.key === 'Enter') begin('continue'); });
+      window.addEventListener('beforeunload', function(){ saveNow(false); });
+    }
+
     return {
       update: update, mouse: mouse,
+      // ---- for tests only ----
+      debugDay: function(){ return JSON.parse(JSON.stringify(state.day)); },
+      debugTime: function(minutes){ state.day.time = minutes; },
+      debugSave: saveNow, debugSnapshot: snapshot, debugBegin: begin, debugHold: function(){ return hold; },
+      debugLoad: function(text){ var d = readSave(text); if (d) applySave(d); return !!d; },
+      debugCheck: function(text){ return !!readSave(text); },
       // ---- for tests only ----
       debugState: function(){
         var it = carried();
         return { money: state.money, served: state.served, lost: state.lost, carry: it ? it.kind : null,
+                 day: state.day.n + ' ' + state.day.phase + ' ' + Math.floor(state.day.time / 60) + ':' + ('0' + Math.floor(state.day.time % 60)).slice(-2),
                  crates: VEG.map(function(k){ return state.crates[k]; }).join('/'), bowls: state.bowls,
                  pot: state.pot.phase + ' x' + state.pot.portions + ' has ' + VEG.map(function(k){ return state.pot.has[k]; }).join('') +
                       ' broth ' + state.pot.broth.toFixed(2) + ' spice ' + state.pot.spice + ' heat ' + state.pot.heat + ' ' + Math.round(state.pot.temp) + 'deg cooked ' +

@@ -1,6 +1,7 @@
 // Electron main process: opens Hot Pot Go in its own window
-const { app, BrowserWindow, Menu, protocol, net } = require('electron');
+const { app, BrowserWindow, Menu, protocol, net, ipcMain } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const { pathToFileURL } = require('url');
 
 // On PCs with two graphics cards (e.g. Intel + NVIDIA) use the powerful one
@@ -18,6 +19,55 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 const served = { ok: [], failed: [] };   // for the self-test
+
+// The saved game: restaurant.json in the user's data folder, with the save from before
+// beside it as restaurant.backup.json. A self-test neither reads nor writes the player's
+// save (HOTPOT_SAVE_DIR gives a test its own folder).
+function saveDir() {
+  if (process.env.HOTPOT_SAVE_DIR) return process.env.HOTPOT_SAVE_DIR;
+  if (process.env.HOTPOT_SELFTEST) return null;
+  return path.join(app.getPath('userData'), 'saves');
+}
+function readText(file) {
+  try { return fs.readFileSync(file, 'utf8'); } catch (e) { return null; }
+}
+function isSave(text) {
+  try { return !!JSON.parse(text).state; } catch (e) { return false; }
+}
+function serveSaves() {
+  ipcMain.on('save:read', (event) => {
+    const dir = saveDir();
+    event.returnValue = dir
+      ? { main: readText(path.join(dir, 'restaurant.json')), backup: readText(path.join(dir, 'restaurant.backup.json')) }
+      : { main: null, backup: null };
+  });
+  // A save the game could not read is not thrown away: it is put aside under another name.
+  ipcMain.on('save:aside', (event) => {
+    const dir = saveDir();
+    try {
+      if (dir) fs.renameSync(path.join(dir, 'restaurant.json'), path.join(dir, 'restaurant.unreadable.json'));
+      event.returnValue = !!dir;
+    } catch (e) { event.returnValue = false; }
+  });
+  // Written to a new file first and then renamed over the old one, so a crash in the
+  // middle of writing never leaves a half-written save behind.
+  ipcMain.on('save:write', (event, text, keepBackup) => {
+    const dir = saveDir();
+    if (!dir) { event.returnValue = false; return; }
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+      const file = path.join(dir, 'restaurant.json'), fresh = file + '.new';
+      fs.writeFileSync(fresh, text);
+      const old = readText(file);
+      if (keepBackup && old && isSave(old)) fs.writeFileSync(path.join(dir, 'restaurant.backup.json'), old);
+      fs.renameSync(fresh, file);
+      event.returnValue = true;
+    } catch (e) {
+      console.log('[save] Could not write the saved game: ' + e.message);
+      event.returnValue = false;
+    }
+  });
+}
 
 function serveAppFiles() {
   protocol.handle('app', async (request) => {
@@ -46,6 +96,7 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      preload: path.join(__dirname, 'preload.js'),
     },
   });
 
@@ -142,6 +193,7 @@ Menu.setApplicationMenu(null);
 
 app.whenReady().then(() => {
   serveAppFiles();
+  serveSaves();
   createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

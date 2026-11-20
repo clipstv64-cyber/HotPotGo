@@ -506,6 +506,9 @@
           // where the player looks, and whether a movement key is held
           look: { get: function(){ return { yaw: lookYaw, pitch: lookPitch }; }, set: function(yaw, pitch){ lookYaw = yaw; lookPitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, pitch)); } },
           isMoving: function(){ return !!(keys.w || keys.a || keys.s || keys.d); },
+          // where the chef stands (for the saved game)
+          chefAt: { get: function(){ return model ? { x: model.position.x, z: model.position.z } : null; },
+                    set: function(x, z){ if (!model) return false; model.position.x = x; model.position.z = z; return true; } },
           // the guests: who they are, their chair and table, their head and hands, where they
           // are right now ('away', 'coming', 'seated', 'leaving'), and how to send them in and out
           getGuests: function(){

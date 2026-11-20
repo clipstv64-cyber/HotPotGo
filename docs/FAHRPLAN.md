@@ -38,8 +38,8 @@ Rest dran kommt. Er wird nach jeder Etappe aktualisiert.
 | 15 | Essen zum Tisch bringen | fertig |
 | 16 | Kunden bezahlen lassen | fertig: 9 € pro Portion plus Trinkgeld für schnelle Bedienung, Startgeld 250 € |
 | 17 | Geduldsanzeige und Verlassen des Restaurants | fertig: nach dem Bezahlen oder wenn die Geduld aufgebraucht ist, stehen sie auf und gehen durch die Tür hinaus |
-| 18 | Einfache Tagesabrechnung | fehlt: es gibt noch keinen Tag und keine Uhr |
-| 19 | Speichern und Laden | fehlt |
+| 18 | Einfache Tagesabrechnung | fertig: Tag mit Uhr (11 bis 21 Uhr), Feierabend, Abrechnungszettel mit Gästen, Verkauf, Trinkgeld, Zutatenkosten, Tagesgewinn und Kassenstand; danach beginnt der nächste Tag |
+| 19 | Speichern und Laden | fertig: das Spiel speichert von selbst (alle 20 Sekunden, bei jedem Abschnitt des Tages, beim Schließen des Fensters) und bietet beim Start „Continue“ oder „New restaurant“ an; Sicherungskopie vom Vortag; ein Pausenmenü mit eigenem Speichern-Punkt fehlt noch |
 
 Schon vorhanden, obwohl erst für später geplant: Flecken auf dem Boden und Kehren mit
 dem Besen; Büro mit Computer, Lagerraum und Putzkammer als Räume (noch ohne Funktion).
@@ -59,9 +59,14 @@ dem der Gastgeber die Aktionen prüft.
    Brühe gibt es als Vorrat (reicht für etwa sechs Töpfe), der Krug wird daraus nachgefüllt.
 4. **Gäste kommen und gehen.** Erledigt (20.11.2026). Offen: freie Platzwahl (jeder hat noch
    seinen festen Stuhl), Gäste weichen nur dem Koch aus, nicht einander.
-5. **Der Tag.** Uhr, Öffnen und Schließen, Tagesabrechnung, Speichern und Laden.
+5. **Der Tag.** Erledigt (20.11.2026): Uhr, Öffnen und Schließen, Tagesabrechnung, Speichern
+   und Laden. Damit ist das Abnahmekriterium von Phase 1 erfüllt: Spiel starten, Eintopf
+   kochen, Gäste bedienen, Geld verdienen, den Tag beenden, Fortschritt speichern.
 
-Danach folgt Phase 2 des Konzepts (Computer mit Bestellungen und Lieferungen, Geräte
+Offen aus Phase 1 (bewusst vereinfacht): Kühlschrank ohne Funktion, Bestellung am Tisch
+aufnehmen, freie Platzwahl der Gäste, Spülen, Pausenmenü.
+
+Als Nächstes folgt Phase 2 des Konzepts (Computer mit Bestellungen und Lieferungen, Geräte
 und Möbel kaufen, Bewertungen, weitere Gerichte), dann Mehrspieler und Mitarbeiter.
 
 ## Absprachen
@@ -81,4 +86,17 @@ und Möbel kaufen, Bewertungen, weitere Gerichte), dann Mehrspieler und Mitarbei
 - **Reihenfolge wie im Konzept:** Mitarbeiter, freies Möbelstellen, neue Räume und
   weitere Gerichte kommen in den Phasen 2 bis 4.
 - **Werte aus dem Konzept** (250 € Startgeld, 9 € pro Portion, 35 € Zutaten pro Topf)
-  übernehme ich mit der Tages- und Geld-Etappe als Ausgangspunkt.
+  sind übernommen: ein Gemüse kostet 8 €, die Brühe für einen Topf 11 €.
+- **Der Tag** (20.11.2026): Beim Vorbereiten steht die Uhr auf 11:00, damit man in Ruhe
+  kochen kann. Sie läuft, sobald an der Eingangstür geöffnet wird. Die Öffnungszeit bis
+  21:00 dauert 12 Minuten (mit Vorbereitung etwa die 15 bis 20 Minuten aus dem Konzept;
+  einstellbar in `RULES.day`). Schließen gilt für den ganzen Tag, auch wenn man selbst
+  früher schließt. Sind die letzten Gäste gegangen, beendet man den Tag an der Tür.
+- **Vorrat über Nacht:** Bis man am Computer bestellen kann (Phase 2), werden Kisten und
+  Brühe über Nacht von selbst aufgefüllt und in der Abrechnung abgezogen, soweit das Geld
+  reicht. Reste im Topf bleiben für den nächsten Tag.
+- **Spielstand:** eine Datei im Benutzerordner des Spiels (`saves/restaurant.json`), dazu
+  der Stand vom Vortag als Sicherung. Gespeichert werden Regeln-Zustand, Standort des
+  Kochs und Flecken. Nicht gespeichert: der Besen (steht nach dem Laden in der Kammer)
+  und Gäste, die gerade unterwegs sind (sie sind nach dem Laden draußen). Eine Datei, die
+  sich nicht lesen lässt, wird nicht überschrieben, sondern beiseitegelegt.

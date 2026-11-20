@@ -838,21 +838,42 @@
       for (var tries = 0; tries < 30; tries++){
         var x = rnd(A.x0, A.x1), z = rnd(A.z0, A.z1);
         if (!freeSpot(x, z, size * 0.2)) continue;
-        var kind = Math.floor(Math.random() * 4), u0 = (kind % 2) * 0.5, v0 = kind < 2 ? 0.5 : 0;
-        var geo = new T.PlaneGeometry(1, 1), uv = geo.attributes.uv;
-        for (var i = 0; i < uv.count; i++) uv.setXY(i, u0 + uv.getX(i) * 0.5, v0 + uv.getY(i) * 0.5);
-        var mat = new T.MeshStandardMaterial({ map: stainTex, transparent: true, depthWrite: false, roughness: 0.35, metalness: 0,
-                                               polygonOffset: true, polygonOffsetFactor: -2 });
-        var m = new T.Mesh(geo, mat);
-        m.rotation.set(-Math.PI / 2, 0, Math.random() * Math.PI * 2);
-        layer = (layer + 1) % 20;
-        m.position.set(x, 0.006 + layer * 0.0004, z);
-        m.scale.setScalar(0.01); m.receiveShadow = true;
-        root.add(m);
-        // clean: 0 = fresh .. 1 = swept away; busy: being swept right now
-        stains.push({ mesh: m, x: x, z: z, size: size, grow: 0, clean: 0, busy: false });
+        addStain(x, z, size, Math.floor(Math.random() * 4), Math.random() * Math.PI * 2);
         return;
       }
+    }
+    // kind: which of the four stains on the texture; turn: how it lies
+    function addStain(x, z, size, kind, turn){
+      var u0 = (kind % 2) * 0.5, v0 = kind < 2 ? 0.5 : 0;
+      var geo = new T.PlaneGeometry(1, 1), uv = geo.attributes.uv;
+      for (var i = 0; i < uv.count; i++) uv.setXY(i, u0 + uv.getX(i) * 0.5, v0 + uv.getY(i) * 0.5);
+      var mat = new T.MeshStandardMaterial({ map: stainTex, transparent: true, depthWrite: false, roughness: 0.35, metalness: 0,
+                                             polygonOffset: true, polygonOffsetFactor: -2 });
+      var m = new T.Mesh(geo, mat);
+      m.rotation.set(-Math.PI / 2, 0, turn);
+      layer = (layer + 1) % 20;
+      m.position.set(x, 0.006 + layer * 0.0004, z);
+      m.scale.setScalar(0.01); m.receiveShadow = true;
+      root.add(m);
+      // clean: 0 = fresh .. 1 = swept away; busy: being swept right now
+      var st = { mesh: m, x: x, z: z, size: size, kind: kind, turn: turn, grow: 0, clean: 0, busy: false };
+      stains.push(st);
+      return st;
+    }
+    // for the saved game: the stains as plain data, and putting them back
+    function getStains(){
+      return stains.filter(function(st){ return st.clean < 1; })
+        .map(function(st){ return { x: st.x, z: st.z, size: st.size, kind: st.kind, turn: st.turn, clean: st.busy ? 0 : st.clean }; });
+    }
+    function setStains(list){
+      sweep = null;
+      stains.forEach(function(st){ root.remove(st.mesh); st.mesh.geometry.dispose(); st.mesh.material.dispose(); });
+      stains.length = 0;
+      (list || []).forEach(function(d){
+        if (!(isFinite(d.x) && isFinite(d.z) && d.size > 0)) return;
+        var st = addStain(+d.x, +d.z, +d.size, (d.kind | 0) & 3, +d.turn || 0);
+        st.grow = 1; st.clean = Math.max(0, Math.min(0.99, +d.clean || 0));
+      });
     }
     function stainDist(s){ var chef = ctx.getChef(); return chef ? Math.hypot(s.x - chef.position.x, s.z - chef.position.z) : 0; }
     // the stain the camera is pointing at (not further away than the broom reaches)
@@ -1068,7 +1089,7 @@
     function afterAnimation(dt){ posePlayer(dt); }
 
     return {
-      interact: interact, grab: grab, click: click, update: update, afterAnimation: afterAnimation,
+      interact: interact, grab: grab, click: click, update: update, getStains: getStains, setStains: setStains, afterAnimation: afterAnimation,
       isHolding: function(){ return holding; },
       // for the other parts of the game (restaurant.js)
       addInteractables: function(fn){ moreInteractables.push(fn); },
