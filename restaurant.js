@@ -523,65 +523,88 @@
       '.hp-start button:first-of-type{margin-top:20px}.hp-start button.quiet{background:transparent;color:#4a3626}' +
       '.hp-start button:hover{background:#6b513a;color:#f4ead2}' +
       '.hp-hold .hp-money,.hp-hold .hp-open,.hp-hold .hp-carry,.hp-hold .hp-hint{visibility:hidden}' +
-      // the computer in the office: a flat monitor showing the restaurant's back-office app
-      '.hp-pc{position:fixed;left:0;top:0;right:0;bottom:0;display:none;align-items:center;justify-content:center;background:rgba(8,9,12,.78);z-index:18;' +
-      'font:14px/1.4 "Segoe UI",system-ui,sans-serif;color:#1f2430;user-select:none}' +
-      '.hp-pc.on{display:flex}' +
+      // the computer in the office: a flat monitor; on it paper notes on the kitchen's dark wood
+      '.hp-pc{position:fixed;left:0;top:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;background:rgba(8,6,4,.6);z-index:18;' +
+      'font:15px/1.4 Georgia,"Times New Roman",serif;font-variant-numeric:lining-nums;color:#4a3626;user-select:none;' +
+      'opacity:0;visibility:hidden;transition:opacity .35s,visibility .35s}' +
+      '.hp-pc.on{opacity:1;visibility:visible}' +
       '.hp-pc .case{position:relative;flex:none;margin-bottom:40px;padding:10px;background:#111317;border-radius:16px;box-shadow:0 30px 90px rgba(0,0,0,.65),0 0 0 1px #2a2e36}' +
       '.hp-pc .case:before{content:"";position:absolute;left:50%;bottom:-30px;width:110px;height:30px;margin-left:-55px;background:linear-gradient(90deg,#1a1d22,#3a3f49,#1a1d22)}' +
       '.hp-pc .case:after{content:"";position:absolute;left:50%;bottom:-40px;width:300px;height:11px;margin-left:-150px;border-radius:6px 6px 3px 3px;background:#2a2e36;box-shadow:0 6px 14px rgba(0,0,0,.5)}' +
-      '.hp-pc .screen{width:920px;height:570px;display:flex;overflow:hidden;border-radius:8px;background:#f3f4f7}' +
+      '.hp-pc .screen{width:920px;height:570px;display:flex;overflow:hidden;border-radius:8px;background:#3a2414 url(textures/k_wood.webp) center/560px}' +
       '.hp-pc svg{width:18px;height:18px;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}' +
       '.hp-pc button{font:inherit;cursor:pointer;border:none}' +
       '.hp-pc button:disabled{cursor:default}' +
-      // the side bar
-      '.hp-pc .side{width:186px;flex:none;display:flex;flex-direction:column;gap:4px;padding:18px 12px 14px;background:#1d222b;color:#c4c9d4}' +
-      '.hp-pc .logo{display:flex;align-items:center;gap:10px;padding:0 6px 16px;color:#fff;font-weight:700;font-size:15px;line-height:1.2}' +
-      '.hp-pc .logo i{width:30px;height:30px;flex:none;border-radius:9px;background:linear-gradient(135deg,#ff8a3d,#e2502a)}' +
-      '.hp-pc .logo small{display:block;font-weight:500;font-size:11.5px;color:#8a92a3}' +
-      '.hp-pc .nav{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:9px;background:transparent;color:#c4c9d4;font-weight:600;text-align:left}' +
-      '.hp-pc .nav:hover{background:#2a303b;color:#fff}.hp-pc .nav.on{background:#e8612c;color:#fff}' +
-      '.hp-pc kbd{font:600 11px/1 "Segoe UI",system-ui,sans-serif;padding:3px 6px;margin-left:auto;border-radius:5px;background:rgba(255,255,255,.14);color:inherit}' +
-      // the top bar and the page
+      // the side: the program's name and its pages, as paper tabs on the wood
+      '.hp-pc .side{width:186px;flex:none;display:flex;flex-direction:column;gap:6px;padding:18px 0 14px 12px;background:linear-gradient(90deg,rgba(14,8,4,.62),rgba(14,8,4,.4));color:#ead9b8}' +
+      '.hp-pc .logo{display:flex;align-items:center;gap:10px;padding:0 6px 16px;color:#f4ead2;font:italic 700 19px/1.15 Georgia,"Times New Roman",serif;text-shadow:0 2px 0 rgba(0,0,0,.45)}' +
+      '.hp-pc .logo i{display:flex;align-items:center;justify-content:center;width:36px;height:36px;flex:none;border-radius:50%;background:#f4ead2;color:#4a3626;box-shadow:0 2px 0 rgba(0,0,0,.4)}' +
+      '.hp-pc .logo i svg{width:22px;height:22px}' +
+      '.hp-pc .logo small{display:block;font:italic 400 13px/1.2 Georgia,"Times New Roman",serif;color:#c9b48f;text-shadow:none}' +
+      '.hp-pc .nav{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:4px 0 0 4px;background:transparent;color:#ead9b8;font:700 16px/1.2 Georgia,"Times New Roman",serif;text-align:left}' +
+      '.hp-pc .nav:hover{background:rgba(244,234,210,.14)}' +
+      '.hp-pc .nav.on{background:#f4ead2;color:#4a3626;box-shadow:0 2px 0 rgba(0,0,0,.35)}' +
+      '.hp-pc .nav.out{margin-right:12px;border-radius:4px}' +
+      '.hp-pc kbd{font:700 11px/1 system-ui,"Segoe UI",sans-serif;padding:3px 6px;margin-left:auto;border-radius:5px;background:rgba(244,234,210,.2);color:inherit}' +
+      // the top: the page's name on the wood, and the day and the till as in the game's own display
       '.hp-pc .main{flex:1;min-width:0;display:flex;flex-direction:column}' +
-      '.hp-pc .top{display:flex;align-items:center;gap:10px;height:62px;flex:none;padding:0 20px;background:#fff;border-bottom:1px solid #e3e6ec}' +
-      '.hp-pc .top h2{margin:0;font:700 20px/1.2 "Segoe UI",system-ui,sans-serif}.hp-pc .top h2 small{display:block;font-weight:500;font-size:12.5px;color:#7a8090}' +
+      '.hp-pc .top{display:flex;align-items:center;gap:10px;height:64px;flex:none;padding:0 20px}' +
+      '.hp-pc .top h2{margin:0;font:italic 700 28px/1.1 Georgia,"Times New Roman",serif;color:#f4ead2;text-shadow:0 2px 0 rgba(0,0,0,.45)}' +
+      '.hp-pc .top h2 small{display:block;font:italic 400 13.5px/1.3 Georgia,"Times New Roman",serif;color:#d2bf9b;text-shadow:none}' +
       '.hp-pc .grow{flex:1}' +
-      '.hp-pc .chip{display:flex;align-items:center;gap:7px;padding:6px 12px;border-radius:999px;background:#f0f2f6;font-weight:600;font-size:13px;white-space:nowrap}' +
-      '.hp-pc .chip i{width:8px;height:8px;border-radius:50%;background:#a3a9b6}.hp-pc .chip.open i{background:#22a559}.hp-pc .chip.till{background:#fff3ea;color:#b9471a}' +
-      '.hp-pc .page{flex:1;min-height:0;display:flex;gap:14px;padding:16px 20px}' +
-      '.hp-pc .col{display:flex;flex-direction:column;gap:10px;min-width:0}' +
-      '.hp-pc .card{background:#fff;border-radius:12px;box-shadow:0 1px 2px rgba(20,25,40,.07),0 0 0 1px #e6e9ef;padding:12px 14px}' +
-      '.hp-pc h4{margin:0 0 8px;font:700 12px/1.2 "Segoe UI",system-ui,sans-serif;letter-spacing:.6px;text-transform:uppercase;color:#7a8090}' +
-      '.hp-pc p{margin:0}.hp-pc .muted{color:#7a8090}.hp-pc .small{font-size:12px}' +
-      '.hp-pc .warn{color:#c93c2c;font-weight:600}.hp-pc .ok{color:#1c8a4b;font-weight:600}' +
+      '.hp-pc .chip{display:flex;align-items:center;gap:7px;padding:6px 13px;border-radius:999px;background:rgba(15,12,10,.55);color:rgba(255,255,255,.92);' +
+      'font:600 13px/1.2 system-ui,"Segoe UI",sans-serif;letter-spacing:.3px;white-space:nowrap}' +
+      '.hp-pc .chip i{width:9px;height:9px;border-radius:50%;background:#9a9a9a}.hp-pc .chip.open i{background:#6fd24f;box-shadow:0 0 6px rgba(111,210,79,.8)}' +
+      '.hp-pc .chip.late i{background:#e0a23a}' +
+      '.hp-pc .chip.till{font-size:15px}.hp-pc .chip.till i{width:14px;height:14px;background:radial-gradient(circle at 35% 30%,#ffe48a,#d79a1e);box-shadow:inset 0 0 0 1.5px rgba(120,70,0,.45)}' +
+      '.hp-pc .page{flex:1;min-height:0;display:flex;gap:16px;padding:4px 22px 18px 20px}' +
+      '.hp-pc .col{display:flex;flex-direction:column;gap:11px;min-width:0}' +
+      // a note: a slip of paper
+      '.hp-pc .card{position:relative;background:#f4ead2;border-radius:2px;box-shadow:0 3px 9px rgba(0,0,0,.45);padding:11px 15px}' +
+      // (pinned, like the recipe on the kitchen wall)
+      '.hp-pc .card:before{content:"";position:absolute;left:50%;top:-5px;width:11px;height:11px;margin-left:-5px;border-radius:50%;' +
+      'background:radial-gradient(circle at 35% 30%,#ff9a85,#b3321f 60%,#7a1d12);box-shadow:0 2px 2px rgba(0,0,0,.45)}' +
+      '.hp-pc .good:before{left:16px;margin-left:0}' +
+      '.hp-pc .col:first-child .note{transform:rotate(-.5deg)}' +
+      '.hp-pc .col:last-child .card:nth-child(odd){transform:rotate(.5deg)}.hp-pc .col:last-child .card:nth-child(even){transform:rotate(-.4deg)}' +
+      '.hp-pc h4{margin:0 0 7px;padding-bottom:4px;border-bottom:1px dotted rgba(74,54,38,.45);font:italic 700 17px/1.2 Georgia,"Times New Roman",serif;color:#4a3626}' +
+      '.hp-pc p{margin:0}.hp-pc .muted{color:#8a6f55}.hp-pc .small{font-size:13px}' +
+      '.hp-pc .warn{color:#b3321f;font-weight:700}.hp-pc .ok{color:#3f8a2c;font-weight:700}' +
       // one thing to order
-      '.hp-pc .good{flex:1;display:flex;align-items:center;gap:16px;padding:10px 16px}' +
-      '.hp-pc .pic{width:78px;height:78px;flex:none;border-radius:14px;background:#f3ece4;display:flex;align-items:center;justify-content:center}.hp-pc .pic img{width:74px;height:74px}' +
-      '.hp-pc .what{flex:1;min-width:0}.hp-pc .what b{font-size:16px}.hp-pc .price{margin-left:8px;color:#7a8090;font-size:13px}' +
-      '.hp-pc .meter{display:flex;height:7px;margin:6px 0 4px;border-radius:4px;background:#e9ecf1;overflow:hidden}' +
-      '.hp-pc .meter i{background:#e8612c}.hp-pc .meter u{background:#f6b998}' +
-      '.hp-pc .what small{color:#7a8090;font-size:12px}' +
-      '.hp-pc .qty{display:flex;align-items:center;gap:4px;flex:none;padding:3px;border-radius:999px;background:#f0f2f6}' +
-      '.hp-pc .qty b{min-width:24px;text-align:center;font-size:16px}' +
-      '.hp-pc .qty button{width:30px;height:30px;border-radius:50%;background:#fff;color:#1f2430;font:700 18px/1 "Segoe UI",system-ui,sans-serif;box-shadow:0 1px 2px rgba(20,25,40,.18)}' +
-      '.hp-pc .qty button:hover{background:#e8612c;color:#fff}.hp-pc .qty button:disabled{background:transparent;color:#b9bec9;box-shadow:none}' +
+      '.hp-pc .good{flex:1;display:flex;align-items:center;gap:16px;padding:8px 16px}' +
+      '.hp-pc .good:nth-child(odd){transform:rotate(-.25deg)}.hp-pc .good:nth-child(even){transform:rotate(.2deg)}' +
+      '.hp-pc .pic{width:76px;height:76px;flex:none;border-radius:50%;background:#e9dab6;box-shadow:inset 0 0 0 2px rgba(74,54,38,.18);display:flex;align-items:center;justify-content:center}' +
+      '.hp-pc .pic img{width:70px;height:70px}' +
+      '.hp-pc .what{flex:1;min-width:0}.hp-pc .what b{font-size:20px}.hp-pc .price{margin-left:9px;font-style:italic;color:#8a6f55}' +
+      '.hp-pc .stock{display:flex;gap:4px;margin:6px 0 4px}' +
+      '.hp-pc .stock i{width:15px;height:15px;border:2px solid #4a3626;border-radius:2px}' +
+      '.hp-pc .stock i.full{background:#c9641f}.hp-pc .stock i.half{background:linear-gradient(90deg,#c9641f 50%,transparent 50%)}' +
+      '.hp-pc .stock i.way{border-style:dashed;border-color:#a0591c;background:repeating-linear-gradient(135deg,rgba(201,100,31,.4) 0 3px,transparent 3px 6px)}' +
+      '.hp-pc .what small{font-style:italic;color:#8a6f55;font-size:13px}' +
+      '.hp-pc .qty{display:flex;align-items:center;gap:6px;flex:none}' +
+      '.hp-pc .qty b{min-width:26px;text-align:center;font-size:20px}' +
+      '.hp-pc .qty button{width:32px;height:32px;border-radius:50%;background:#f4ead2;border:2px solid #4a3626;color:#4a3626;font:700 18px/1 Georgia,"Times New Roman",serif}' +
+      '.hp-pc .qty button:hover{background:#4a3626;color:#f4ead2}' +
+      '.hp-pc .qty button:disabled{background:transparent;border-color:rgba(74,54,38,.28);color:rgba(74,54,38,.28)}' +
       // the order and the deliveries
-      '.hp-pc .row{display:flex;justify-content:space-between;gap:10px;padding:2px 0}' +
-      '.hp-pc .row.total{margin-top:6px;padding-top:8px;border-top:1px solid #e3e6ec;font-size:16px}' +
-      '.hp-pc .primary{display:block;width:100%;margin:10px 0 8px;padding:10px;border-radius:10px;background:#e8612c;color:#fff;font-weight:700;font-size:15px}' +
-      '.hp-pc .primary:hover{background:#d4531f}.hp-pc .primary:disabled{background:#e3e6ec;color:#9aa1ae}' +
-      '.hp-pc .ship{padding:6px 0;border-top:1px solid #eef0f4}.hp-pc .ship:first-of-type{border-top:none;padding-top:0}' +
-      '.hp-pc .ship .bar{height:5px;margin-top:5px;border-radius:3px;background:#e9ecf1;overflow:hidden}.hp-pc .ship .bar i{display:block;height:100%;background:#2f7de1}' +
+      '.hp-pc .row{display:flex;justify-content:space-between;gap:10px;padding:2px 0;border-bottom:1px dotted rgba(74,54,38,.4)}' +
+      '.hp-pc .row.total{margin-top:8px;padding-top:7px;border-bottom:none;border-top:2px solid #4a3626;font-size:19px;font-weight:700}' +
+      '.hp-pc .row.after{border-bottom:none;font-style:italic;color:#8a6f55}' +
+      '.hp-pc .note .row{padding:4px 0}.hp-pc .note .row.total{padding-top:7px}.hp-pc .row.minus b{color:#b3321f}.hp-pc .row.plus b{color:#3f8a2c}.hp-pc .row.till{border-bottom:none}' +
+      '.hp-pc .primary{display:block;width:100%;margin:9px 0 7px;padding:9px;border:2px solid #4a3626;border-radius:3px;background:#4a3626;color:#f4ead2;font:700 18px/1.2 Georgia,"Times New Roman",serif}' +
+      '.hp-pc .primary:hover{background:#6b513a}' +
+      '.hp-pc .primary:disabled{background:transparent;border:2px dashed rgba(74,54,38,.35);color:rgba(74,54,38,.45)}' +
+      '.hp-pc .ship{padding:6px 0;border-top:1px dotted rgba(74,54,38,.4)}.hp-pc .ship:first-of-type{border-top:none;padding-top:0}' +
+      '.hp-pc .ship .bar{height:6px;margin-top:5px;border-radius:3px;background:rgba(74,54,38,.16);overflow:hidden}.hp-pc .ship .bar i{display:block;height:100%;background:#3f8a2c}' +
       '.hp-pc .cut{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
-      '.hp-pc .tag{display:inline-block;padding:1px 8px;margin-right:6px;border-radius:999px;font-size:11.5px;font-weight:700;background:#e5f0ff;color:#2265c4}.hp-pc .tag.here{background:#e3f6ea;color:#1c8a4b}' +
+      '.hp-pc .one .cut{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}' +
+      // (a rubber stamp)
+      '.hp-pc .tag{display:inline-block;padding:1px 7px;margin-right:8px;border:2px solid currentColor;border-radius:3px;transform:rotate(-2deg);opacity:.9;' +
+      'font:700 12px/1.3 Georgia,"Times New Roman",serif;letter-spacing:1.2px;text-transform:uppercase;color:#a0591c}.hp-pc .tag.here{color:#3f8a2c}' +
       // the accounts
-      '.hp-pc .tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}' +
-      '.hp-pc .tile b{display:block;font-size:24px;line-height:1.15}.hp-pc .tile.neg b{color:#c93c2c}.hp-pc .tile.pos b{color:#1c8a4b}' +
-      '.hp-pc table{width:100%;border-collapse:collapse}.hp-pc td,.hp-pc th{padding:5px 8px;text-align:right;border-bottom:1px solid #eef0f4}' +
-      '.hp-pc th{font:700 11.5px/1.2 "Segoe UI",system-ui,sans-serif;letter-spacing:.5px;text-transform:uppercase;color:#7a8090}' +
-      '.hp-pc td:first-child,.hp-pc th:first-child{text-align:left}.hp-pc tr:last-child td{border-bottom:none}.hp-pc td.neg{color:#c93c2c}.hp-pc td.pos{color:#1c8a4b}' +
-      '.hp-pc .till b{font-size:30px;line-height:1.1;color:#b9471a}';
+      '.hp-pc table{width:100%;border-collapse:collapse}.hp-pc td,.hp-pc th{padding:4px 5px;text-align:right;white-space:nowrap;border-bottom:1px dotted rgba(74,54,38,.4)}' +
+      '.hp-pc th{font:italic 700 13.5px/1.2 Georgia,"Times New Roman",serif;color:#8a6f55}' +
+      '.hp-pc td:first-child,.hp-pc th:first-child{text-align:left}.hp-pc tr:last-child td{border-bottom:none}.hp-pc td.neg{color:#b3321f}.hp-pc td.pos{color:#3f8a2c}';
     document.head.appendChild(css);
     var moneyEl = document.createElement('div'); moneyEl.className = 'hp-money';
     moneyEl.innerHTML = '<span class="hp-coin"></span><span class="hp-amount"></span>'; document.body.appendChild(moneyEl);
@@ -1317,7 +1340,7 @@
     function list(words){ return words.join(', ').replace(/, ([^,]*)$/, ' and $1'); }
     play.addInteractables(function(hands){
       var out = [], it = carried(), pot = state.pot;
-      if (!place.pot || hold || pc) return out;
+      if (!place.pot || hold || pc || (ctx.seat && ctx.seat.active())) return out;
       if (state.day.phase === 'done'){   // the accounts are on screen: on to the next morning
         var me = ctx.getChef();
         return me ? [{ pos: me.position, reach: 9, key: 'E', label: 'Start day ' + (state.day.n + 1), use: function(){ act('nextDay'); } }] : out;
@@ -1393,7 +1416,15 @@
         if (it.goods.broth > 0) add({ pos: place.home.broth.pos, reach: RULES.shelfReach, key: 'E', label: 'Unpack the broth', use: function(){ act('unpack', 'broth'); }, obj: see(state.items[state.tools.broth]) });
       }
       // the computer in the office
-      add({ pos: PC, reach: 2.3, key: 'E', label: 'Use the computer', use: openPC });
+      var office = ctx.getOffice && ctx.getOffice(), swivel = office && office.chair, me = ctx.getChef();
+      var inOffice = !!office && !!office.room && me.position.x > office.room.x0 && me.position.x < office.room.x1 && me.position.z > office.room.z0 && me.position.z < office.room.z1;
+      if (inOffice && swivel && ctx.seat && ctx.seat.ready()){   // he sits down on the chair first; the screen comes on once he sits
+        var atChair = V(swivel.x, 0, swivel.z);
+        add(free ? { pos: atChair, reach: 2.1, key: 'E', label: 'Sit down at the computer', use: sitAtPC, obj: swivel.holder }
+                 : { pos: atChair, reach: 2.1, key: 'E', label: 'Hands full' });
+      } else if (inOffice && office.desk){   // (as long as the chair cannot be sat on: standing at the desk)
+        add({ pos: V(office.desk.x, 0, office.desk.z), reach: 2.2, key: 'E', label: 'Use the computer', use: openPC });
+      }
       if (it && !HOME[it.kind] && aim && !scoop){
         if (aim.free) add({ pos: V(aim.x, 0, aim.z), reach: 2.4, key: 'F', bias: 0.35, label: 'Put ' + nameOf(it, 'the') + ' down', use: function(){ if (aim && aim.free) act('putDown', aim); } });
         else add({ pos: V(aim.x, 0, aim.z), reach: 2.4, key: 'F', bias: 0.35, label: 'No room here' });
@@ -1707,10 +1738,11 @@
     }
 
     // ---------- the computer in the office ------------------------------------------------------
-    // E at the desk shows its screen, the restaurant's back-office app: ordering supplies,
-    // and the accounts. The mouse is free while it is on; E or Esc gets up again. The game
-    // goes on meanwhile.
-    var PC = V(5.2, 0, -15.8), DOCK = V(6.95, 0, -12.75);   // the desk; where deliveries are put down in the storeroom
+    // E at the office chair: the chef sits down (index.html), then the screen comes on, the
+    // restaurant's back-office program: ordering supplies, and the accounts. It looks like
+    // the game's own paper notes (the recipe, the day's slip) pinned on dark wood. The mouse
+    // is free while it is on; E or Esc switches it off and he gets up. The game goes on.
+    var DOCK = V(6.95, 0, -12.75);   // where deliveries are put down in the storeroom
     var pc = null;   // while it is used: { page: 'supplies' | 'accounts', cart, said: [text, kind], fresh, sig }
     var pcEl = document.createElement('div'); pcEl.className = 'hp-pc';
     pcEl.innerHTML = '<div class="case"><div class="screen"></div></div>';
@@ -1735,6 +1767,12 @@
       if (!pc) return;
       pc = null; pcEl.classList.remove('on'); document.body.classList.remove('hp-hold');
       lockMouse();
+      if (ctx.seat && ctx.seat.seated()) ctx.seat.stand();   // he gets up
+    }
+    // E at the chair: he sits down, then the screen comes on
+    function sitAtPC(){
+      if (pc || !ctx.seat || carried() || cutting || pouring || stirring) return;
+      ctx.seat.sit(openPC);   // (refused while he jumps or stands on something)
     }
     // a small picture of a model, drawn once with the game's own renderer
     var thumbs = {};
@@ -1748,7 +1786,9 @@
         sc.environment = scene.environment;
         sc.add(new T.AmbientLight(0xffffff, 0.7));
         var lamp = new T.DirectionalLight(0xffffff, 1.2); lamp.position.set(1.5, 3, 2); sc.add(lamp);
-        sc.add(instance(kind));
+        var thing = instance(kind);
+        if (md.align){ thing.rotation.y = Math.atan2(1.5, 1.9); r = Math.max(sz.x * 0.8, sz.y * 1.15, sz.z); }   // its length across the picture
+        sc.add(thing);
         var cam = new T.PerspectiveCamera(28, 1, 0.01, 20);
         cam.position.set(r * 1.5, sz.y / 2 + r * 1.3, r * 1.9); cam.lookAt(V(0, sz.y / 2, 0));
         var oldTarget = Rn.getRenderTarget(), oldColor = new T.Color(), oldAlpha = Rn.getClearAlpha(), buf = new Uint8Array(px * px * 4);
@@ -1769,20 +1809,28 @@
     function minSec(t){ t = Math.max(0, Math.ceil(t)); return Math.floor(t / 60) + ':' + (t % 60 < 10 ? '0' : '') + (t % 60); }
     function oneDec(x){ return Math.round(x * 10) / 10; }
     var ICON = {
-      box: '<svg viewBox="0 0 24 24"><path d="M3 7.5 12 3l9 4.5v9L12 21l-9-4.5z"/><path d="M3 7.5 12 12l9-4.5M12 12v9"/></svg>',
-      chart: '<svg viewBox="0 0 24 24"><path d="M5 20V11M12 20V4M19 20v-6M2 20h20"/></svg>',
-      out: '<svg viewBox="0 0 24 24"><path d="M10 4H5v16h5M15 8l4 4-4 4M19 12H9"/></svg>'
+      pot: '<svg viewBox="0 0 24 24"><path d="M4 11h16v4a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5z"/><path d="M2 11h20M9 8c0-1.6 1.4-1.6 1.4-3.2M13.6 8c0-1.6 1.4-1.6 1.4-3.2"/></svg>'
     };
     function pct(x){ return Math.round(clamp(x) * 100); }
+    // one little box for each place in the kitchen: filled = there, dashed = on its way, empty = room
+    function stockBoxes(have, coming, holds){
+      var h = '';
+      for (var n = 0; n < holds; n++) h += '<i class="' + (have - n > 0.95 ? 'full' : have - n > 0.05 ? 'half' : have + coming - n > 0.5 ? 'way' : '') + '"></i>';
+      return h;
+    }
     // the screen follows the state: drawn again whenever something on it has changed
     function drawPC(){
       if (!pc) return;
       var day = state.day, total = priceOf(pc.cart), boxes = parcels();
       var sig = [pc.page, JSON.stringify(pc.cart), pc.said, state.money, GOODS.map(function(k){ return oneDec(stockOf(k)) + '/' + room(k) + '/' + coming(k); }).join(' '),
                  state.orders.map(function(o){ return Math.ceil(o.left); }).join(','), boxes.map(function(p){ return p.at + JSON.stringify(p.goods); }).join(','),
-                 day.n, clockText(), day.phase, day.served, day.lost, day.sales, day.tips, day.spent, state.history.length].join('|');
-      if (sig === pc.sig) return;
-      pc.sig = sig;
+                 day.n, day.phase, day.served, day.lost, day.sales, day.tips, day.spent, state.history.length].join('|');
+      var when = 'Day ' + day.n + ' · ' + clockText() + ' · ' + (day.phase === 'open' ? 'Open' : day.phase === 'prep' ? 'Closed' : 'Closed for today');
+      if (sig === pc.sig){   // only the clock has moved on: its text alone is changed, the screen is not built again
+        if (when !== pc.when){ pc.when = when; var clockEl = pcScreen.querySelector('.when'); if (clockEl) clockEl.textContent = when; }
+        return;
+      }
+      pc.sig = sig; pc.when = when;
       var html = '', title, sub;
       if (pc.page === 'supplies'){
         title = 'Supplies'; sub = 'Order what the kitchen needs';
@@ -1791,7 +1839,7 @@
           var pic = thumb(k), have = stockOf(k), cap = holds(k), on = coming(k), n = pc.cart[k];
           cards += '<div class="card good"><div class="pic">' + (pic ? '<img src="' + pic + '" alt="">' : '') + '</div>' +
             '<div class="what"><b>' + GOOD[k].name + '</b><span class="price">' + euro(RULES.cost[k]) + (k === 'broth' ? ' per pot' : ' each') + '</span>' +
-            '<div class="meter"><i style="width:' + pct(have / cap) + '%"></i><u style="width:' + pct(on / cap) + '%"></u></div>' +
+            '<div class="stock">' + stockBoxes(have, on, cap) + '</div>' +
             '<small>' + (k === 'broth' ? 'For ' + oneDec(have) + ' of ' + cap + ' pots' : have + ' of ' + cap + (on ? '' : ' in the kitchen')) + (on ?' \u00b7 ' + on + ' on the way' : '') + '</small></div>' +
             '<div class="qty"><button data-do="minus:' + k + '"' + (n > 0 ? '' : ' disabled') + '>\u2212</button><b>' + n + '</b>' +
             '<button data-do="plus:' + k + '"' + (n < room(k) ? '' : ' disabled') + '>+</button></div></div>';
@@ -1801,7 +1849,7 @@
         var full = GOODS.every(function(k){ return room(k) === 0; });
         var order = '<div class="card"><h4>Your order</h4>' + (lines || '<p class="muted">' + (full ? 'The kitchen is full \u2013 there is no room for more right now.' : 'Choose what you need with + and \u2212.') + '</p>') +
           '<div class="row total"><span>Total</span><b>' + euro(total) + '</b></div>' +
-          '<div class="row muted"><span>Till afterwards</span><span>' + signed(state.money - total) + '</span></div>' +
+          '<div class="row after"><span>Till afterwards</span><span>' + signed(state.money - total) + '</span></div>' +
           (poor ? '<p class="warn">Not enough money in the till.</p>' : '') +
           '<button class="primary" data-do="buy"' + (total > 0 && !poor ? '' : ' disabled') + '>Order now</button>' +
           '<p class="muted small">Delivered to the storeroom in ' + RULES.delivery + ' s.</p></div>';
@@ -1815,38 +1863,39 @@
           rows.push('<div class="ship"><span class="tag">On its way</span>' + minSec(o.left) + '<div class="small cut">' + goodsText(o.goods) + '</div>' +
                     '<div class="bar"><i style="width:' + pct(1 - o.left / RULES.delivery) + '%"></i></div></div>');
         });
-        ships += rows.slice(0, 2).join('');
-        if (rows.length > 2) ships += '<p class="muted small">+ ' + (rows.length - 2) + ' more</p>';
+        var fit = GOODS.filter(function(k){ return pc.cart[k] > 0; }).length >= 3 ? 1 : 2;   // (a long order leaves less room below it)
+        ships += '<div class="' + (Math.min(fit, rows.length) === 1 ? 'one' : '') + '">' + rows.slice(0, fit).join('') + '</div>';
+        if (rows.length > fit) ships += '<p class="muted small">+ ' + (rows.length - fit) + ' more</p>';
         if (!state.orders.length && !boxes.length && !pc.said) ships += '<p class="muted">Nothing on its way.</p><p class="muted small">Carry a delivered box to the kitchen and unpack it at the crates and at the broth shelf.</p>';
-        html = '<div class="col" style="flex:1">' + cards + '</div><div class="col" style="width:252px;flex:none">' + order + '<div class="card" style="flex:1;min-height:0;overflow:hidden"><h4>Deliveries</h4>' + ships + '</div></div>';
+        html = '<div class="col" style="flex:1">' + cards + '</div><div class="col" style="width:252px;flex:none">' + order + '<div class="card" style="flex:1;min-height:0"><h4>Deliveries</h4>' + ships + '</div></div>';
       } else {
         title = 'Accounts'; sub = 'Day ' + day.n + ' so far, and the days before';
         var soFar = day.sales + day.tips - day.spent;
-        function tile(name, value, cls){ return '<div class="card tile' + (cls ? ' ' + cls : '') + '"><h4>' + name + '</h4><b>' + value + '</b></div>'; }
+        function line(name, value, cls){ return '<div class="row' + (cls ? ' ' + cls : '') + '"><span>' + name + '</span><b>' + value + '</b></div>'; }
         var days = '';
         if (!state.history.length) days = '<p class="muted">No day is finished yet. End a day at the front door to see it here.</p>';
         else {
-          days = '<table><tr><th>Day</th><th>Guests</th><th>Stew + tips</th><th>Supplies</th><th>Profit</th><th>Till</th></tr>';
+          days = '<table><tr><th>Day</th><th>Guests</th><th>Takings</th><th>Supplies</th><th>Profit</th><th>Till</th></tr>';
           state.history.slice(-5).reverse().forEach(function(r){
             days += '<tr><td>Day ' + r.n + '</td><td>' + r.served + '</td><td>' + euro(r.sales + r.tips) + '</td><td>' + signed(-r.cost) + '</td><td class="' + (r.profit < 0 ? 'neg' : r.profit > 0 ? 'pos' : '') + '">' + signed(r.profit) + '</td><td>' + signed(r.money) + '</td></tr>';
           });
           days += '</table>';
         }
-        html = '<div class="col" style="flex:1"><div class="tiles">' +
-          tile('Guests served', day.served) + tile('Left hungry', day.lost, day.lost > 0 ? 'neg' : '') + tile('Stew sold', euro(day.sales)) +
-          tile('Tips', euro(day.tips)) + tile('Supplies bought', signed(-day.spent), day.spent > 0 ? 'neg' : '') + tile('Profit so far', signed(soFar), soFar < 0 ? 'neg' : soFar > 0 ? 'pos' : '') +
-          '</div><div style="display:flex;gap:10px;flex:1;min-height:0">' +
-          '<div class="card till" style="width:190px;flex:none"><h4>In the till</h4><b>' + signed(state.money) + '</b><p class="muted small" style="margin-top:8px">Everything you earn and spend goes through the till.</p></div>' +
-          '<div class="card" style="flex:1;overflow:hidden"><h4>Earlier days</h4>' + days + '</div></div></div>';
+        // (the same lines as on the slip at the end of the day)
+        html = '<div class="col" style="width:278px;flex:none"><div class="card note"><h4>Today \u2013 day ' + day.n + '</h4>' +
+          line('Guests served', day.served) + line('Guests who left hungry', day.lost, day.lost ? 'minus' : '') +
+          line('Stew sold', euro(day.sales)) + line('Tips', euro(day.tips)) + line('Supplies bought', signed(-day.spent), day.spent ? 'minus' : '') +
+          line('Profit so far', signed(soFar), 'total ' + (soFar < 0 ? 'minus' : soFar > 0 ? 'plus' : '')) + line('In the till', signed(state.money), 'till') + '</div></div>' +
+          '<div class="col" style="flex:1"><div class="card note"><h4>Earlier days</h4>' + days + '</div></div>';
       }
       pcScreen.innerHTML =
-        '<div class="side"><div class="logo"><i></i><span>Hot Pot Go<small>Back office</small></span></div>' +
-        '<button class="nav' + (pc.page === 'supplies' ? ' on' : '') + '" data-do="page:supplies">' + ICON.box + 'Supplies</button>' +
-        '<button class="nav' + (pc.page === 'accounts' ? ' on' : '') + '" data-do="page:accounts">' + ICON.chart + 'Accounts</button>' +
-        '<span class="grow"></span><button class="nav" data-do="close">' + ICON.out + 'Get up<kbd>E</kbd></button></div>' +
+        '<div class="side"><div class="logo"><i>' + ICON.pot + '</i><span>Hot Pot Go<small>Back office</small></span></div>' +
+        '<button class="nav' + (pc.page === 'supplies' ? ' on' : '') + '" data-do="page:supplies">Supplies</button>' +
+        '<button class="nav' + (pc.page === 'accounts' ? ' on' : '') + '" data-do="page:accounts">Accounts</button>' +
+        '<span class="grow"></span><button class="nav out" data-do="close">Get up<kbd>E</kbd></button></div>' +
         '<div class="main"><div class="top"><h2>' + title + '<small>' + sub + '</small></h2><span class="grow"></span>' +
-        '<span class="chip' + (day.phase === 'open' ? ' open' : '') + '"><i></i>Day ' + day.n + ' \u00b7 ' + clockText() + ' \u00b7 ' + (day.phase === 'open' ? 'Open' : 'Closed') + '</span>' +
-        '<span class="chip till">Till ' + signed(state.money) + '</span></div><div class="page">' + html + '</div></div>';
+        '<span class="chip' + (day.phase === 'open' ? ' open' : day.phase === 'prep' ? '' : ' late') + '"><i></i><span class="when">' + when + '</span></span>' +
+        '<span class="chip till"><i></i>' + signed(state.money) + '</span></div><div class="page">' + html + '</div></div>';
     }
     // a button on the screen: 'plus:potato', 'minus:potato', 'buy', 'page:accounts', 'close'
     function pcDo(cmd){
@@ -1960,6 +2009,7 @@
       play.setCarry(null);
       cutting = null; pouring = null; stirring = null; shake = null; scoop = null; note.t = 0;
       closePC(); shown.delivered = undefined;
+      if (ctx.seat && ctx.seat.reset) ctx.seat.reset();   // (not sitting in a loaded game)
       shown.carry = null; shown.money = null; shown.hud = null; shown.phase = undefined; shown.told = true;
       if (play.setStains) play.setStains(d.stains);
       pendingChef = d.chef && num(d.chef.x) && num(d.chef.z) ? d.chef : null;
@@ -2013,7 +2063,7 @@
 
     return {
       update: update, mouse: mouse,
-      atScreen: function(){ return !!pc || hold; },   // the keys belong to a screen, not to the chef
+      atScreen: function(){ return !!pc || hold || !!(ctx.seat && ctx.seat.active()); },   // the keys belong to a screen (or he is sitting down), not to the chef
       // ---- for tests only ----
       debugPC: function(cmd){ if (cmd === 'open') openPC(); else if (cmd) pcDo(cmd); return pc ? { page: pc.page, cart: pc.cart, said: pc.said } : null; },
       debugSupplies: function(){ var o = {}; GOODS.forEach(function(k){ o[k] = oneDec(stockOf(k)) + ' room ' + room(k) + ' coming ' + coming(k); }); o.orders = state.orders.map(function(x){ return goodsText(x.goods) + ' in ' + Math.ceil(x.left); }); o.boxes = parcels().map(function(p){ return p.at + ': ' + goodsText(p.goods); }); return o; },

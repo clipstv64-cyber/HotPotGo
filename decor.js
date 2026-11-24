@@ -158,6 +158,7 @@
       place('dogfigure', { h: 0.22 }, null, x, top, 3.6, -Math.PI / 2 - 0.5, { cast: true });
     }
 
+    var office = { chair: null, screen: null, room: null, desk: null };   // what the game needs of the office: the swivel chair, the monitor's screen
     // ---------- back rooms behind the kitchen: corridor, office, storeroom, cleaning closet ----
     (function(){
       var B = ctx.BACKROOMS;
@@ -272,44 +273,54 @@
       });
 
       // office: desk with the computer against the far wall, chair, filing cabinet, bookshelf
-      place('office_desk', { w: 1.5 }, null, doorO, 0, z1 + 0.03, 0, { back: true, cast: true, done: function(holder, size){
+      place('office_desk', { w: 1.9 }, null, doorO, 0, z1 + 0.03, 0, { back: true, cast: true, done: function(holder, size){
         // The monitor is switched on: a picture of the back-office program on its screen.
         // (where the screen is was measured on the model, as shares of its size)
         var cv = document.createElement('canvas'); cv.width = 512; cv.height = 288;
         var g = cv.getContext('2d'), i, sw = size.x * 0.572 * 0.955, sh = size.y * 0.341 * 0.92, wide = sw / sh / (512 / 288);
-        g.fillStyle = '#f3f4f7'; g.fillRect(0, 0, 512, 288);
-        g.fillStyle = '#1d222b'; g.fillRect(0, 0, 104, 288);                      // side bar
-        g.fillStyle = '#e8612c'; g.fillRect(10, 12, 18, 18); g.fillRect(8, 52, 88, 22);
-        g.fillStyle = '#565d6b'; g.fillRect(36, 15, 50, 6); g.fillRect(36, 25, 34, 4); g.fillRect(14, 86, 60, 6); g.fillRect(14, 262, 44, 6);
-        g.fillStyle = '#ffffff'; g.fillRect(22, 60, 46, 6);
-        g.fillRect(104, 0, 408, 34);                                             // top bar
-        g.fillStyle = '#1f2430'; g.fillRect(116, 10, 74, 9);
-        g.fillStyle = '#c9ced8'; g.fillRect(116, 23, 110, 4); g.fillRect(392, 11, 62, 12);
-        g.fillStyle = '#fbd9c6'; g.fillRect(460, 11, 42, 12);
-        for (i = 0; i < 4; i++){                                                 // four things to order
-          var y = 44 + i * 60;
-          g.fillStyle = '#ffffff'; g.fillRect(116, y, 232, 52);
-          g.fillStyle = '#f3ece4'; g.fillRect(124, y + 8, 36, 36);
-          g.fillStyle = ['#d98a3a', '#ee7a2a', '#e39a3c', '#efe7d6'][i]; g.beginPath(); g.ellipse(142, y + 26, 11 / wide, 11, 0, 0, Math.PI * 2); g.fill();
-          g.fillStyle = '#1f2430'; g.fillRect(170, y + 11, 56, 7);
-          g.fillStyle = '#e9ecf1'; g.fillRect(170, y + 25, 110, 5);
-          g.fillStyle = '#e8612c'; g.fillRect(170, y + 25, [56, 92, 92, 96][i], 5);
-          g.fillStyle = '#c9ced8'; g.fillRect(170, y + 36, 70, 4);
-          g.fillStyle = '#f0f2f6'; g.fillRect(292, y + 16, 46, 20);
+        g.fillStyle = '#4a2e1a'; g.fillRect(0, 0, 512, 288);                      // dark wood
+        g.fillStyle = 'rgba(0,0,0,.2)'; for (i = 0; i < 9; i++) g.fillRect(i * 58 + 20, 0, 2, 288);   // its planks
+        g.fillStyle = 'rgba(14,8,4,.5)'; g.fillRect(0, 0, 104, 288);              // the side
+        g.fillStyle = '#f4ead2'; g.beginPath(); g.ellipse(20, 20, 9 / wide, 9, 0, 0, Math.PI * 2); g.fill();
+        g.fillRect(36, 13, 52, 6); g.fillRect(8, 50, 96, 22);                     // the program's name, the page that is open
+        g.fillStyle = '#b79c74'; g.fillRect(36, 23, 34, 4); g.fillRect(14, 84, 62, 6); g.fillRect(14, 262, 44, 6);
+        g.fillStyle = '#4a3626'; g.fillRect(20, 58, 50, 6);
+        g.fillStyle = '#f4ead2'; g.fillRect(116, 9, 86, 10);                      // the page's name
+        g.fillStyle = '#b79c74'; g.fillRect(116, 24, 110, 4);
+        g.fillStyle = 'rgba(15,12,10,.6)'; g.fillRect(376, 9, 76, 15); g.fillRect(458, 9, 44, 15);   // the day, the till
+        for (i = 0; i < 4; i++){                                                 // four things to order, each on its slip of paper
+          var y = 42 + i * 61;
+          g.fillStyle = '#f4ead2'; g.fillRect(116, y, 232, 53);
+          g.fillStyle = '#e9dab6'; g.beginPath(); g.ellipse(142, y + 26, 19 / wide, 19, 0, 0, Math.PI * 2); g.fill();
+          g.fillStyle = ['#d98a3a', '#ee7a2a', '#e39a3c', '#fbf6e6'][i]; g.beginPath(); g.ellipse(142, y + 26, 11 / wide, 11, 0, 0, Math.PI * 2); g.fill();
+          g.fillStyle = '#4a3626'; g.fillRect(170, y + 11, 56, 7);
+          g.fillStyle = '#d8c7a2'; g.fillRect(170, y + 25, 110, 6);
+          g.fillStyle = '#c9641f'; g.fillRect(170, y + 25, [56, 92, 92, 96][i], 6);
+          g.fillStyle = '#b79c74'; g.fillRect(170, y + 37, 70, 4);
+          g.strokeStyle = '#4a3626'; g.lineWidth = 2;
+          g.beginPath(); g.ellipse(302, y + 26, 7 / wide, 7, 0, 0, Math.PI * 2); g.stroke(); g.beginPath(); g.ellipse(332, y + 26, 7 / wide, 7, 0, 0, Math.PI * 2); g.stroke();
         }
-        g.fillStyle = '#ffffff'; g.fillRect(358, 44, 144, 124); g.fillRect(358, 176, 144, 100);   // the order, the deliveries
-        g.fillStyle = '#c9ced8'; g.fillRect(368, 54, 60, 5); g.fillRect(368, 70, 110, 4); g.fillRect(368, 82, 96, 4); g.fillRect(368, 186, 64, 5); g.fillRect(368, 204, 100, 4);
-        g.fillStyle = '#1f2430'; g.fillRect(368, 102, 34, 7); g.fillRect(462, 102, 30, 7);
-        g.fillStyle = '#e8612c'; g.fillRect(368, 126, 124, 26);
-        g.fillStyle = '#2f7de1'; g.fillRect(368, 222, 70, 5);
+        g.fillStyle = '#f4ead2'; g.fillRect(358, 42, 144, 126); g.fillRect(358, 178, 144, 98);   // the order, the deliveries
+        g.fillStyle = '#b79c74'; g.fillRect(368, 70, 110, 3); g.fillRect(368, 82, 96, 3); g.fillRect(368, 206, 100, 3);
+        g.fillStyle = '#4a3626'; g.fillRect(368, 52, 62, 6); g.fillRect(368, 102, 34, 7); g.fillRect(462, 102, 30, 7); g.fillRect(368, 126, 124, 26); g.fillRect(368, 188, 66, 6);
+        g.fillStyle = '#3f8a2c'; g.fillRect(368, 222, 70, 5);
         var tex = new T.CanvasTexture(cv); tex.encoding = T.sRGBEncoding; tex.anisotropy = 4;
         var scr = new T.Mesh(new T.PlaneGeometry(sw, sh), new T.MeshBasicMaterial({ map: tex, toneMapped: false }));
         scr.position.set(size.x * 0.0523, size.y * (0.659 + 0.341 / 2), size.z * 0.306 + 0.004);
         holder.add(scr);
+        holder.updateMatrixWorld(true);
+        office.screen = scr.getWorldPosition(new T.Vector3());   // where the chef looks when he sits at the desk
       } });
-      addBox(doorO, z1 + 0.5, 1.5, 0.94, 0.8);
-      place('office_chair', { h: 1.05 }, null, doorO + 0.1, 0, z1 + 1.5, Math.PI + 0.3, { cast: true });
-      addBox(doorO + 0.1, z1 + 1.5, 0.55, 0.55, 0.5);
+      addBox(doorO, z1 + 0.62, 1.9, 1.18, 1.05);
+      // the swivel chair, as low as the chef's short legs need it: it stands a little askew and turns to the desk when
+      // he sits down (index.html). seat / back: its seat's height and where the backrest begins,
+      // as shares of its height and depth (measured on the model)
+      var chairX = doorO + 0.15, chairZ = z1 + 1.85;
+      office.chair = { holder: place('office_chair', { h: 1.15 }, null, chairX, 0, chairZ, Math.PI + 0.3, { cast: true }),
+                       x: chairX, z: chairZ, rest: Math.PI + 0.3, face: Math.PI, seat: 0.51, back: 0.38 };
+      addBox(chairX, chairZ, 0.6, 0.6, 0.55);
+      office.room = { x0: x0, x1: xo, z0: z1, z1: zm };   // the office's floor (he sits down only from inside it)
+      office.desk = { x: doorO, z: z1 + 1.25 };           // in front of the desk
       place('filing_cabinet', { h: 1.35 }, null, x0 + 0.03, 0, zm - 1.1, Math.PI / 2, { back: true, cast: true });
       addBox(x0 + 0.35, zm - 1.1, 0.7, 0.5, 1.35);
       place('office_shelf', { h: 1.8 }, null, xo - 0.03, 0, z1 + 1.9, -Math.PI / 2, { back: true, cast: true });
@@ -362,7 +373,7 @@
       doorPivot.rotation.y = -1.5 * entrance.open;
     }
 
-    return { dressTable: dressTable, update: update, root: root, entrance: entrance };
+    return { dressTable: dressTable, update: update, root: root, entrance: entrance, office: office };
   }
 
   window.HotPotDecor = { build: build };

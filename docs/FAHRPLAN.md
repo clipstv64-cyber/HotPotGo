@@ -118,6 +118,16 @@ Danach folgen Mehrspieler und Mitarbeiter (Phase 3).
   Rechner); sein Bildschirm leuchtet und zeigt ein kleines Bild des Büro-Programms. Der
   Computer-Bildschirm selbst sieht aus wie ein modernes Büro-Programm: dunkle Seitenleiste,
   Karten, Bestellung und Lieferungen rechts, Kennzahlen unter „Accounts“.
+- **Am Computer sitzen** (Wunsch vom 24.11.2026): Den Computer benutzt man im Sitzen. E am
+  Bürostuhl: Der Koch geht neben den Stuhl, setzt sich (der Drehstuhl dreht sich zum Tisch,
+  die Kamera folgt seinem Kopf, der Blick bleibt auf dem Bildschirm), dann geht der
+  Bildschirm an. E oder Esc schaltet ihn aus und der Koch steht auf. Weil seine Beine sehr
+  kurz sind, fallen die Oberschenkel im Sitzen nach vorn ab, damit die Sohlen den Boden
+  erreichen. Schreibtisch und Stuhl sind dafür an die Größe des Kochs angepasst.
+- **Bildschirm im Stil des Spiels** (Wunsch vom 24.11.2026): Das Büro-Programm sieht nicht
+  mehr wie eine Website aus, sondern wie die Zettel des Spiels: Papier auf dem dunklen
+  Küchenholz, mit Pinnnadeln, kursiver Schrift, gepunkteten Linien, Stempeln und Kästchen
+  für den Vorrat; Tag und Kasse oben rechts wie in der Spielanzeige.
 - **Prüfer-Agenten:** Im Ordner `.claude/agents/` liegen vier Prüfer (Stil, Code, Performance,
   Animationen). Nach passenden Änderungen laufen sie, bevor etwas als fertig gilt.
 - **Karton ohne neues Modell:** Der Lieferkarton ist aus dem Kartonstapel im Lager
