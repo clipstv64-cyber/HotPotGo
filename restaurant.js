@@ -66,6 +66,7 @@
               writes: 0.75,          // share of the served guests who write a review (who leaves hungry always does)
               keep: 30,              // the restaurant's stars: the average of this many latest reviews
               dirt: 0.25,            // each stain on the floor takes this much off "clean"
+              dishes: 0.15,          // ... and each dirty bowl left on a table
               mood: 0.45,            // the room as it is: shabby (better furniture will raise it)
               draw: [0.8, 1.25] },   // guests come this much less / more often at 1 star and at 5 stars
     autosave: 20,             // seconds between two automatic saves
@@ -159,6 +160,7 @@
     carrot: { a: 'a carrot', the: 'the carrot', many: 'carrots', cutName: 'carrot slices', carry: { half: 0.115, fwd: 0.44, drop: -0.25, grip: 0.04, back: 0, curl: 0.45, yaw: 0.5 } },
     onion:  { a: 'an onion', the: 'the onion', many: 'onions', cutName: 'chopped onion', carry: { half: 0.1, fwd: 0.44, drop: -0.25, grip: 0.07, back: 0, curl: 0.45 } },
     bowl:   { a: 'an empty bowl', the: 'the bowl', carry: { half: 0.17, fwd: 0.46, drop: -0.25, grip: 0.06, back: 0, curl: 0.4 } },
+    dirty:  { a: 'a dirty bowl', the: 'the dirty bowl', carry: { half: 0.17, fwd: 0.46, drop: -0.25, grip: 0.06, back: 0, curl: 0.4 } },
     stew:   { a: 'a bowl of stew', the: 'the bowl of stew', carry: { half: 0.17, fwd: 0.46, drop: -0.25, grip: 0.06, back: 0, curl: 0.4 } },
     knife:  { a: 'the knife', the: 'the knife' },   // these three are held in one hand (see toolHold)
     broth:  { a: 'the jug of broth', the: 'the jug of broth' },
@@ -286,12 +288,15 @@
       list.forEach(function(r){ sum += r.stars; });
       return list.length ? sum / list.length : 0;
     }
+    function dirtyOnTables(){ return Object.keys(state.items).filter(function(id){ var o = state.items[id]; return o.kind === 'dirty' && o.at === 'table'; }).length; }
+    // is a dirty bowl still standing at this guest's place? (nobody sits down there until it is cleared away)
+    function dirtyAt(gid){ return Object.keys(state.items).some(function(id){ var o = state.items[id]; return o.kind === 'dirty' && o.at === 'table' && o.guest === gid; }); }
     // A guest's visit is over: what it was like, the stars for it, and (if the guest writes one) the review.
     // served: the guest got the stew (g.q: how good it was, g.patience: the patience that was left when it came).
     function review(g, served){
       var W = RULES.review, stains = play.getStains ? play.getStains().length : 0;   // (the floor is gameplay.js's)
       var f = { food: served ? clamp(num(g.q) ? g.q : 1) : 0, wait: served ? clamp((num(g.patience) ? g.patience : 1) * 1.15) : 0,
-                clean: clamp(1 - W.dirt * stains), value: 0, mood: mood() };
+                clean: clamp(1 - W.dirt * stains - W.dishes * dirtyOnTables()), value: 0, mood: mood() };
       f.value = served ? clamp(0.5 + 0.5 * f.food) : 0;   // the price is fair for a good stew
       var score = 0;
       Object.keys(W.weights).forEach(function(k){ score += W.weights[k] * f[k]; });
@@ -367,18 +372,22 @@
           state.store[arg] += putS; it.goods[arg] -= putS;
           if (!GOODS.some(function(k){ return it.goods[k] > 0; })) dropItem(it);
           return true;
+        case 'wash':       // the dirty bowl in his hands, at the sink: clean again
+          if (!it || it.kind !== 'dirty') return false;
+          it.kind = 'bowl'; return true;
         case 'takeBowl':
           if (it || state.bowls <= 0) return false;
           state.bowls--; newItem('bowl'); return true;
-        case 'returnBowl':
-          if (!it || it.kind !== 'bowl') return false;
+        case 'returnBowl':   // (a dirty one only where the kitchen has no sink to wash it)
+          if (!it || (it.kind !== 'bowl' && !(it.kind === 'dirty' && !(ctx.getKitchen() || {}).sinkAt))) return false;
           state.bowls++; dropItem(it); return true;
         case 'putDown':    // onto a work surface: arg = { x, y, z }
           if (!it || !arg || HOME[it.kind]) return false;
           it.at = 'surface'; it.x = arg.x; it.y = arg.y; it.z = arg.z; it.rot = arg.rot || 0; state.carry = null; return true;
         case 'pickUp':     // arg = item id
           g = state.items[arg];
-          if (it || !g || (g.at !== 'surface' && g.at !== 'board' && g.at !== 'home' && g.at !== 'dock')) return false;
+          if (it || !g || (g.at !== 'surface' && g.at !== 'board' && g.at !== 'home' && g.at !== 'dock' && !(g.at === 'table' && g.kind === 'dirty'))) return false;
+          if (g.at === 'table') delete g.guest;
           if (g.at === 'board'){
             if (!isCut(g) && cutCount(g) > 0) return false;   // half cut: it stays until it is done
             state.board = null;
@@ -565,7 +574,13 @@
             g.phase = 'paid'; g.t = 0; state.money += g.pay; state.served++;
             day.served++; day.sales += RECIPE.price; day.tips += g.pay - RECIPE.price;
             review(g, true);
-            if (state.items[g.item]){ dropItem(state.items[g.item]); state.bowls++; }   // the bowl goes back to the clean stack (washing up comes later)
+            var used = state.items[g.item];
+            if (used){   // the empty bowl stays on the table, dirty, where it stood
+              var gv2 = views[g.id];
+              used.kind = 'dirty'; delete used.batch; delete used.q;
+              if (gv2){ used.x = gv2.bowlAt.x; used.y = gv2.bowlAt.y; used.z = gv2.bowlAt.z; }
+              else { dropItem(used); state.bowls++; }   // (nowhere to show it: back on the stack)
+            }
             g.item = null;
           }
         } else if (g.phase === 'paid' || g.phase === 'angry'){
@@ -573,7 +588,7 @@
           if (g.t >= RULES.linger) g.phase = 'leaving';
         } else if (g.phase === 'away'){
           g.rest = Math.max(0, (g.rest || 0) - dt);
-          if (g.rest <= 0) away.push(g);
+          if (g.rest <= 0 && !dirtyAt(g.id)) away.push(g);   // (not to a table with a dirty bowl on it)
         }
       });
       // while the restaurant is open, guests come in one after the other
@@ -1315,7 +1330,7 @@
       if (place.knifeHome && Math.abs(place.knifeHome.x - x) < 0.34 && Math.abs(place.knifeHome.z - z) < 0.2) ok = false;   // the knife's place
       Object.keys(state.items).forEach(function(id){
         var o = state.items[id];
-        if (o.at === 'surface' && Math.hypot(o.x - x, o.z - z) < (o.kind === 'parcel' ? 0.45 : o.kind === 'bowl' || o.kind === 'stew' ? 0.36 : 0.24)) ok = false;
+        if (o.at === 'surface' && Math.hypot(o.x - x, o.z - z) < (o.kind === 'parcel' ? 0.45 : o.kind === 'bowl' || o.kind === 'stew' || o.kind === 'dirty' ? 0.36 : 0.24)) ok = false;
       });
       return ok;
     }
@@ -1536,10 +1551,10 @@
       });
       // the stack of clean bowls
       var sb = { pos: place.stacks.pos, reach: RULES.reach, key: 'F' };
-      if (it && it.kind === 'bowl'){ sb.label = 'Put the bowl back'; sb.use = function(){ act('returnBowl'); }; add(sb); }
+      if (it && (it.kind === 'bowl' || (it.kind === 'dirty' && !ctx.getKitchen().sinkAt))){ sb.label = 'Put the bowl back'; sb.use = function(){ act('returnBowl'); }; add(sb); }
       else if (!it){
         if (!free) sb.label = 'Hands full';
-        else if (state.bowls <= 0) sb.label = 'No clean bowls left';
+        else if (state.bowls <= 0) sb.label = 'No clean bowls left \u2013 clear the tables and wash up';
         else { sb.label = 'Take a bowl'; sb.use = function(){ act('takeBowl'); }; sb.obj = place.stacks.bowls[state.bowls - 1]; }
         add(sb);
       }
@@ -1639,6 +1654,14 @@
       else if (inside()) de.label = 'Closed \u2013 the last guests are still here';
       else { de.label = 'End the day'; de.use = function(){ act('endDay'); }; }
       add(de);
+      // dirty bowls left on the tables, and the sink
+      Object.keys(state.items).forEach(function(id){
+        var o = state.items[id];
+        if (o.kind !== 'dirty' || o.at !== 'table') return;
+        if (free) add({ pos: V(o.x, 0, o.z), reach: RULES.serveReach, key: 'F', label: 'Clear away the dirty bowl', use: function(){ act('pickUp', o.id); }, obj: objs[o.id] && objs[o.id].obj });
+      });
+      var k2 = ctx.getKitchen();
+      if (it && it.kind === 'dirty' && k2.sinkAt) add({ pos: k2.sinkAt, reach: RULES.reach, key: 'E', label: 'Wash the bowl', use: function(){ if (act('wash')) say('Clean again \u2013 put it back on the stack'); } });
       // guests waiting for their food
       state.guests.forEach(function(g){
         if (g.phase !== 'waiting') return;
@@ -1661,6 +1684,23 @@
       var kind = scoop && scoop.item === o.id && scoop.t < POUR_AT ? 'bowl' : o.kind;
       return kind + (o.cut ? '#' + o.cut.a.length + '.' + o.cut.b.length + (o.cut.done ? 'd' : '') : '');
     }
+    // an empty bowl with the rest of the stew in it
+    var dirtyTex = null, dirtyRest = null;
+    function makeDirty(){
+      var b = instance('bowl'), sz = MODELS.bowl.size;
+      if (!dirtyTex){
+        var cv = document.createElement('canvas'); cv.width = cv.height = 64;
+        var g = cv.getContext('2d'), gr = g.createRadialGradient(32, 32, 4, 32, 32, 31);
+        gr.addColorStop(0, 'rgba(120,58,20,1)'); gr.addColorStop(0.7, 'rgba(135,70,28,.95)'); gr.addColorStop(1, 'rgba(150,82,36,0)');
+        g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+        for (var n = 0; n < 14; n++){ g.fillStyle = n % 2 ? 'rgba(224,138,44,.9)' : 'rgba(226,201,138,.9)'; g.fillRect(14 + Math.random() * 34, 14 + Math.random() * 34, 4, 3); }
+        dirtyTex = new T.CanvasTexture(cv); dirtyTex.encoding = T.sRGBEncoding;
+      }
+      if (!dirtyRest) dirtyRest = { geo: new T.CircleGeometry(sz.x * 0.33, 20), mat: new T.MeshStandardMaterial({ map: dirtyTex, transparent: true, depthWrite: false, roughness: 0.5 }) };
+      var rest = new T.Mesh(dirtyRest.geo, dirtyRest.mat);
+      rest.rotation.x = -Math.PI / 2; rest.position.y = sz.y * 0.55; rest.renderOrder = 2; b.add(rest);
+      return b;
+    }
     function syncItems(dt){
       var it = carried();
       Object.keys(objs).forEach(function(id){
@@ -1673,15 +1713,16 @@
         if (v && v.look !== want){ rot = v.rot; if (v.obj.parent) v.obj.parent.remove(v.obj); if (shown.carry === o.id) shown.carry = null; v = null; }
         if (!v){
           var kind = want.split('#')[0];
-          v = objs[id] = { obj: o.cut && isVeg(kind) ? makeCut(kind, o.cut, o.cut.done) : instance(kind), look: want, placed: false, rot: rot };
+          v = objs[id] = { obj: o.cut && isVeg(kind) ? makeCut(kind, o.cut, o.cut.done) : kind === 'dirty' ? makeDirty() : instance(kind), look: want, placed: false, rot: rot };
         }
         if (o.at === 'hand'){
           if (shown.carry !== o.id){ shown.carry = o.id; v.placed = false; v.rot = undefined; play.setCarry(v.obj, toolHold[o.kind] || KINDS[o.kind].carry); }
           return;
         }
-        if (o.at === 'table' && !(views[o.guest] && views[o.guest].info.where() === 'seated')) return;   // (right after loading: once the guest sits)
+        if (o.at === 'table' && o.kind !== 'dirty' && !(views[o.guest] && views[o.guest].info.where() === 'seated')) return;   // (right after loading: once the guest sits)
         if (!v.placed){
-          if (o.at === 'table'){ var gv = views[o.guest]; placeBowl(gv); v.obj.position.copy(gv.bowlAt); v.obj.rotation.set(0, rnd(0, 6.28), 0); }
+          if (o.at === 'table' && o.kind === 'dirty' && num(o.x)){ v.obj.position.set(o.x, o.y, o.z); v.obj.rotation.set(0, rnd(0, 6.28), 0); }
+          else if (o.at === 'table'){ var gv = views[o.guest]; placeBowl(gv); v.obj.position.copy(gv.bowlAt); v.obj.rotation.set(0, rnd(0, 6.28), 0); }
           else if (o.at === 'home'){ v.obj.position.copy(place.home[o.kind].pos); v.obj.rotation.set(0, place.home[o.kind].rot, 0); }
           else if (o.at === 'dock'){ v.obj.position.copy(DOCK); v.obj.rotation.set(0, 0.35, 0); }
           else if (o.at === 'board'){ v.obj.position.copy(place.board.pos); if (v.rot === undefined) v.rot = o.rot || 0; v.obj.rotation.set(0, v.rot, 0); }
@@ -2230,13 +2271,13 @@
       if (st.board !== null && !(st.items[st.board] && st.items[st.board].at === 'board')) st.board = null;
       Object.keys(st.items).forEach(function(id){
         var o = st.items[id], lost = false;
-        if (o.at === 'table') lost = !st.guests.some(function(g){ return g.phase === 'eating' && g.item === o.id; });
+        if (o.at === 'table') lost = o.kind === 'dirty' ? !(num(o.x) && num(o.y) && num(o.z)) : !st.guests.some(function(g){ return g.phase === 'eating' && g.item === o.id; });
         else if (o.at === 'hand') lost = st.carry !== o.id;
         else if (o.at === 'board') lost = st.board !== o.id;
         else if (o.at === 'dock') lost = o.kind !== 'parcel';
         if (!lost) return;
         if (HOME[o.kind]) o.at = 'home';
-        else { if (o.kind === 'bowl' || o.kind === 'stew') st.bowls++; delete st.items[id]; }
+        else { if (o.kind === 'bowl' || o.kind === 'stew' || o.kind === 'dirty') st.bowls++; delete st.items[id]; }
       });
       st.knife = st.tools.knife; st.open = st.day.phase === 'open';
       return d;
@@ -2354,7 +2395,7 @@
         if (!place.pot) return null;
         var k = ctx.getKitchen(), r = function(v){ return [+v.x.toFixed(2), +v.y.toFixed(2), +v.z.toFixed(2)]; };
         return { pot: r(place.pot.pos), potSize: r(place.pot.size), bowls: r(place.stacks.pos), surfaces: k.surfaces,
-                 crates: VEG.map(function(kind){ return r(place.crates[kind].pos); }) };
+                 crates: VEG.map(function(kind){ return r(place.crates[kind].pos); }), sink: k.sinkAt ? r(k.sinkAt) : null };
       }
     };
   }

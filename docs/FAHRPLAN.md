@@ -79,7 +79,7 @@ aufnehmen, freie Platzwahl der Gäste, Spülen, Pausenmenü.
 | 7 | Neue Räume freischalten | fehlt |
 | 8 | Kundenzufriedenheit und Sternebewertungen | fertig in der ersten Fassung: jeder Gast bewertet seinen Besuch (Essen 35 %, Wartezeit 25 %, Sauberkeit 20 %, Preis 10 %, Atmosphäre 10 %), daraus werden 1 bis 5 Sterne und ein passender Satz; die Sterne des Restaurants sind der Schnitt der letzten 30 Bewertungen und bringen mehr oder weniger Gäste. Atmosphäre ist noch ein fester Wert, bis es Möbel zu kaufen gibt; Gästetypen fehlen |
 | 9 | Weitere Rezepte | fehlt |
-| 10 | Reinigungssystem | teilweise: Flecken und Besen gibt es schon |
+| 10 | Reinigungssystem | teilweise: Flecken und Besen; Abwasch: die leere Schüssel bleibt mit dem Rest Eintopf auf dem Tisch, man räumt sie ab (F), spült sie an der Spüle (E) und stellt sie zurück auf den Stapel; an einem Platz mit schmutziger Schüssel setzt sich kein Gast, und schmutzige Schüsseln kosten in den Bewertungen Sauberkeit |
 
 Danach folgen Mehrspieler und Mitarbeiter (Phase 3).
 

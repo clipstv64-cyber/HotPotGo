@@ -760,6 +760,7 @@
         }
         wall(fr, 0.05); wall(sj, 0.1);
         if (wall(sk, 0.15) && ws){ ws.h.position.set(e - ws.s.z / 2, 1.95, sk.h.position.z); ws.h.rotation.y = -Math.PI / 2; scene.add(ws.h); }
+        if (sk) kitchen.sinkAt = new THREE.Vector3(sk.h.position.x, 0, sk.h.position.z);   // the washing up is done here (restaurant.js)
         wall(sv, 0.15);
         if (sj) wall(copy(sj), 0.1);
         if (sc) wall(copy(sc), 0.15);
