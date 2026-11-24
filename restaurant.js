@@ -102,6 +102,20 @@
     onion:  { name: 'Onions', one: 'onion', many: 'onions' },
     broth:  { name: 'Broth', one: 'broth for 1 pot', many: 'broth for # pots' }
   };
+  // The shop at the computer: things for the restaurant, bought once each. Every one does
+  // something in the game (no decoration without an effect):
+  //   bowls   ten more bowls on the stack
+  //   candles candles on every table: the room is nicer (the reviews' "mood")
+  //   plants  potted plants along the dining room's wall: the same
+  //   stove   a stronger burner: the stew cooks in less time
+  var SHOP = [
+    { key: 'bowls',   name: 'More bowls',     price: 45,  pic: 'bowl',   text: 'Ten more bowls on the stack, so you run out less often.' },
+    { key: 'candles', name: 'Table candles',  price: 60,  pic: 'candle', text: 'A candle on every table. Guests like the room better.' },
+    { key: 'plants',  name: 'Potted plants',  price: 110, pic: 'plant',  text: 'Three big plants for the dining room. Guests like the room better.' },
+    { key: 'stove',   name: 'Strong burner',  price: 220, pic: 'pot',    text: 'A stronger flame under the pot: the stew is done in less time.' }
+  ];
+  var SHOP_EFFECT = { bowls: 10, candles: 0.15, plants: 0.2, stove: 0.7 };   // more bowls; mood added (each); cooking time (share)
+  function shopItem(key){ for (var i = 0; i < SHOP.length; i++) if (SHOP[i].key === key) return SHOP[i]; return null; }
   // the guests' names, for their reviews
   var GUEST_NAMES = { woman: 'Greta', sailor: 'Hein', biker: 'Bruno', nerd: 'Milo', oldman: 'Walter', glamour: 'Lola', butcher: 'Otto', goth: 'Raven' };
   // What a guest writes. It follows from the visit: f = how the food, the wait and the
@@ -166,7 +180,9 @@
     crate:  { file: 'models/d_crate.glb', width: 0.66 },
     pot:    { file: 'models/d_cookpot.glb', width: 0.86 },
     ladle:  { file: 'models/d_ladle.glb', height: 0.56 },
-    parcel: { file: 'models/d_parcel.glb', width: 0.44 }                  // one box out of the storeroom's stack of boxes
+    parcel: { file: 'models/d_parcel.glb', width: 0.44 },                 // one box out of the storeroom's stack of boxes
+    candle: { file: 'models/d_candlebottle.glb', height: 0.4 },           // (the shop's pictures)
+    plant:  { file: 'models/d_plant.glb', height: 1.75 }
   };
 
   function num(v){ return typeof v === 'number' && isFinite(v); }
@@ -233,6 +249,7 @@
         delivered: 0,                                 // how many deliveries have arrived so far
         history: [],                                  // the accounts of the days that are over (see 'endDay')
         reviews: [],                                  // what guests wrote: { id, day, who, stars, text, food, wait, clean }
+        owned: {},                                    // what was bought in the shop: { bowls: true, ... }
         day: newDay(1)
       };
       ['knife', 'broth', 'spice'].forEach(function(kind){
@@ -257,6 +274,8 @@
       return n;
     }
     function room(kind){ return Math.max(0, Math.floor(holds(kind) - stockOf(kind) - coming(kind) + 1e-6)); }
+    // how nice the room is (0 .. 1): shabby to start with, better with what was bought
+    function mood(){ return clamp(RULES.review.mood + (state.owned.candles ? SHOP_EFFECT.candles : 0) + (state.owned.plants ? SHOP_EFFECT.plants : 0)); }
     // The restaurant's stars: the average of the latest reviews (0 = nobody has written one yet).
     function reputation(){
       var list = state.reviews.slice(-RULES.review.keep), sum = 0;
@@ -268,7 +287,7 @@
     function review(g, served){
       var W = RULES.review, stains = play.getStains ? play.getStains().length : 0;   // (the floor is gameplay.js's)
       var f = { food: served ? clamp(num(g.q) ? g.q : 1) : 0, wait: served ? clamp((num(g.patience) ? g.patience : 1) * 1.15) : 0,
-                clean: clamp(1 - W.dirt * stains), value: 0, mood: W.mood };
+                clean: clamp(1 - W.dirt * stains), value: 0, mood: mood() };
       f.value = served ? clamp(0.5 + 0.5 * f.food) : 0;   // the price is fair for a good stew
       var score = 0;
       Object.keys(W.weights).forEach(function(k){ score += W.weights[k] * f[k]; });
@@ -399,6 +418,12 @@
         case 'close':      // ... and end: nobody new comes in, who is inside finishes the meal
           if (day.phase !== 'open') return false;
           day.phase = 'closed'; state.open = false; return true;
+        case 'purchase':   // something from the shop: arg = its key
+          var thing = shopItem(arg);
+          if (!thing || state.owned[arg] || state.money < thing.price) return false;
+          state.money -= thing.price; day.spent += thing.price; state.owned[arg] = true;
+          if (arg === 'bowls') state.bowls += SHOP_EFFECT.bowls;
+          return true;
         case 'buy':        // an order at the computer: arg = { potato, carrot, onion, broth } (how many of each)
           if (!arg) return false;
           var goods = emptyGoods(), any = false, fits = true;
@@ -496,7 +521,7 @@
       if (pot.phase === 'filling' || pot.phase === 'ready'){
         // it cooks once everything is in and it is hot enough
         if (pot.phase === 'filling' && !missing().length && pot.broth >= 0.4 && pot.temp >= C.slow){
-          pot.cooked += dt / RECIPE.cookTime * (pot.temp >= C.hot ? 1.25 : pot.temp >= C.simmer ? 1 : 0.5);
+          pot.cooked += dt / (RECIPE.cookTime * (state.owned.stove ? SHOP_EFFECT.stove : 1)) * (pot.temp >= C.hot ? 1.25 : pot.temp >= C.simmer ? 1 : 0.5);
           if (pot.cooked >= 1){ pot.cooked = 1; pot.phase = 'ready'; pot.portions = RECIPE.portions; pot.batch = state.nextId++; }
         }
         // unstirred it catches on the bottom (sooner with too little broth), then it burns
@@ -658,6 +683,7 @@
       '.hp-pc .primary:disabled{background:transparent;border:2px dashed rgba(74,54,38,.35);color:rgba(74,54,38,.45)}' +
       '.hp-pc .ship{padding:6px 0;border-top:1px dotted rgba(74,54,38,.4)}.hp-pc .ship:first-of-type{border-top:none;padding-top:0}' +
       '.hp-pc .ship .bar{height:6px;margin-top:5px;border-radius:3px;background:rgba(74,54,38,.16);overflow:hidden}.hp-pc .ship .bar i{display:block;height:100%;background:#3f8a2c}' +
+      '.hp-pc .small-btn{width:auto;margin:0;padding:6px 16px;font-size:16px;flex:none}' +
       '.hp-pc .cut{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
       // the reviews
       '.hp-pc .stars{color:#c9641f;letter-spacing:2px;font-size:17px}.hp-pc .stars i{font-style:normal;color:rgba(74,54,38,.22)}' +
@@ -690,7 +716,7 @@
       dayEl.innerHTML = '<h2>Day ' + r.n + '</h2><div class="sub">The day\u2019s accounts</div>' +
         row('Guests served', r.served) + row('Guests who left hungry', r.lost, r.lost ? 'minus' : '') +
         row('Reviews', r.reviews ? r.stars.toFixed(1) + ' \u2605 (' + r.reviews + ')' : 'none') +
-        row('Stew sold', euro(r.sales)) + row('Tips', euro(r.tips)) + row('Supplies bought', signed(-r.cost), r.cost ? 'minus' : '') +
+        row('Stew sold', euro(r.sales)) + row('Tips', euro(r.tips)) + row('Bought', signed(-r.cost), r.cost ? 'minus' : '') +
         row('Profit today', signed(r.profit), 'sum ' + (r.profit < 0 ? 'minus' : 'plus')) + row('In the till', signed(r.money)) +
         '<div class="go"><kbd>E</kbd>Start day ' + (r.n + 1) + '</div>';
     }
@@ -1136,9 +1162,11 @@
       // the clean bowls: two stacks side by side
       var st = new T.Group(); st.position.copy(k.bowlsAt); root.add(st);
       place.stacks = { grp: st, pos: st.position, bowls: [] };
-      for (var n = 0; n < RULES.bowls; n++){
+      for (var n = 0; n < RULES.bowls + SHOP_EFFECT.bowls; n++){   // (room for the bowls from the shop)
         var b = instance('bowl');
-        b.position.set(0, Math.floor(n / 2) * 0.062, (n % 2 ? 0.21 : -0.21)); b.rotation.y = rnd(0, 6.28);
+        // (four towers of five: the first ten bowls in front, the ten from the shop behind them)
+        var m = n % 10, back = n >= 10 ? 1 : 0;
+        b.position.set(back ? 0.44 : 0, Math.floor(m / 2) * 0.062, (m % 2 ? 0.23 : -0.23)); b.rotation.y = rnd(0, 6.28);
         st.add(b); place.stacks.bowls.push(b);
       }
       // the pot on the range, the stew in it, the vegetables lying in it before it cooks, the ladle
@@ -1707,6 +1735,8 @@
       // crates and bowl stacks show what is left
       VEG.forEach(function(kind){ place.crates[kind].inside.forEach(function(v, i){ v.visible = i < state.crates[kind]; }); });
       place.stacks.bowls.forEach(function(b, i){ b.visible = i < state.bowls; });
+      // what was bought for the dining room (decor.js puts it there)
+      SHOP.forEach(function(t){ if (!!state.owned[t.key] !== !!shown['own_' + t.key]){ shown['own_' + t.key] = !!state.owned[t.key]; if (ctx.showBought) ctx.showBought(t.key, !!state.owned[t.key]); } });
 
       // the guests: sent in and out as the rules say, and their signs (menu, order, eating, angry)
       state.guests.forEach(function(g){
@@ -1916,7 +1946,7 @@
       var day = state.day, total = priceOf(pc.cart), boxes = parcels();
       var sig = [pc.page, JSON.stringify(pc.cart), pc.said, state.money, GOODS.map(function(k){ return oneDec(stockOf(k)) + '/' + room(k) + '/' + coming(k); }).join(' '),
                  state.orders.map(function(o){ return Math.ceil(o.left); }).join(','), boxes.map(function(p){ return p.at + JSON.stringify(p.goods); }).join(','),
-                 day.n, day.phase, day.served, day.lost, day.sales, day.tips, day.spent, state.history.length, state.reviews.length ? state.reviews[state.reviews.length - 1].id : 0].join('|');
+                 day.n, day.phase, day.served, day.lost, day.sales, day.tips, day.spent, state.history.length, Object.keys(state.owned).join(','), state.reviews.length ? state.reviews[state.reviews.length - 1].id : 0].join('|');
       var when = 'Day ' + day.n + ' · ' + clockText() + ' · ' + (day.phase === 'open' ? 'Open' : day.phase === 'prep' ? 'Closed' : 'Closed for today');
       if (sig === pc.sig){   // only the clock has moved on: its text alone is changed, the screen is not built again
         if (when !== pc.when){ pc.when = when; var clockEl = pcScreen.querySelector('.when'); if (clockEl) clockEl.textContent = when; }
@@ -1960,6 +1990,22 @@
         if (rows.length > fit) ships += '<p class="muted small">+ ' + (rows.length - fit) + ' more</p>';
         if (!state.orders.length && !boxes.length && !pc.said) ships += '<p class="muted">Nothing on its way.</p><p class="muted small">Carry a delivered box to the kitchen and unpack it at the crates and at the broth shelf.</p>';
         html = '<div class="col" style="flex:1">' + cards + '</div><div class="col" style="width:252px;flex:none">' + order + '<div class="card" style="flex:1;min-height:0"><h4>Deliveries</h4>' + ships + '</div></div>';
+      } else if (pc.page === 'shop'){
+        title = 'Shop'; sub = 'Things for the restaurant';
+        var items = '';
+        SHOP.forEach(function(t){
+          var pic = thumb(t.pic), have = !!state.owned[t.key], poor = state.money < t.price;
+          items += '<div class="card good">' + '<div class="pic">' + (pic ? '<img src="' + pic + '" alt="">' : '') + '</div>' +
+            '<div class="what"><b>' + t.name + '</b><span class="price">' + euro(t.price) + '</span><br><small>' + t.text + '</small></div>' +
+            (have ? '<span class="tag here">Bought</span>' : '<button class="primary small-btn" data-do="purchase:' + t.key + '"' + (poor ? ' disabled' : '') + '>Buy</button>') + '</div>';
+        });
+        var info = '<div class="card note"><h4>The room</h4>' +
+          '<div class="row"><span>How guests like the room</span><b>' + Math.round(mood() * 100) + ' %</b></div>' +
+          '<div class="row"><span>Bowls</span><b>' + (RULES.bowls + (state.owned.bowls ? SHOP_EFFECT.bowls : 0)) + '</b></div>' +
+          '<div class="row"><span>Cooking time</span><b>' + Math.round(RECIPE.cookTime * (state.owned.stove ? SHOP_EFFECT.stove : 1)) + ' s</b></div>' +
+          '<p class="muted small" style="margin-top:9px">Everything is delivered at once and paid from the till.</p>' +
+          (pc.said ? '<p class="' + pc.said[1] + '" style="margin-top:6px">' + pc.said[0] + '</p>' : '') + '</div>';
+        html = '<div class="col" style="flex:1">' + items + '</div><div class="col" style="width:252px;flex:none">' + info + '</div>';
       } else if (pc.page === 'reviews'){
         title = 'Reviews'; sub = 'What the guests say';
         var latest = state.reviews.slice(-RULES.review.keep), count = [0, 0, 0, 0, 0, 0], avg = reputation();
@@ -1992,7 +2038,7 @@
         // (the same lines as on the slip at the end of the day)
         html = '<div class="col" style="width:278px;flex:none"><div class="card note"><h4>Today \u2013 day ' + day.n + '</h4>' +
           line('Guests served', day.served) + line('Guests who left hungry', day.lost, day.lost ? 'minus' : '') +
-          line('Stew sold', euro(day.sales)) + line('Tips', euro(day.tips)) + line('Supplies bought', signed(-day.spent), day.spent ? 'minus' : '') +
+          line('Stew sold', euro(day.sales)) + line('Tips', euro(day.tips)) + line('Bought', signed(-day.spent), day.spent ? 'minus' : '') +
           line('Profit so far', signed(soFar), 'total ' + (soFar < 0 ? 'minus' : soFar > 0 ? 'plus' : '')) + line('In the till', signed(state.money), 'till') + '</div></div>' +
           '<div class="col" style="flex:1"><div class="card note"><h4>Earlier days</h4>' + days + '</div></div>';
       }
@@ -2001,6 +2047,7 @@
         '<button class="nav' + (pc.page === 'supplies' ? ' on' : '') + '" data-do="page:supplies">Supplies</button>' +
         '<button class="nav' + (pc.page === 'accounts' ? ' on' : '') + '" data-do="page:accounts">Accounts</button>' +
         '<button class="nav' + (pc.page === 'reviews' ? ' on' : '') + '" data-do="page:reviews">Reviews</button>' +
+        '<button class="nav' + (pc.page === 'shop' ? ' on' : '') + '" data-do="page:shop">Shop</button>' +
         '<span class="grow"></span><button class="nav out" data-do="close">Get up<kbd>E</kbd></button></div>' +
         '<div class="main"><div class="top"><h2>' + title + '<small>' + sub + '</small></h2><span class="grow"></span>' +
         '<span class="chip' + (day.phase === 'open' ? ' open' : day.phase === 'prep' ? '' : ' late') + '"><i></i><span class="when">' + when + '</span></span>' +
@@ -2013,7 +2060,12 @@
       pc.said = null;
       if (p[0] === 'plus'){ if (GOOD[k] && pc.cart[k] < room(k)) pc.cart[k]++; }
       else if (p[0] === 'minus'){ if (GOOD[k] && pc.cart[k] > 0) pc.cart[k]--; }
-      else if (p[0] === 'page') pc.page = k === 'accounts' || k === 'reviews' ? k : 'supplies';
+      else if (p[0] === 'page') pc.page = k === 'accounts' || k === 'reviews' || k === 'shop' ? k : 'supplies';
+      else if (p[0] === 'purchase'){
+        var t = shopItem(k);
+        if (t && act('purchase', k)){ pc.said = [t.name + ' \u2013 bought!', 'ok']; saveNow(false); }
+        else pc.said = ['This is not possible.', 'warn'];
+      }
       else if (p[0] === 'buy'){
         if (act('buy', pc.cart)){ pc.cart = emptyGoods(); pc.said = ['Ordered \u2013 thank you!', 'ok']; saveNow(false); }
         else pc.said = ['This order is not possible.', 'warn'];
@@ -2078,6 +2130,10 @@
       st.orders = (Array.isArray(st.orders) ? st.orders : []).filter(function(o){ return !!o && !!o.goods && num(o.left) && GOODS.every(function(k){ return num(o.goods[k]) && o.goods[k] >= 0; }); });
       st.history = (Array.isArray(st.history) ? st.history : []).filter(function(r){ return !!r && ['n', 'served', 'lost', 'sales', 'tips', 'cost', 'profit', 'money'].every(function(k){ return num(r[k]); }); });
       if (!num(st.delivered)) st.delivered = 0;
+      var owned = {};   // (only things the shop has)
+      if (st.owned && typeof st.owned === 'object') SHOP.forEach(function(t){ if (st.owned[t.key] === true) owned[t.key] = true; });
+      st.owned = owned;
+      st.bowls = Math.max(0, Math.min(Math.floor(st.bowls), RULES.bowls + (owned.bowls ? SHOP_EFFECT.bowls : 0)));   // (whole bowls, no more than the stack holds)
       st.reviews = (Array.isArray(st.reviews) ? st.reviews : []).filter(function(r){
         return !!r && num(r.id) && num(r.day) && num(r.stars) && r.stars >= 1 && r.stars <= 5 && typeof r.text === 'string' && typeof r.who === 'string';
       }).slice(-60);
@@ -2186,6 +2242,7 @@
       atScreen: function(){ return !!pc || hold || !!(ctx.seat && ctx.seat.active()); },   // the keys belong to a screen (or he is sitting down), not to the chef
       // ---- for tests only ----
       debugPC: function(cmd){ if (cmd === 'open') openPC(); else if (cmd) pcDo(cmd); return pc ? { page: pc.page, cart: pc.cart, said: pc.said } : null; },
+      debugShop: function(){ return { owned: Object.keys(state.owned), mood: +mood().toFixed(2), bowls: state.bowls, money: state.money }; },
       debugReviews: function(){ return { stars: +reputation().toFixed(2), list: state.reviews.map(function(r){ return r.stars + ' ' + r.who + ' (food ' + r.food + ' wait ' + r.wait + ' clean ' + r.clean + '): ' + r.text; }) }; },
       debugSupplies: function(){ var o = {}; GOODS.forEach(function(k){ o[k] = oneDec(stockOf(k)) + ' room ' + room(k) + ' coming ' + coming(k); }); o.orders = state.orders.map(function(x){ return goodsText(x.goods) + ' in ' + Math.ceil(x.left); }); o.boxes = parcels().map(function(p){ return p.at + ': ' + goodsText(p.goods); }); return o; },
       debugDay: function(){ return JSON.parse(JSON.stringify(state.day)); },

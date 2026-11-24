@@ -529,7 +529,8 @@
               return c.guestInfo;
             });
           },
-          getEntrance: function(){ return decor && decor.entrance; } });
+          getEntrance: function(){ return decor && decor.entrance; },
+          showBought: function(key, on){ if (decor && decor.showBought) decor.showBought(key, on); } });
         window.__hotpotRestaurant = restaurant;   // for tests
       } catch (e){ console.error('Setting up the restaurant failed:', e); }
     }

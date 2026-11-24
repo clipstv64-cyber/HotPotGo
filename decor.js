@@ -362,8 +362,12 @@
     })();
 
     // ---------- tables: condiment caddy, candle in a bottle on two of them ------
+    var bought = { candles: null, plants: null };
+    var tables = [];   // (spot, top) of every table, for the candles from the shop
     function dressTable(table, spot, size, i){
       var y = size.y;
+      tables.push({ spot: spot, y: y, i: i });
+      if (bought.candles && i !== 0 && i !== 2) place('candlebottle', { h: 0.4 }, bought.candles, spot[0] + 0.28, y, spot[1] + 0.01, 0, {});   // (the candles were bought before this table was there)
       place('condiments', { w: 0.3 }, null, spot[0] - 0.12, y, spot[1], [0.2, -0.3, 1.4, 3.0][i % 4], { cast: true });
       if (i === 0 || i === 2) place('candlebottle', { h: 0.4 }, null, spot[0] + 0.28, y, spot[1] + 0.01, 0, {});
     }
@@ -376,7 +380,21 @@
       doorPivot.rotation.y = -1.5 * entrance.open;
     }
 
-    return { dressTable: dressTable, update: update, root: root, entrance: entrance, office: office };
+    // things bought in the shop (restaurant.js): candles on the tables that have none, plants along the wall
+    function showBought(key, on){
+      if (bought[key]){ bought[key].visible = on; return; }
+      if (!on || (key !== 'candles' && key !== 'plants')) return;
+      var g = bought[key] = new T.Group(); root.add(g);
+      if (key === 'candles') tables.forEach(function(t){
+        if (t.i === 0 || t.i === 2) return;   // (these have one from the start)
+        place('candlebottle', { h: 0.4 }, g, t.spot[0] + 0.28, t.y, t.spot[1] + 0.01, 0, {});
+      });
+      else [-4.66, 0, 4.66].forEach(function(z, n){   // between the tables, at the left wall
+        place('plant', { h: 1.6 }, g, -9.42, 0, z, [0.3, 2.1, 4.0][n], { cast: true });
+        ctx.addBox(-9.42, z, 0.55, 0.55, 1.4);
+      });
+    }
+    return { dressTable: dressTable, showBought: showBought, update: update, root: root, entrance: entrance, office: office };
   }
 
   window.HotPotDecor = { build: build };
