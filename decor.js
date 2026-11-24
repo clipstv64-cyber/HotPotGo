@@ -310,6 +310,8 @@
         holder.add(scr);
         holder.updateMatrixWorld(true);
         office.screen = scr.getWorldPosition(new T.Vector3());   // where the chef looks when he sits at the desk
+        // the desk's top (measured on the model: the front edge of the top at 0.585 of its height), for his hands
+        office.table = { x: doorO, z: z1 + 0.03 + size.z / 2, halfZ: size.z / 2, top: size.y * 0.585 };
       } });
       addBox(doorO, z1 + 0.62, 1.9, 1.18, 1.05);
       // The chef's swivel chair (Meshy): low and wide, without armrests, as his short legs and wide hips need
@@ -317,13 +319,13 @@
       // height and where the backrest begins, as shares of its height and depth (measured on the model);
       // box: half the width of its obstacle.
       var chairX = doorO, chairZ = z1 + 1.82;
-      office.chair = { holder: place('chef_chair', { h: 0.68 }, null, chairX, 0, chairZ, Math.PI + 0.3, { cast: true }),
-                       x: chairX, z: chairZ, rest: Math.PI + 0.3, face: Math.PI, seat: 0.74, back: 0.28, box: 0.4 };
-      addBox(chairX, chairZ, 0.8, 0.8, 0.5);
+      office.chair = { holder: place('chef_chair', { h: 0.6 }, null, chairX, 0, chairZ, Math.PI + 0.3, { cast: true }),
+                       x: chairX, z: chairZ, rest: Math.PI + 0.3, face: Math.PI, seat: 0.74, back: 0.28, box: 0.3 };
+      addBox(chairX, chairZ - 0.12, 0.6, 0.6, 0.5);   // (where the empty chair stands, pushed in: see CHEF_SEAT.tuck in index.html)
       office.room = { x0: x0, x1: xo, z0: z1, z1: zm };   // the office's floor (he sits down only from inside it)
       office.desk = { x: doorO, z: z1 + 1.25 };           // in front of the desk
-      place('filing_cabinet', { h: 1.35 }, null, x0 + 0.03, 0, zm - 1.1, Math.PI / 2, { back: true, cast: true });
-      addBox(x0 + 0.35, zm - 1.1, 0.7, 0.5, 1.35);
+      place('filing_cabinet', { h: 1.35 }, null, x0 + 0.03, 0, zm - 0.45, Math.PI / 2, { back: true, cast: true });
+      addBox(x0 + 0.35, zm - 0.45, 0.7, 0.5, 1.35);   // (by the door: the chef walks past it to pull out his chair)
       place('office_shelf', { h: 1.8 }, null, xo - 0.03, 0, z1 + 1.9, -Math.PI / 2, { back: true, cast: true });
       addBox(xo - 0.2, z1 + 1.9, 0.4, 1.0, 1.8);
       // storeroom: big rack at the back, sacks, boxes, a pallet of water

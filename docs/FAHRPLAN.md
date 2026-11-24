@@ -119,12 +119,12 @@ Danach folgen Mehrspieler und Mitarbeiter (Phase 3).
   Computer-Bildschirm selbst sieht aus wie ein modernes Büro-Programm: dunkle Seitenleiste,
   Karten, Bestellung und Lieferungen rechts, Kennzahlen unter „Accounts“.
 - **Am Computer sitzen** (Wunsch vom 24.11.2026): Den Computer benutzt man im Sitzen. E am
-  Bürostuhl: Der Koch geht zum Stuhl, dreht sich um, setzt sich gerade hin (der Stuhl hat
-  sich zu ihm gedreht) und dreht sich mit dem Stuhl zum Tisch; dann geht der Bildschirm
-  an. E oder Esc schaltet ihn aus, er dreht sich zurück, steht auf und macht einen Schritt
-  vom Stuhl weg. Die Kamera schaut dorthin, wohin sein Körper zeigt. Der Stuhl ist ein
-  eigenes Meshy-Modell für ihn: niedrig und breit, ohne Armlehnen, weil seine Beine sehr
-  kurz und seine Hüften breit sind. Der Schreibtisch ist an seine Größe angepasst.
+  Bürostuhl: Der Koch geht neben den Stuhl, fasst ihn an der Lehne und zieht ihn vom Tisch
+  weg, tritt davor, setzt sich mit Blick zum Tisch und rückt mit dem Stuhl heran; die Hände
+  gehen auf die Tastatur, dann geht der Bildschirm an. E oder Esc: Er rückt zurück, steht
+  auf, tritt zur Seite und schiebt den Stuhl wieder an den Tisch. Der Stuhl ist ein eigenes
+  Meshy-Modell für ihn (niedrig, breit, ohne Armlehnen). Der Aktenschrank steht dafür neben
+  der Bürotür.
 - **Bewertungen** (24.11.2026): Ein Gast schreibt nach dem Essen mit 75 % Wahrscheinlichkeit
   eine Bewertung, wer hungrig geht, immer (1 Stern). Der Satz dazu nennt, was am
   schwächsten war (Essen, Wartezeit oder Sauberkeit). Jeder Fleck auf dem Boden kostet ein

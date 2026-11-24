@@ -516,7 +516,7 @@
                   active: function(){ return !!chefSit; }, seated: function(){ return !!chefSit && chefSit.phase === 'seated'; } },
           renderer: renderer,
           // where the chef stands (for the saved game)
-          chefAt: { get: function(){ return !model ? null : chefSit ? { x: chefSeat.near.x, z: chefSeat.near.z } : { x: model.position.x, z: model.position.z }; },   // (seated: where he stands when he has got up)
+          chefAt: { get: function(){ return !model ? null : chefSit ? { x: chefSeat.side.x, z: chefSeat.side.z } : { x: model.position.x, z: model.position.z }; },   // (seated: where he stands when he has got up)
                     set: function(x, z){ if (!model) return false; model.position.x = x; model.position.z = z; return true; } },
           // the guests: who they are, their chair and table, their head and hands, where they
           // are right now ('away', 'coming', 'seated', 'leaving'), and how to send them in and out
@@ -2677,23 +2677,27 @@
 
   // ---- the chef sits down at the office desk (and gets up again) ---------------------
   // His seated pose on the office chair is worked out once, the same way as the guests'
-  // (sitPose, plantFeet). He sits down the way one does on a swivel chair: he walks up to
-  // it, turns round, sits straight down onto the chair (which has turned to him), and
-  // swivels to the desk. Getting up is the same backwards, and a step away from the chair.
-  // The camera hangs on his head and looks where his body faces, so the view goes along.
-  var CHEF_SEAT = { turn: 0.55, down: 1.0, swivel: 0.8, up: 0.9,   // seconds for each part
-                    forward: 0.14,   // he sits this far toward the front edge of the seat (his legs are short)
+  // (sitPose, plantFeet). He sits down the way one does at a desk: he walks to the side of
+  // the chair, takes hold of its back and pulls it out from the desk, steps in front of it,
+  // sits down facing the desk and moves in with the chair. Getting up is the same backwards:
+  // he moves back, stands up, steps aside and pushes the chair back to the desk.
+  // The camera hangs on his head and looks where his body faces; seated, at the screen.
+  var CHEF_SEAT = { pull: 1.3, turn: 0.45, down: 1.0, scoot: 0.6, up: 0.9,   // seconds for each part
+                    forward: 0.04,   // he sits this far toward the front edge of the seat
+                    tuck: 0.12,      // the empty chair stands this much further in, toward the desk
+                    out: 0.5,        // ... and is pulled out this far from where he sits
+                    beside: 0.82,    // he stands this far beside the chair to pull it
                     giveUp: 5 };     // seconds after which he stops trying to get to the chair
   var chefWalkClip = null;
-  var chefSeat = null;          // worked out once: { nodes, bones, stand, chair, C, off, y, rot, f0, f1, front, near, yaw, pitch }
+  var chefSeat = null;          // worked out once: { nodes, bones, hanging, stand, chair, C, off, y, rot, f0, f1, front, home, out, grip, side, yaw, pitch }
   var chefSeatFailed = false, chefSeatInfo = '', chefStill = 0;
-  var chefSit = null;           // while it lasts: { phase: 'walk' | 'step' | 'turn' | 'down' | 'swivel' | 'seated' | 'out' | 'up' | 'leave', t, from, pos0, rot0, chair0, rate, done, fail }
+  var chefSit = null;           // while it lasts: { phase: 'walk' | 'pull' | 'step' | 'turn' | 'down' | 'in' | 'seated' | 'back' | 'up' | 'leave' | 'push', t, from, rot0, rate, reach, done, fail }
   function chefFeet(){ return wp(model.getObjectByName('LeftFoot')).add(wp(model.getObjectByName('RightFoot'))).multiplyScalar(0.5); }   // the middle between his ankles
   function easeInOut(x){ x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x); }
   function poseOf(nodes){ return nodes.map(function(o){ return { q: o.quaternion.clone(), p: o.position.clone() }; }); }
   function prepareChefSeat(){
     var office = decor && decor.office, chair = office && office.chair;
-    if (chefSeat || chefSeatFailed || !chair || !chair.holder.userData.size || !office.screen || !chefWalkClip || !headBone) return;
+    if (chefSeat || chefSeatFailed || !chair || !chair.holder.userData.size || !office.screen || !office.table || !chefWalkClip || !headBone) return;
     // standing still with free hands for a moment (so that a carrying pose has faded: his standing pose is taken from the body)
     chefStill = walkWeight === 0 && jumpWeight === 0 && onGround && !(gameplay && gameplay.handsFree && !gameplay.handsFree()) ? chefStill + 1 : 0;
     if (chefStill < 45) return;
@@ -2725,19 +2729,31 @@
       model.updateMatrixWorld(true);
       var to = office.screen.clone().sub(wp(headBone));   // from his eyes to the screen
       var C = new THREE.Vector3(chair.x, 0, chair.z), feet = chefFeet().sub(C);   // his ankles from the chair's middle, seated, the chair facing the desk
+      // two seated poses: arms hanging beside him as when he stands (sitting down, swivelling), and
+      // his hands on the keyboard (at the desk), placed the way the guests lay theirs on the table
+      var hanging = poseOf(nodes);
+      nodes.forEach(function(o, k){ if (/^(Left|Right)(Shoulder|Arm|ForeArm|Hand)/.test(o.name)) hanging[k] = stand[k]; });
+      ch.cfg.mood = { reach: 0.3, apart: 0.17, handIn: 28 }; ch.cfg.height = 2.4;
+      ch.restHandQ = {}; ch.restHandFrame = {};
+      ['Left', 'Right'].forEach(function(sd){ ch.restHandQ[sd] = wq(model.getObjectByName(sd + 'Hand')); ch.restHandFrame[sd] = handFrame(ch, sd); });
+      var T = office.table;
+      handsOnTable(ch, { x: chair.x, z: chair.z, rot: spot.rot, table: { x: T.x, z: T.z, halfZ: T.halfZ, top: T.top } });
       var bones = poseOf(nodes);
-      // his arms hang beside him as when he stands (laid on the thighs they would be inside his belly)
-      nodes.forEach(function(o, k){ if (/^(Left|Right)(Shoulder|Arm|ForeArm|Hand)/.test(o.name)) bones[k] = stand[k]; });
-      // C: the chair's middle; off: his place from there while the chair faces the desk.
-      // f1: where his ankles are when he sits and the chair faces the room; f0: the same spot, standing.
-      // front: where he stands to sit down, his back to the chair, so that his feet are on that spot already;
-      // near: a step in front of that, clear of the chair.
-      var f1 = new THREE.Vector3(C.x - feet.x, feet.y, C.z - feet.z);
-      var front = f1.clone().sub(underHim.clone().applyAxisAngle(UP_AXIS, model.rotation.y + Math.PI)).setY(0);
-      var away = new THREE.Vector3(-feet.x, 0, -feet.z).normalize(), clear = (chair.box || 0.45) + CHEF_RADIUS + 0.06;
-      chefSeat = { nodes: nodes, bones: bones, stand: stand, chair: chair, C: C, off: model.position.clone().sub(C).setY(0), y: model.position.y, rot: model.rotation.y,
-                   f1: f1, f0: new THREE.Vector3(f1.x, pos0.y + underHim.y, f1.z), front: front, near: C.clone().addScaledVector(away, clear),
+      // C: the chair's middle when he sits at the desk; off: his place from there. f1: his ankles, seated;
+      // f0: the same spot, standing. (All at C; where the chair is pulled out, they move along with it.)
+      // home: where the empty chair stands; out: where it is pulled to; front: where he stands, facing the
+      // desk, to sit down on the pulled-out chair; side: where he stands beside it to pull it.
+      var fwd = new THREE.Vector3(Math.sin(spot.rot), 0, Math.cos(spot.rot)), right = new THREE.Vector3(fwd.z, 0, -fwd.x);
+      var f1 = C.clone().add(feet), outV = fwd.clone().multiplyScalar(-CHEF_SEAT.out);
+      var front = f1.clone().sub(underHim.clone().applyAxisAngle(UP_AXIS, model.rotation.y)).add(outV).setY(0);
+      var home = C.clone().addScaledVector(fwd, CHEF_SEAT.tuck), outP = C.clone().add(outV);
+      var sideDir = right.clone();   // (toward the office wall: on the other side stands the shelf)
+      var side = home.clone().addScaledVector(fwd, -0.15).addScaledVector(sideDir, CHEF_SEAT.beside);
+      chefSeat = { approach: side.clone().addScaledVector(fwd, -0.7), nodes: nodes, bones: bones, hanging: hanging, stand: stand, chair: chair, C: C, off: model.position.clone().sub(C).setY(0), y: model.position.y, rot: model.rotation.y,
+                   f1: f1, f0: new THREE.Vector3(f1.x, pos0.y + underHim.y, f1.z), front: front, home: home, out: outP, side: side, near: side, fwd: fwd, sideDir: sideDir,
+                   back: size.z * 0.38, grip: size.y * 0.92,   // the back of the chair, where he takes hold of it
                    yaw: Math.atan2(-to.x, -to.z), pitch: Math.atan2(to.y, Math.hypot(to.x, to.z)) };
+      chair.holder.position.set(home.x, 0, home.z); chair.holder.rotation.y = chair.face;   // the empty chair, pushed in at the desk
     } catch (e){ console.error('Working out how the chef sits failed:', e); chefSeatFailed = true; }
     // back to how he stood
     nodes.forEach(function(o, k){ o.quaternion.copy(stand[k].q); o.position.copy(stand[k].p); });
@@ -2752,7 +2768,7 @@
   }
   function chefGetUp(done){
     if (!chefSit || chefSit.phase !== 'seated') return false;
-    chefSit.phase = 'out'; chefSit.t = 0; chefSit.done = done;
+    chefSit.phase = 'back'; chefSit.t = 0; chefSit.done = done;
     return true;
   }
   // He stands again, at once: when the game is put somewhere else (a loaded game, a test).
@@ -2761,25 +2777,28 @@
     var seat = chefSeat, onChair = chefSit.phase !== 'walk';
     chefSit = null; jumpY = 0; onGround = true; walkWeight = 0;
     seat.nodes.forEach(function(o, k){ o.quaternion.copy(seat.stand[k].q); o.position.copy(seat.stand[k].p); });
-    if (onChair){ model.position.x = seat.near.x; model.position.z = seat.near.z; }
+    seat.chair.holder.position.set(seat.home.x, 0, seat.home.z); seat.chair.holder.rotation.y = seat.chair.face;
+    if (onChair){ model.position.x = seat.side.x; model.position.z = seat.side.z; }
     model.position.y = modelBaseY;
   }
-  // where he is on the chair when it is turned by `turn` from facing the desk (0) to facing the room (PI)
-  function chefOnChair(turn){
-    var seat = chefSeat, c = Math.cos(turn), s = Math.sin(turn);
-    model.position.set(seat.C.x + seat.off.x * c + seat.off.z * s, seat.y, seat.C.z - seat.off.x * s + seat.off.z * c);
-    model.rotation.y = seat.rot + turn;
-    seat.chair.holder.rotation.y = seat.chair.face + turn;
+  // the chair at p (and he on it, when he sits)
+  function chairAt(p){ chefSeat.chair.holder.position.set(p.x, 0, p.z); }
+  function chefOnChair(p){
+    var seat = chefSeat;
+    chairAt(p);
+    model.position.set(p.x + seat.off.x, seat.y, p.z + seat.off.z);
+    model.rotation.y = seat.rot;
   }
-  // a step of the walk toward a point; returns how far it still is
-  function chefWalkTo(target, delta, collide){
+  // a step of the walk toward a point; returns how far it still is. face: the direction his body turns to
+  // (by default where he walks)
+  function chefWalkTo(target, delta, collide, face){
     var dx = target.x - model.position.x, dz = target.z - model.position.z, d = Math.hypot(dx, dz);
     walkWeight += ((d > 0.3 ? 1 : 0.4) - walkWeight) * (1 - Math.exp(-BLEND_RATE * delta));
     var rate = WALK_ANIM_RATE * (0.4 + 0.6 * walkWeight), step = Math.min(d, STRIDE_SPEED * rate * walkWeight * delta);
     if (d > 1e-5){
       model.position.x += dx / d * step; model.position.z += dz / d * step;
-      // the body turns to where he walks (so the feet do not slide sideways)
-      model.rotation.y += shortestAngle(Math.atan2(dx, dz) - model.rotation.y) * (1 - Math.exp(-9 * delta));
+      var want = face !== undefined ? face : Math.atan2(dx, dz);
+      model.rotation.y += shortestAngle(want - model.rotation.y) * (1 - Math.exp(-9 * delta));
     }
     if (collide) resolveCollisions(model.position, jumpY);
     model.position.y = modelBaseY;
@@ -2788,69 +2807,88 @@
   }
   // every frame while it lasts, before the animation: where he is and where he looks; returns the walk's pace
   function stepChefSit(delta){
-    var S = chefSit, seat = chefSeat, chair = seat.chair, u;
-    jumpRequested = false; sprintWeight = 0; S.rate = WALK_ANIM_RATE * 0.4;
+    var S = chefSit, seat = chefSeat, u;
+    jumpRequested = false; sprintWeight = 0; S.rate = WALK_ANIM_RATE * 0.4; S.reach = 0;
     function next(phase){ S.phase = phase; S.t = 0; }
+    function run(seconds){ S.t = Math.min(1, S.t + delta / seconds); return easeInOut(S.t); }
     // back to the keys: he stands where he is; what is left of the walk runs out in the direction he faces
     function handBack(){ chefSit = null; jumpY = 0; onGround = true; model.position.y = modelBaseY; lastMoveDir.set(Math.sin(model.rotation.y), 0, Math.cos(model.rotation.y)); }
-    if (S.phase === 'walk' || S.phase === 'step')   // the chair turns round to him while he comes (before he stands in front of it)
-      chair.holder.rotation.y += shortestAngle(chair.face + Math.PI - chair.holder.rotation.y) * (1 - Math.exp(-6 * delta));
-    function run(seconds){ S.t = Math.min(1, S.t + delta / seconds); return easeInOut(S.t); }
-    if (S.phase === 'walk'){            // to a step in front of the chair, round whatever stands in the way
+    var toChair = function(){ var c = seat.chair.holder.position; return Math.atan2(c.x - model.position.x, c.z - model.position.z); };
+    // pulling (k = 0 .. 1 of the phase): he reaches for the chair's back, the chair goes from a to b, he lets go
+    function pulling(a, b, k){
+      var m = easeInOut((k - 0.25) / 0.55);
+      chairAt(a.clone().lerp(b, m));
+      S.reach = Math.min(1, k / 0.25, (1 - k) / 0.18);
+      model.rotation.y += shortestAngle(toChair() - model.rotation.y) * (1 - Math.exp(-8 * delta));
+    }
+    if (S.phase === 'walk'){            // to the side of the chair, round whatever stands in the way
       S.t += delta;
-      if (chefWalkTo(seat.near, delta, true) < 0.05) next('step');
+      // (first to a point in the room in line with that side, then up to it: past the chair, not into it)
+      if (!S.leg && chefWalkTo(seat.approach, delta, true) < 0.12) S.leg = 1;
+      if (S.leg && chefWalkTo(seat.side, delta, true) < 0.05){ next('pull'); walkWeight = 0; }
       else if (S.t > CHEF_SEAT.giveUp){ var no = S.fail; handBack(); if (no) no(); return WALK_ANIM_RATE * 0.4; }   // he cannot get there
-    } else if (S.phase === 'step'){     // up to the chair
-      if (chefWalkTo(seat.front, delta, false) < 0.02){ next('turn'); walkWeight = 0; S.rot0 = model.rotation.y; S.chair0 = chair.holder.rotation.y; }
-    } else if (S.phase === 'turn'){     // he turns his back to the chair, the chair turns to him
+    } else if (S.phase === 'pull'){     // the chair out from the desk
+      walkWeight = 0; run(CHEF_SEAT.pull); pulling(seat.home, seat.out, S.t);
+      if (S.t >= 1) next('step');
+    } else if (S.phase === 'step'){     // in front of the chair, between it and the desk
+      if (chefWalkTo(seat.front, delta, false) < 0.02){   // (facing where he walks; the turn to the desk comes after)
+        next('turn'); walkWeight = 0; S.rot0 = model.rotation.y; }
+    } else if (S.phase === 'turn'){     // his back to the chair, facing the desk
       walkWeight = 0; u = run(CHEF_SEAT.turn);
-      model.rotation.y = S.rot0 + shortestAngle(seat.rot + Math.PI - S.rot0) * u;
-      chair.holder.rotation.y = S.chair0 + shortestAngle(chair.face + Math.PI - S.chair0) * u;
-      if (S.t >= 1){ next('down'); S.from = poseOf(seat.nodes); S.pos0 = model.position.clone(); }
-    } else if (S.phase === 'down'){     // straight down onto the seat, the feet where they are
-      walkWeight = 0; u = run(CHEF_SEAT.down);
-      chefOnChair(Math.PI);
-      model.position.lerpVectors(S.pos0, model.position.clone(), u);
-      if (S.t >= 1) next('swivel');
-    } else if (S.phase === 'swivel'){   // round to the desk
-      walkWeight = 0; u = run(CHEF_SEAT.swivel);
-      chefOnChair(Math.PI * (1 - u));
+      model.rotation.y = S.rot0 + shortestAngle(seat.rot - S.rot0) * u;
+      if (S.t >= 1){ next('down'); S.from = poseOf(seat.nodes); }
+    } else if (S.phase === 'down'){     // down onto the seat, the feet where they are
+      walkWeight = 0; run(CHEF_SEAT.down);
+      chairAt(seat.out); model.rotation.y = seat.rot;
+      if (S.t >= 1){ next('in'); chefOnChair(seat.out); }
+    } else if (S.phase === 'in'){       // in to the desk with the chair
+      walkWeight = 0; u = run(CHEF_SEAT.scoot);
+      chefOnChair(seat.out.clone().lerp(seat.C, u));
       if (S.t >= 1){ next('seated'); if (S.done){ var f = S.done; S.done = null; f(); } }
     } else if (S.phase === 'seated'){
-      walkWeight = 0; chefOnChair(0);
-    } else if (S.phase === 'out'){      // round to the room again
-      walkWeight = 0; u = run(CHEF_SEAT.swivel);
-      chefOnChair(Math.PI * u);
+      walkWeight = 0; chefOnChair(seat.C);
+    } else if (S.phase === 'back'){     // back from the desk with the chair
+      walkWeight = 0; u = run(CHEF_SEAT.scoot);
+      chefOnChair(seat.C.clone().lerp(seat.out, u));
       if (S.t >= 1) next('up');
     } else if (S.phase === 'up'){       // up from the seat
-      walkWeight = 0; u = run(CHEF_SEAT.up);
-      chefOnChair(Math.PI);
-      model.position.lerpVectors(model.position.clone(), new THREE.Vector3(seat.front.x, modelBaseY, seat.front.z), u);
+      walkWeight = 0; run(CHEF_SEAT.up);
+      chairAt(seat.out); model.rotation.y = seat.rot;
       if (S.t >= 1){ next('leave'); seat.nodes.forEach(function(o, k){ o.quaternion.copy(seat.stand[k].q); o.position.copy(seat.stand[k].p); }); }
-    } else {                            // 'leave': a step away from the chair
-      if (chefWalkTo(seat.near, delta, false) < 0.03){
+    } else if (S.phase === 'leave'){    // aside, to where he pulled the chair
+      // (a step sideways, facing the chair: he does not turn to the wall close behind him)
+      if (chefWalkTo(seat.side, delta, false, toChair()) < 0.03){ next('push'); walkWeight = 0; }
+    } else {                            // 'push': the chair back to the desk
+      walkWeight = 0; run(CHEF_SEAT.pull); pulling(seat.out, seat.home, S.t);
+      if (S.t >= 1){
         var g = S.done;
         handBack();
         if (g) g();
         return WALK_ANIM_RATE * 0.4;
       }
     }
-    // the view: where his body faces; once he sits, on the screen
-    // (while he turns, the view keeps close to the body: lagging behind, it would look into his own head)
-    var turning = S.phase === 'turn' || S.phase === 'swivel' || S.phase === 'out';
-    var e = 1 - Math.exp(-(turning ? 24 : 7) * delta), seatedNow = S.phase === 'seated' || (S.phase === 'swivel' && S.t > 0.75);
-    lookYaw += shortestAngle((seatedNow ? seat.yaw : model.rotation.y - Math.PI) - lookYaw) * e;
-    lookPitch += ((seatedNow ? seat.pitch : -0.12) - lookPitch) * e;
+    // the view: where his body faces, a little down at the chair while he handles it; seated, on the screen
+    var seatedNow = S.phase === 'seated' || (S.phase === 'in' && S.t > 0.4);
+    var e = 1 - Math.exp(-((S.phase === 'turn') ? 24 : 7) * delta);
+    // (stepping in front of the chair, the view stays on the desk: the body turns to where he walks, and the camera
+    // in front of his head would go into the shelf)
+    lookYaw += shortestAngle((seatedNow || S.phase === 'step' || S.phase === 'turn' ? seat.yaw : model.rotation.y - Math.PI) - lookYaw) * e;
+    lookPitch += ((seatedNow ? seat.pitch : (S.phase === 'pull' || S.phase === 'push') ? -1.25 : -0.15) - lookPitch) * e;
     return S.rate;
   }
   window.__hotpotChefSit = function(){ return chefSit ? chefSit.phase + ' ' + chefSit.t.toFixed(2) : chefSeat ? 'ready (' + chefSeatInfo + ')' : chefSeatFailed ? 'failed' : 'not ready'; };   // for tests
   // ... and after the animation: the body between standing and sitting
   function poseChefSit(){
     var S = chefSit, seat = chefSeat, A, B, u;
-    if (!S || S.phase === 'walk' || S.phase === 'step' || S.phase === 'leave') return;   // (walking: the walk's own pose)
+    if (!S) return;
+    if (S.phase === 'pull' || S.phase === 'push'){ reachChair(S.reach); return; }   // (standing: the animation's pose, one arm to the chair)
+    if (S.phase === 'walk' || S.phase === 'step' || S.phase === 'leave') return;   // (walking: the walk's own pose)
+    // (the hands go to the keyboard while he moves in to the desk, and leave it when he moves back)
     if (S.phase === 'turn'){ A = B = seat.stand; u = 1; }
-    else if (S.phase === 'down'){ A = S.from; B = seat.bones; u = easeInOut(S.t); }
-    else if (S.phase === 'up'){ A = seat.bones; B = seat.stand; u = easeInOut(S.t); }
+    else if (S.phase === 'down'){ A = S.from; B = seat.hanging; u = easeInOut(S.t); }
+    else if (S.phase === 'in'){ A = seat.hanging; B = seat.bones; u = easeInOut(S.t); }
+    else if (S.phase === 'back'){ A = seat.bones; B = seat.hanging; u = easeInOut(S.t); }
+    else if (S.phase === 'up'){ A = seat.hanging; B = seat.stand; u = easeInOut(S.t); }
     else { A = B = seat.bones; u = 1; }
     seat.nodes.forEach(function(o, k){
       o.quaternion.copy(A[k].q).slerp(B[k].q, u);
@@ -2859,9 +2897,24 @@
     // sitting down and getting up, his feet stay on their spot: the body is carried along over them
     if (S.phase === 'down' || S.phase === 'up'){
       model.updateMatrixWorld(true);
-      var want = S.phase === 'down' ? seat.f0.clone().lerp(seat.f1, u) : seat.f1.clone().lerp(seat.f0, u);
+      var shift = seat.out.clone().sub(seat.C).setY(0);
+      var want = (S.phase === 'down' ? seat.f0.clone().lerp(seat.f1, u) : seat.f1.clone().lerp(seat.f0, u)).add(shift);
       model.position.add(want.sub(chefFeet()));
     }
+  }
+  // the hand nearer to the chair on the top of its back (w: 0 = where the animation has it .. 1 = holding on)
+  function reachChair(w){
+    if (w <= 0) return;
+    var seat = chefSeat, c = seat.chair.holder.position;
+    var grip = new THREE.Vector3(c.x, seat.grip, c.z).addScaledVector(seat.fwd, -seat.back);
+    model.updateMatrixWorld(true);
+    var L = model.getObjectByName('LeftArm'), R = model.getObjectByName('RightArm');
+    var arm = wp(L).distanceTo(grip) < wp(R).distanceTo(grip) ? L : R, sd = arm === L ? 'Left' : 'Right';
+    var fore = model.getObjectByName(sd + 'ForeArm'), hand = model.getObjectByName(sd + 'Hand');
+    var fwd = new THREE.Vector3(Math.sin(model.rotation.y), 0, Math.cos(model.rotation.y));
+    var out = wp(arm).sub(wp(model.getObjectByName('Hips'))).setY(0).normalize();
+    var target = wp(hand).lerp(grip, w);
+    reachHand({ arm: arm, fore: fore, hand: hand, right: out, fwd: fwd, handQ: wq(hand) }, target);
   }
 
   function animate(){
