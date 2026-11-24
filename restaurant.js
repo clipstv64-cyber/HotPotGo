@@ -58,6 +58,15 @@
     // what supplies cost at the computer (euros): one vegetable, broth for one pot (about 35 a pot)
     cost: { potato: 8, carrot: 8, onion: 8, broth: 11 },
     delivery: 30,             // seconds until an order arrives in the storeroom
+    // Reviews: a guest rates the visit by these parts (each 0 .. 1; the weights are the game
+    // concept's), and that gives 1 to 5 stars. The restaurant's stars are the average of the
+    // latest reviews, so bad ones can be made good again.
+    review: { weights: { food: 0.35, wait: 0.25, clean: 0.2, value: 0.1, mood: 0.1 },
+              writes: 0.75,          // share of the served guests who write a review (who leaves hungry always does)
+              keep: 30,              // the restaurant's stars: the average of this many latest reviews
+              dirt: 0.25,            // each stain on the floor takes this much off "clean"
+              mood: 0.45,            // the room as it is: shabby (better furniture will raise it)
+              draw: [0.8, 1.25] },   // guests come this much less / more often at 1 star and at 5 stars
     autosave: 20,             // seconds between two automatic saves
     reach: 2.1,               // how close the chef has to be to a crate, the pot, the bowls
     cutReach: 1.75,           // ... to the chopping block to cut on it
@@ -93,6 +102,25 @@
     onion:  { name: 'Onions', one: 'onion', many: 'onions' },
     broth:  { name: 'Broth', one: 'broth for 1 pot', many: 'broth for # pots' }
   };
+  // the guests' names, for their reviews
+  var GUEST_NAMES = { woman: 'Greta', sailor: 'Hein', biker: 'Bruno', nerd: 'Milo', oldman: 'Walter', glamour: 'Lola', butcher: 'Otto', goth: 'Raven' };
+  // What a guest writes. It follows from the visit: f = how the food, the wait and the
+  // cleanliness were (0 .. 1), and the weakest of them is what the guest complains about.
+  var REVIEW_TEXT = {
+    5: { any: ['The place looks terrible, but the stew is incredible!', 'Wonderful stew, and it came quickly. I will be back.', 'Best stew in town. Do not let the furniture put you off.'] },
+    4: { food: ['Quick and friendly. The stew was good, not great.'], wait: ['Really tasty. I just had to wait a little.'], clean: ['Lovely stew. The floor could do with a broom, though.'] },
+    3: { food: ['It was okay. The stew was nothing special.'], wait: ['The stew was fine, but it took a long time.'], clean: ['Decent stew, but the floor was dirty.'] },
+    2: { food: ['The stew was no good. I could not finish it.'], wait: ['I waited far too long for my stew.'], clean: ['It was filthy in there. I lost my appetite.'] },
+    1: { food: ['Awful stew. Never again.'], wait: ['I waited ages, and then the stew was not even good.'], clean: ['Dirty floor, bad stew. Never again.'] },
+    hungry: ['I waited and waited for a bowl of stew, then I went home hungry.', 'Nobody brought me anything. I left hungry.']
+  };
+  function reviewText(stars, f, served, n){
+    if (!served) return REVIEW_TEXT.hungry[n % REVIEW_TEXT.hungry.length];
+    var worst = f.wait < f.food ? (f.clean < f.wait ? 'clean' : 'wait') : (f.clean < f.food ? 'clean' : 'food');
+    var list = REVIEW_TEXT[stars].any || REVIEW_TEXT[stars][worst];
+    return list[n % list.length];
+  }
+  function esc(t){ return String(t).replace(/[&<>"']/g, function(c){ return '&#' + c.charCodeAt(0) + ';'; }); }   // for text that comes out of a saved game
   // "3 potatoes, 1 carrot and broth for 2 pots"
   function goodsText(goods){
     var words = GOODS.filter(function(k){ return goods[k] > 0; }).map(function(k){
@@ -141,6 +169,7 @@
     parcel: { file: 'models/d_parcel.glb', width: 0.44 }                  // one box out of the storeroom's stack of boxes
   };
 
+  function num(v){ return typeof v === 'number' && isFinite(v); }
   function clamp(v, a, b){ return Math.max(a === undefined ? 0 : a, Math.min(b === undefined ? 1 : b, v)); }
   function smooth(x){ x = clamp(x); return x * x * (3 - 2 * x); }
   function rnd(a, b){ return a + (b - a) * Math.random(); }
@@ -179,7 +208,8 @@
     // ---------- the state and the actions that change it ---------------------------------
     // the day: 'prep' (before opening) -> 'open' -> 'closed' (the last guests finish) -> 'done' (the accounts are shown)
     // (spent: euros for supplies ordered that day)
-    function newDay(n){ return { n: n, phase: 'prep', time: RULES.day.opens, served: 0, lost: 0, sales: 0, tips: 0, spent: 0, report: null }; }
+    // (reviewed, stars: how many reviews were written that day, and their stars added up)
+    function newDay(n){ return { n: n, phase: 'prep', time: RULES.day.opens, served: 0, lost: 0, sales: 0, tips: 0, spent: 0, reviewed: 0, stars: 0, report: null }; }
     function newState(){
       var st = {
         money: RULES.startMoney, served: 0, lost: 0, nextId: 1,
@@ -202,6 +232,7 @@
         orders: [],                                   // supplies on their way: { id, goods: { potato, carrot, onion, broth }, cost, left (seconds) }
         delivered: 0,                                 // how many deliveries have arrived so far
         history: [],                                  // the accounts of the days that are over (see 'endDay')
+        reviews: [],                                  // what guests wrote: { id, day, who, stars, text, food, wait, clean }
         day: newDay(1)
       };
       ['knife', 'broth', 'spice'].forEach(function(kind){
@@ -226,6 +257,30 @@
       return n;
     }
     function room(kind){ return Math.max(0, Math.floor(holds(kind) - stockOf(kind) - coming(kind) + 1e-6)); }
+    // The restaurant's stars: the average of the latest reviews (0 = nobody has written one yet).
+    function reputation(){
+      var list = state.reviews.slice(-RULES.review.keep), sum = 0;
+      list.forEach(function(r){ sum += r.stars; });
+      return list.length ? sum / list.length : 0;
+    }
+    // A guest's visit is over: what it was like, the stars for it, and (if the guest writes one) the review.
+    // served: the guest got the stew (g.q: how good it was, g.patience: the patience that was left when it came).
+    function review(g, served){
+      var W = RULES.review, stains = play.getStains ? play.getStains().length : 0;   // (the floor is gameplay.js's)
+      var f = { food: served ? clamp(num(g.q) ? g.q : 1) : 0, wait: served ? clamp((num(g.patience) ? g.patience : 1) * 1.15) : 0,
+                clean: clamp(1 - W.dirt * stains), value: 0, mood: W.mood };
+      f.value = served ? clamp(0.5 + 0.5 * f.food) : 0;   // the price is fair for a good stew
+      var score = 0;
+      Object.keys(W.weights).forEach(function(k){ score += W.weights[k] * f[k]; });
+      var stars = served ? clamp(Math.round(1 + 4 * score), 1, 5) : 1;
+      if (served && Math.random() > W.writes) return null;
+      var r = { id: state.nextId++, day: state.day.n, who: g.id, stars: stars, text: '', food: +f.food.toFixed(2), wait: +f.wait.toFixed(2), clean: +f.clean.toFixed(2) };
+      r.text = reviewText(stars, f, served, r.id);
+      state.reviews.push(r);
+      if (state.reviews.length > 60) state.reviews.shift();
+      state.day.reviewed++; state.day.stars += stars; g.review = r.id; g.stars = stars;
+      return r;
+    }
     function priceOf(goods){ var c = 0; GOODS.forEach(function(k){ c += (goods[k] || 0) * RULES.cost[k]; }); return c; }
     function emptyPot(){
       var pot = state.pot;
@@ -375,6 +430,7 @@
         case 'endDay':     // everybody has gone: the day's accounts
           if (day.phase !== 'closed' || inside()) return false;
           day.report = { n: day.n, served: day.served, lost: day.lost, sales: day.sales, tips: day.tips, cost: day.spent,
+                         reviews: day.reviewed, stars: day.reviewed ? day.stars / day.reviewed : 0,
                          profit: day.sales + day.tips - day.spent, money: state.money };
           state.history.push(day.report);
           if (state.history.length > 60) state.history.shift();
@@ -412,6 +468,7 @@
           g = guest(arg); if (!g || g.phase !== 'waiting' || !it || it.kind !== 'stew') return false;
           it.at = 'table'; it.guest = g.id; state.carry = null;
           g.phase = 'eating'; g.t = 0; g.item = it.id;
+          g.q = it.q === undefined ? 1 : it.q;   // (the review will be about this, and about the patience that was left)
           g.pay = RECIPE.price + Math.round(RULES.tip * g.patience * (0.4 + 0.6 * (it.q === undefined ? 1 : it.q))); return true;   // quick service and a well made stew tip better
       }
       return false;
@@ -459,12 +516,13 @@
           if (g.t <= 0) act('order', g.id);
         } else if (g.phase === 'waiting'){
           g.patience -= dt / RULES.patience;
-          if (g.patience <= 0){ g.phase = 'angry'; g.t = 0; state.lost++; day.lost++; }
+          if (g.patience <= 0){ g.phase = 'angry'; g.t = 0; state.lost++; day.lost++; review(g, false); }
         } else if (g.phase === 'eating'){
           g.t += dt;
           if (g.t >= RULES.eatTime){
             g.phase = 'paid'; g.t = 0; state.money += g.pay; state.served++;
             day.served++; day.sales += RECIPE.price; day.tips += g.pay - RECIPE.price;
+            review(g, true);
             if (state.items[g.item]){ dropItem(state.items[g.item]); state.bowls++; }   // the bowl goes back to the clean stack (washing up comes later)
             g.item = null;
           }
@@ -481,7 +539,8 @@
       state.nextGuest -= dt;
       if (state.nextGuest <= 0){
         if (away.length) act('arrive', away[Math.floor(Math.random() * away.length)].id);
-        state.nextGuest = rnd(RULES.guestEvery[0], RULES.guestEvery[1]);
+        var stars = reputation(), draw = stars ? RULES.review.draw[0] + (RULES.review.draw[1] - RULES.review.draw[0]) * (stars - 1) / 4 : 1;
+        state.nextGuest = rnd(RULES.guestEvery[0], RULES.guestEvery[1]) / draw;   // a good name brings more guests
       }
     }
 
@@ -498,6 +557,9 @@
       '.hp-carry.on{opacity:1}' +
       '.hp-open{position:fixed;right:22px;top:58px;display:flex;align-items:center;gap:7px;padding:5px 12px;border-radius:999px;background:rgba(15,12,10,.36);' +
       'color:rgba(255,255,255,.85);font:600 13px/1.2 system-ui,"Segoe UI",sans-serif;letter-spacing:.3px;pointer-events:none;user-select:none;white-space:pre}' +
+      '.hp-stars{position:fixed;right:22px;top:92px;padding:5px 12px;border-radius:999px;background:rgba(15,12,10,.36);color:#ffd95a;' +
+      'font:600 13px/1.2 system-ui,"Segoe UI",sans-serif;letter-spacing:.3px;pointer-events:none;user-select:none;white-space:pre;opacity:0;transition:opacity .3s}' +
+      '.hp-stars.on{opacity:1}.hp-stars span{color:rgba(255,255,255,.85)}' +
       '.hp-open i{width:9px;height:9px;border-radius:50%;background:#9a9a9a}.hp-open.on i{background:#6fd24f;box-shadow:0 0 6px rgba(111,210,79,.8)}.hp-open.late i{background:#e0a23a}' +
       // the day's accounts: a slip of paper in the middle of the screen
       '.hp-paper{width:360px;padding:26px 30px 22px;background:#f4ead2;color:#4a3626;font:500 17px/1.5 Georgia,"Times New Roman",serif;' +
@@ -522,7 +584,7 @@
       'font:700 18px/1.2 Georgia,"Times New Roman",serif;cursor:pointer}' +
       '.hp-start button:first-of-type{margin-top:20px}.hp-start button.quiet{background:transparent;color:#4a3626}' +
       '.hp-start button:hover{background:#6b513a;color:#f4ead2}' +
-      '.hp-hold .hp-money,.hp-hold .hp-open,.hp-hold .hp-carry,.hp-hold .hp-hint{visibility:hidden}' +
+      '.hp-hold .hp-money,.hp-hold .hp-open,.hp-hold .hp-stars,.hp-hold .hp-carry,.hp-hold .hp-hint{visibility:hidden}' +
       // the computer in the office: a flat monitor; on it paper notes on the kitchen's dark wood
       '.hp-pc{position:fixed;left:0;top:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;background:rgba(8,6,4,.6);z-index:18;' +
       'font:15px/1.4 Georgia,"Times New Roman",serif;font-variant-numeric:lining-nums;color:#4a3626;user-select:none;' +
@@ -597,6 +659,10 @@
       '.hp-pc .ship{padding:6px 0;border-top:1px dotted rgba(74,54,38,.4)}.hp-pc .ship:first-of-type{border-top:none;padding-top:0}' +
       '.hp-pc .ship .bar{height:6px;margin-top:5px;border-radius:3px;background:rgba(74,54,38,.16);overflow:hidden}.hp-pc .ship .bar i{display:block;height:100%;background:#3f8a2c}' +
       '.hp-pc .cut{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
+      // the reviews
+      '.hp-pc .stars{color:#c9641f;letter-spacing:2px;font-size:17px}.hp-pc .stars i{font-style:normal;color:rgba(74,54,38,.22)}' +
+      '.hp-pc .big{font-size:44px;font-weight:700;line-height:1.1}.hp-pc .big .stars{font-size:22px;vertical-align:middle}' +
+      '.hp-pc .rev{padding:8px 15px}.hp-pc .quote{font-style:italic;font-size:16px;line-height:1.3;margin:2px 0}' +
       '.hp-pc .one .cut{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}' +
       // (a rubber stamp)
       '.hp-pc .tag{display:inline-block;padding:1px 7px;margin-right:8px;border:2px solid currentColor;border-radius:3px;transform:rotate(-2deg);opacity:.9;' +
@@ -612,6 +678,7 @@
     var carryEl = document.createElement('div'); carryEl.className = 'hp-carry'; document.body.appendChild(carryEl);
     function euro(n){ return '€' + n; }
     var openEl = document.createElement('div'); openEl.className = 'hp-open'; openEl.innerHTML = '<i></i><span></span>'; document.body.appendChild(openEl);
+    var starsEl = document.createElement('div'); starsEl.className = 'hp-stars'; document.body.appendChild(starsEl);   // the restaurant's stars, once there are reviews
     var shown = { money: null, carry: null, hud: null };
     function signed(n){ return (n < 0 ? '\u2212' : '') + euro(Math.abs(n)); }
     // the day's accounts (null: put the slip away)
@@ -622,6 +689,7 @@
       function row(name, value, cls){ return '<div class="row' + (cls ? ' ' + cls : '') + '"><span>' + name + '</span><b>' + value + '</b></div>'; }
       dayEl.innerHTML = '<h2>Day ' + r.n + '</h2><div class="sub">The day\u2019s accounts</div>' +
         row('Guests served', r.served) + row('Guests who left hungry', r.lost, r.lost ? 'minus' : '') +
+        row('Reviews', r.reviews ? r.stars.toFixed(1) + ' \u2605 (' + r.reviews + ')' : 'none') +
         row('Stew sold', euro(r.sales)) + row('Tips', euro(r.tips)) + row('Supplies bought', signed(-r.cost), r.cost ? 'minus' : '') +
         row('Profit today', signed(r.profit), 'sum ' + (r.profit < 0 ? 'minus' : 'plus')) + row('In the till', signed(r.money)) +
         '<div class="go"><kbd>E</kbd>Start day ' + (r.n + 1) + '</div>';
@@ -950,14 +1018,27 @@
     }
     // "+€11" floating up from a table
     var pops = [];
-    function popMoney(pos, amount){
+    function popMoney(pos, amount){ popText(pos, '+' + euro(amount), 44); }
+    // ... and the stars of a review floating up over the guest who wrote it
+    // (five stars: the ones given in gold, the others dark)
+    function popStars(pos, stars){
+      var s = popText(pos, '', 23), g = s.g, five = '\u2605\u2605\u2605\u2605\u2605';
+      g.textAlign = 'left';
+      var x = 64 - g.measureText(five).width / 2;
+      g.lineWidth = 5; g.strokeStyle = 'rgba(30,22,10,.85)'; g.strokeText(five, x, 64);
+      g.fillStyle = '#5a4a3a'; g.fillText(five, x, 64);
+      g.fillStyle = '#ffd95a'; g.fillText(five.slice(0, stars), x, 64);
+      s.tex.needsUpdate = true;
+    }
+    function popText(pos, text, px){
       var s = sign(0.8), g = s.g;
       g.clearRect(0, 0, 128, 128);
-      g.font = '800 44px system-ui,"Segoe UI",sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-      g.lineWidth = 8; g.strokeStyle = 'rgba(30,22,10,.85)'; g.strokeText('+' + euro(amount), 64, 64);
-      g.fillStyle = '#ffd95a'; g.fillText('+' + euro(amount), 64, 64);
+      g.font = '800 ' + px + 'px system-ui,"Segoe UI","Segoe UI Symbol",sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.lineWidth = px > 30 ? 8 : 5; g.strokeStyle = 'rgba(30,22,10,.85)'; g.strokeText(text, 64, 64);
+      g.fillStyle = '#ffd95a'; g.fillText(text, 64, 64);
       s.tex.needsUpdate = true; s.sp.visible = true; s.sp.position.copy(pos);
       pops.push({ s: s, t: 0, y: pos.y });
+      return s;
     }
     // steam over the pot: soft puffs that rise and fade
     var puffTex = (function(){
@@ -1104,7 +1185,7 @@
     }
 
     // ---------- the guests' side ------------------------------------------------------------
-    var views = {};   // per guest: { info, sign, toTable, bowlAt }
+    var views = {};   // per guest: { info, sign, toTable, bowlAt, review (the last one whose stars were shown) }
     function view(info){
       var v = views[info.id];
       if (!v){
@@ -1652,7 +1733,18 @@
         }
         if (g.phase === 'paid' && !g.popped){ g.popped = true; popMoney(V(v.bowlAt.x, v.bowlAt.y + 0.45, v.bowlAt.z), g.pay); }
         if (g.phase !== 'paid') g.popped = false;
+        if (v.review === undefined) v.review = g.review || 0;   // (first seen, e.g. in a loaded game: nothing new)
+        if (g.review && v.review !== g.review){   // a review was written: its stars float up over the guest
+          v.review = g.review;
+          if (where !== 'away'){ v.info.head.getWorldPosition(headPos); popStars(V(headPos.x, headPos.y + (g.phase === 'angry' ? 1.05 : 0.6), headPos.z), g.stars); }   // (above the cross of a guest who gave up)
+        }
       });
+      var stars = reputation(), counted = Math.min(state.reviews.length, RULES.review.keep);
+      var starText = stars ? '\u2605 ' + stars.toFixed(1) + '<span>  \u00b7  ' + counted + (counted === 1 ? ' review' : ' reviews') + '</span>' : '';
+      if (starText !== shown.stars){
+        shown.stars = starText; starsEl.classList.toggle('on', !!starText);
+        if (starText) starsEl.innerHTML = starText;
+      }
       // the entrance door stands open while the restaurant is open or somebody is still inside
       var door = ctx.getEntrance && ctx.getEntrance();
       if (door) door.target = state.open || state.guests.some(function(g){ return g.phase !== 'away'; }) ? 1 : 0;
@@ -1743,7 +1835,7 @@
     // the game's own paper notes (the recipe, the day's slip) pinned on dark wood. The mouse
     // is free while it is on; E or Esc switches it off and he gets up. The game goes on.
     var DOCK = V(6.95, 0, -12.75);   // where deliveries are put down in the storeroom
-    var pc = null;   // while it is used: { page: 'supplies' | 'accounts', cart, said: [text, kind], fresh, sig }
+    var pc = null;   // while it is used: { page: 'supplies' | 'accounts' | 'reviews', cart, said: [text, kind], fresh, sig, when }
     var pcEl = document.createElement('div'); pcEl.className = 'hp-pc';
     pcEl.innerHTML = '<div class="case"><div class="screen"></div></div>';
     document.body.appendChild(pcEl);
@@ -1772,7 +1864,7 @@
     // E at the chair: he sits down, then the screen comes on
     function sitAtPC(){
       if (pc || !ctx.seat || carried() || cutting || pouring || stirring) return;
-      ctx.seat.sit(openPC);   // (refused while he jumps or stands on something)
+      ctx.seat.sit(openPC, function(){ say('He cannot get to the chair \u2013 something is in the way', 4); });   // (refused while he jumps or stands on something)
     }
     // a small picture of a model, drawn once with the game's own renderer
     var thumbs = {};
@@ -1824,7 +1916,7 @@
       var day = state.day, total = priceOf(pc.cart), boxes = parcels();
       var sig = [pc.page, JSON.stringify(pc.cart), pc.said, state.money, GOODS.map(function(k){ return oneDec(stockOf(k)) + '/' + room(k) + '/' + coming(k); }).join(' '),
                  state.orders.map(function(o){ return Math.ceil(o.left); }).join(','), boxes.map(function(p){ return p.at + JSON.stringify(p.goods); }).join(','),
-                 day.n, day.phase, day.served, day.lost, day.sales, day.tips, day.spent, state.history.length].join('|');
+                 day.n, day.phase, day.served, day.lost, day.sales, day.tips, day.spent, state.history.length, state.reviews.length ? state.reviews[state.reviews.length - 1].id : 0].join('|');
       var when = 'Day ' + day.n + ' · ' + clockText() + ' · ' + (day.phase === 'open' ? 'Open' : day.phase === 'prep' ? 'Closed' : 'Closed for today');
       if (sig === pc.sig){   // only the clock has moved on: its text alone is changed, the screen is not built again
         if (when !== pc.when){ pc.when = when; var clockEl = pcScreen.querySelector('.when'); if (clockEl) clockEl.textContent = when; }
@@ -1868,6 +1960,22 @@
         if (rows.length > fit) ships += '<p class="muted small">+ ' + (rows.length - fit) + ' more</p>';
         if (!state.orders.length && !boxes.length && !pc.said) ships += '<p class="muted">Nothing on its way.</p><p class="muted small">Carry a delivered box to the kitchen and unpack it at the crates and at the broth shelf.</p>';
         html = '<div class="col" style="flex:1">' + cards + '</div><div class="col" style="width:252px;flex:none">' + order + '<div class="card" style="flex:1;min-height:0"><h4>Deliveries</h4>' + ships + '</div></div>';
+      } else if (pc.page === 'reviews'){
+        title = 'Reviews'; sub = 'What the guests say';
+        var latest = state.reviews.slice(-RULES.review.keep), count = [0, 0, 0, 0, 0, 0], avg = reputation();
+        latest.forEach(function(r){ count[r.stars]++; });
+        function starRow(n){ return '<span class="stars">' + '\u2605\u2605\u2605\u2605\u2605'.slice(0, n) + '<i>' + '\u2605\u2605\u2605\u2605\u2605'.slice(n) + '</i></span>'; }
+        var sum = '<div class="card note"><h4>The restaurant\u2019s stars</h4>';
+        if (latest.length){
+          sum += '<div class="big">' + avg.toFixed(1) + ' ' + starRow(Math.round(avg)) + '</div><p class="muted small">from the last ' + latest.length + (latest.length === 1 ? ' review' : ' reviews') + '</p>';
+          [5, 4, 3, 2, 1].forEach(function(n){ sum += '<div class="row"><span>' + starRow(n) + '</span><b>' + count[n] + '</b></div>'; });
+        } else sum += '<p class="muted">Nobody has written a review yet.</p>';
+        sum += '<p class="muted small" style="margin-top:9px">Good stew, quick service and a clean floor make good reviews. More stars bring more guests.</p></div>';
+        var said = '';
+        latest.slice(-4).reverse().forEach(function(r){
+          said += '<div class="card rev">' + starRow(r.stars) + '<p class="quote">\u201c' + esc(r.text) + '\u201d</p><p class="muted small">\u2013 ' + esc(GUEST_NAMES.hasOwnProperty(r.who) ? GUEST_NAMES[r.who] : 'A guest') + ', day ' + r.day + '</p></div>';
+        });
+        html = '<div class="col" style="width:278px;flex:none">' + sum + '</div><div class="col" style="flex:1">' + said + '</div>';
       } else {
         title = 'Accounts'; sub = 'Day ' + day.n + ' so far, and the days before';
         var soFar = day.sales + day.tips - day.spent;
@@ -1892,6 +2000,7 @@
         '<div class="side"><div class="logo"><i>' + ICON.pot + '</i><span>Hot Pot Go<small>Back office</small></span></div>' +
         '<button class="nav' + (pc.page === 'supplies' ? ' on' : '') + '" data-do="page:supplies">Supplies</button>' +
         '<button class="nav' + (pc.page === 'accounts' ? ' on' : '') + '" data-do="page:accounts">Accounts</button>' +
+        '<button class="nav' + (pc.page === 'reviews' ? ' on' : '') + '" data-do="page:reviews">Reviews</button>' +
         '<span class="grow"></span><button class="nav out" data-do="close">Get up<kbd>E</kbd></button></div>' +
         '<div class="main"><div class="top"><h2>' + title + '<small>' + sub + '</small></h2><span class="grow"></span>' +
         '<span class="chip' + (day.phase === 'open' ? ' open' : day.phase === 'prep' ? '' : ' late') + '"><i></i><span class="when">' + when + '</span></span>' +
@@ -1904,7 +2013,7 @@
       pc.said = null;
       if (p[0] === 'plus'){ if (GOOD[k] && pc.cart[k] < room(k)) pc.cart[k]++; }
       else if (p[0] === 'minus'){ if (GOOD[k] && pc.cart[k] > 0) pc.cart[k]--; }
-      else if (p[0] === 'page') pc.page = k === 'accounts' ? 'accounts' : 'supplies';
+      else if (p[0] === 'page') pc.page = k === 'accounts' || k === 'reviews' ? k : 'supplies';
       else if (p[0] === 'buy'){
         if (act('buy', pc.cart)){ pc.cart = emptyGoods(); pc.said = ['Ordered \u2013 thank you!', 'ok']; saveNow(false); }
         else pc.said = ['This order is not possible.', 'warn'];
@@ -1928,7 +2037,7 @@
     // Everything the rules know (`state`), where the chef stands and the stains on the
     // floor, as one text. `hold`: the game waits for "Continue" or "New restaurant".
     var store = window.hotpotSave || null, SAVE_VERSION = 1, hold = false, sinceSave = 0, pendingChef = null, saved = null, startEl = null;
-    function num(v){ return typeof v === 'number' && isFinite(v); }
+
     function snapshot(){
       var at = ctx.chefAt && ctx.chefAt.get(), L = ctx.look.get();
       return JSON.stringify({ game: 'Hot Pot Go', version: SAVE_VERSION, saved: new Date().toISOString(), state: state,
@@ -1969,7 +2078,14 @@
       st.orders = (Array.isArray(st.orders) ? st.orders : []).filter(function(o){ return !!o && !!o.goods && num(o.left) && GOODS.every(function(k){ return num(o.goods[k]) && o.goods[k] >= 0; }); });
       st.history = (Array.isArray(st.history) ? st.history : []).filter(function(r){ return !!r && ['n', 'served', 'lost', 'sales', 'tips', 'cost', 'profit', 'money'].every(function(k){ return num(r[k]); }); });
       if (!num(st.delivered)) st.delivered = 0;
-      if (st.day.report && !num(st.day.report.cost)) st.day.report.cost = 0;
+      st.reviews = (Array.isArray(st.reviews) ? st.reviews : []).filter(function(r){
+        return !!r && num(r.id) && num(r.day) && num(r.stars) && r.stars >= 1 && r.stars <= 5 && typeof r.text === 'string' && typeof r.who === 'string';
+      }).slice(-60);
+      st.reviews.forEach(function(r){ r.stars = Math.round(r.stars); r.text = r.text.slice(0, 200); r.who = r.who.slice(0, 40); });
+      var FIGURES = ['n', 'served', 'lost', 'sales', 'tips', 'cost', 'profit', 'money', 'reviews', 'stars'];
+      function figures(r){ FIGURES.forEach(function(k){ if (!num(r[k])) r[k] = 0; }); }
+      if (st.day.report) figures(st.day.report);
+      st.history.forEach(figures);
       if (!Array.isArray(st.pot.qs)) st.pot.qs = [];
       if (!st.pot.cut || typeof st.pot.cut !== 'object') st.pot.cut = {};
       VEG.forEach(function(k){ if (st.pot.cut[k] && !okCut(st.pot.cut[k])) delete st.pot.cut[k]; });
@@ -1985,6 +2101,9 @@
         if (!num(g.patience)) g.patience = 1;
         if (!num(g.pay)) g.pay = RECIPE.price;
         if (!num(g.rest)) g.rest = 0;
+        if (!num(g.q)) delete g.q;
+        if (!num(g.review) || !num(g.stars)){ delete g.review; delete g.stars; }
+        delete g.waited;
         g.popped = false;
       });
       if (st.carry !== null && !(st.items[st.carry] && st.items[st.carry].at === 'hand')) st.carry = null;
@@ -2008,7 +2127,8 @@
       Object.keys(objs).forEach(function(id){ if (objs[id].obj.parent) objs[id].obj.parent.remove(objs[id].obj); delete objs[id]; });
       play.setCarry(null);
       cutting = null; pouring = null; stirring = null; shake = null; scoop = null; note.t = 0;
-      closePC(); shown.delivered = undefined;
+      closePC(); shown.delivered = undefined; shown.stars = null;
+      Object.keys(views).forEach(function(id){ views[id].review = undefined; });   // (their reviews are the loaded game's)
       if (ctx.seat && ctx.seat.reset) ctx.seat.reset();   // (not sitting in a loaded game)
       shown.carry = null; shown.money = null; shown.hud = null; shown.phase = undefined; shown.told = true;
       if (play.setStains) play.setStains(d.stains);
@@ -2066,6 +2186,7 @@
       atScreen: function(){ return !!pc || hold || !!(ctx.seat && ctx.seat.active()); },   // the keys belong to a screen (or he is sitting down), not to the chef
       // ---- for tests only ----
       debugPC: function(cmd){ if (cmd === 'open') openPC(); else if (cmd) pcDo(cmd); return pc ? { page: pc.page, cart: pc.cart, said: pc.said } : null; },
+      debugReviews: function(){ return { stars: +reputation().toFixed(2), list: state.reviews.map(function(r){ return r.stars + ' ' + r.who + ' (food ' + r.food + ' wait ' + r.wait + ' clean ' + r.clean + '): ' + r.text; }) }; },
       debugSupplies: function(){ var o = {}; GOODS.forEach(function(k){ o[k] = oneDec(stockOf(k)) + ' room ' + room(k) + ' coming ' + coming(k); }); o.orders = state.orders.map(function(x){ return goodsText(x.goods) + ' in ' + Math.ceil(x.left); }); o.boxes = parcels().map(function(p){ return p.at + ': ' + goodsText(p.goods); }); return o; },
       debugDay: function(){ return JSON.parse(JSON.stringify(state.day)); },
       debugTime: function(minutes){ state.day.time = minutes; },
@@ -2096,6 +2217,7 @@
         if (!g || !v) return false;
         v.info.seatNow(); g.phase = 'waiting'; g.patience = 1; return true;
       },
+      debugPatience: function(id, left){ var g = guest(id); if (g) g.patience = left; },
       debugPhase: function(id, phase){ var g = guest(id); if (g){ g.phase = phase; g.t = 0; } },
       debugGuests: function(){ return state.guests.map(function(g){ return g.id + ':' + g.phase + '/' + views[g.id].info.where(); }).join(' '); },
       debugAct: act, debugPot: function(){ return state.pot; }, debugCookRules: COOK,

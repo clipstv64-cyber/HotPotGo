@@ -312,13 +312,14 @@
         office.screen = scr.getWorldPosition(new T.Vector3());   // where the chef looks when he sits at the desk
       } });
       addBox(doorO, z1 + 0.62, 1.9, 1.18, 1.05);
-      // the swivel chair, as low as the chef's short legs need it: it stands a little askew and turns to the desk when
-      // he sits down (index.html). seat / back: its seat's height and where the backrest begins,
-      // as shares of its height and depth (measured on the model)
-      var chairX = doorO + 0.15, chairZ = z1 + 1.85;
-      office.chair = { holder: place('office_chair', { h: 1.15 }, null, chairX, 0, chairZ, Math.PI + 0.3, { cast: true }),
-                       x: chairX, z: chairZ, rest: Math.PI + 0.3, face: Math.PI, seat: 0.51, back: 0.38 };
-      addBox(chairX, chairZ, 0.6, 0.6, 0.55);
+      // The chef's swivel chair (Meshy): low and wide, without armrests, as his short legs and wide hips need
+      // it. It stands a little askew and turns when he sits down (index.html). seat / back: its seat's
+      // height and where the backrest begins, as shares of its height and depth (measured on the model);
+      // box: half the width of its obstacle.
+      var chairX = doorO, chairZ = z1 + 1.82;
+      office.chair = { holder: place('chef_chair', { h: 0.68 }, null, chairX, 0, chairZ, Math.PI + 0.3, { cast: true }),
+                       x: chairX, z: chairZ, rest: Math.PI + 0.3, face: Math.PI, seat: 0.74, back: 0.28, box: 0.4 };
+      addBox(chairX, chairZ, 0.8, 0.8, 0.5);
       office.room = { x0: x0, x1: xo, z0: z1, z1: zm };   // the office's floor (he sits down only from inside it)
       office.desk = { x: doorO, z: z1 + 1.25 };           // in front of the desk
       place('filing_cabinet', { h: 1.35 }, null, x0 + 0.03, 0, zm - 1.1, Math.PI / 2, { back: true, cast: true });

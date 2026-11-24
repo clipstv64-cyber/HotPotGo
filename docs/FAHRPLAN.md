@@ -70,14 +70,14 @@ aufnehmen, freie Platzwahl der Gäste, Spülen, Pausenmenü.
 
 | Nr. | Punkt aus dem Konzept | Stand |
 |---|---|---|
-| 1 | Voll funktionsfähiger Restaurant-Computer | teilweise: der Computer im Büro hat einen eigenen Bildschirm mit zwei Programmen, „Supplies“ (bestellen) und „Accounts“ (heutige Zahlen und frühere Tage); Shop, Restaurantverwaltung, Bewertungen fehlen |
+| 1 | Voll funktionsfähiger Restaurant-Computer | teilweise: der Computer im Büro hat einen eigenen Bildschirm mit drei Seiten, „Supplies“ (bestellen), „Accounts“ (heutige Zahlen und frühere Tage) und „Reviews“ (Sterne und was die Gäste schreiben); Shop und Restaurantverwaltung fehlen |
 | 2 | Zutaten bestellen | fertig: Menge wählen, Summe, Kassenstand, bestellen |
 | 3 | Warenlieferung und Lagerverwaltung | teilweise: Lieferung kommt nach 30 Sekunden als Karton ins Lager und wird in der Küche ausgepackt; ein eigener Lagerbestand im Lagerraum fehlt |
 | 4 | Geräte kaufen | fehlt |
 | 5 | Möbel kaufen und platzieren | fehlt |
 | 6 | Wände und Böden verändern | fehlt |
 | 7 | Neue Räume freischalten | fehlt |
-| 8 | Kundenzufriedenheit und Sternebewertungen | fehlt |
+| 8 | Kundenzufriedenheit und Sternebewertungen | fertig in der ersten Fassung: jeder Gast bewertet seinen Besuch (Essen 35 %, Wartezeit 25 %, Sauberkeit 20 %, Preis 10 %, Atmosphäre 10 %), daraus werden 1 bis 5 Sterne und ein passender Satz; die Sterne des Restaurants sind der Schnitt der letzten 30 Bewertungen und bringen mehr oder weniger Gäste. Atmosphäre ist noch ein fester Wert, bis es Möbel zu kaufen gibt; Gästetypen fehlen |
 | 9 | Weitere Rezepte | fehlt |
 | 10 | Reinigungssystem | teilweise: Flecken und Besen gibt es schon |
 
@@ -119,11 +119,17 @@ Danach folgen Mehrspieler und Mitarbeiter (Phase 3).
   Computer-Bildschirm selbst sieht aus wie ein modernes Büro-Programm: dunkle Seitenleiste,
   Karten, Bestellung und Lieferungen rechts, Kennzahlen unter „Accounts“.
 - **Am Computer sitzen** (Wunsch vom 24.11.2026): Den Computer benutzt man im Sitzen. E am
-  Bürostuhl: Der Koch geht neben den Stuhl, setzt sich (der Drehstuhl dreht sich zum Tisch,
-  die Kamera folgt seinem Kopf, der Blick bleibt auf dem Bildschirm), dann geht der
-  Bildschirm an. E oder Esc schaltet ihn aus und der Koch steht auf. Weil seine Beine sehr
-  kurz sind, fallen die Oberschenkel im Sitzen nach vorn ab, damit die Sohlen den Boden
-  erreichen. Schreibtisch und Stuhl sind dafür an die Größe des Kochs angepasst.
+  Bürostuhl: Der Koch geht zum Stuhl, dreht sich um, setzt sich gerade hin (der Stuhl hat
+  sich zu ihm gedreht) und dreht sich mit dem Stuhl zum Tisch; dann geht der Bildschirm
+  an. E oder Esc schaltet ihn aus, er dreht sich zurück, steht auf und macht einen Schritt
+  vom Stuhl weg. Die Kamera schaut dorthin, wohin sein Körper zeigt. Der Stuhl ist ein
+  eigenes Meshy-Modell für ihn: niedrig und breit, ohne Armlehnen, weil seine Beine sehr
+  kurz und seine Hüften breit sind. Der Schreibtisch ist an seine Größe angepasst.
+- **Bewertungen** (24.11.2026): Ein Gast schreibt nach dem Essen mit 75 % Wahrscheinlichkeit
+  eine Bewertung, wer hungrig geht, immer (1 Stern). Der Satz dazu nennt, was am
+  schwächsten war (Essen, Wartezeit oder Sauberkeit). Jeder Fleck auf dem Boden kostet ein
+  Viertel der Sauberkeit. Die Sterne steigen über dem Gast auf, der Schnitt steht oben
+  rechts, alles Weitere auf der Seite „Reviews“ am Computer und auf dem Tageszettel.
 - **Bildschirm im Stil des Spiels** (Wunsch vom 24.11.2026): Das Büro-Programm sieht nicht
   mehr wie eine Website aus, sondern wie die Zettel des Spiels: Papier auf dem dunklen
   Küchenholz, mit Pinnnadeln, kursiver Schrift, gepunkteten Linien, Stempeln und Kästchen
