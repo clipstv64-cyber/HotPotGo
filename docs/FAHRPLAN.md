@@ -118,7 +118,7 @@ Danach folgen Mehrspieler und Mitarbeiter (Phase 3).
   Rechner); sein Bildschirm leuchtet und zeigt ein kleines Bild des Büro-Programms. Der
   Computer-Bildschirm selbst sieht aus wie ein modernes Büro-Programm: dunkle Seitenleiste,
   Karten, Bestellung und Lieferungen rechts, Kennzahlen unter „Accounts“.
-- **Prüfer-Agenten:** Im Ordner `agents/` liegen vier Prüfer (Stil, Code, Performance,
+- **Prüfer-Agenten:** Im Ordner `.claude/agents/` liegen vier Prüfer (Stil, Code, Performance,
   Animationen). Nach passenden Änderungen laufen sie, bevor etwas als fertig gilt.
 - **Karton ohne neues Modell:** Der Lieferkarton ist aus dem Kartonstapel im Lager
   herausgeschnitten (`models/d_parcel.glb`), weil gerade keine Meshy-Guthaben da sind.
