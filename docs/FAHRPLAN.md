@@ -113,6 +113,13 @@ Danach folgen Mehrspieler und Mitarbeiter (Phase 3).
   packt mit E an den Kisten und am Brühe-Brett aus. Bestellen kann man nur, was in die
   Küche passt (6 je Gemüse, Brühe für 7 Töpfe). Kommt eine Lieferung, während noch ein
   Karton im Lager steht, landet sie im selben Karton. Reste im Topf bleiben über Nacht.
+- **Moderner Computer** (Wunsch vom 24.11.2026): Der Schreibtisch im Büro ist ein neues
+  Meshy-Modell (rustikales Holz, darauf Flachbildschirm, flache Tastatur, Maus, kleiner
+  Rechner); sein Bildschirm leuchtet und zeigt ein kleines Bild des Büro-Programms. Der
+  Computer-Bildschirm selbst sieht aus wie ein modernes Büro-Programm: dunkle Seitenleiste,
+  Karten, Bestellung und Lieferungen rechts, Kennzahlen unter „Accounts“.
+- **Prüfer-Agenten:** Im Ordner `agents/` liegen vier Prüfer (Stil, Code, Performance,
+  Animationen). Nach passenden Änderungen laufen sie, bevor etwas als fertig gilt.
 - **Karton ohne neues Modell:** Der Lieferkarton ist aus dem Kartonstapel im Lager
   herausgeschnitten (`models/d_parcel.glb`), weil gerade keine Meshy-Guthaben da sind.
 - **Spielstand:** eine Datei im Benutzerordner des Spiels (`saves/restaurant.json`), dazu

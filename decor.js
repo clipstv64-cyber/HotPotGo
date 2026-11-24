@@ -271,11 +271,45 @@
         var l = new T.PointLight(0xffd29a, 0.9, 6, 2); l.position.set(p[0], H - 0.7, p[1]); root.add(l);
       });
 
-      // office: desk with the old PC against the far wall, chair, filing cabinet, bookshelf
-      place('office_desk', { w: 1.5 }, null, doorO, 0, z1 + 0.03, 0, { back: true, cast: true });
-      addBox(doorO, z1 + 0.4, 1.5, 0.8, 0.8);
-      place('office_chair', { h: 1.05 }, null, doorO + 0.1, 0, z1 + 1.35, Math.PI + 0.3, { cast: true });
-      addBox(doorO + 0.1, z1 + 1.35, 0.55, 0.55, 0.5);
+      // office: desk with the computer against the far wall, chair, filing cabinet, bookshelf
+      place('office_desk', { w: 1.5 }, null, doorO, 0, z1 + 0.03, 0, { back: true, cast: true, done: function(holder, size){
+        // The monitor is switched on: a picture of the back-office program on its screen.
+        // (where the screen is was measured on the model, as shares of its size)
+        var cv = document.createElement('canvas'); cv.width = 512; cv.height = 288;
+        var g = cv.getContext('2d'), i, sw = size.x * 0.572 * 0.955, sh = size.y * 0.341 * 0.92, wide = sw / sh / (512 / 288);
+        g.fillStyle = '#f3f4f7'; g.fillRect(0, 0, 512, 288);
+        g.fillStyle = '#1d222b'; g.fillRect(0, 0, 104, 288);                      // side bar
+        g.fillStyle = '#e8612c'; g.fillRect(10, 12, 18, 18); g.fillRect(8, 52, 88, 22);
+        g.fillStyle = '#565d6b'; g.fillRect(36, 15, 50, 6); g.fillRect(36, 25, 34, 4); g.fillRect(14, 86, 60, 6); g.fillRect(14, 262, 44, 6);
+        g.fillStyle = '#ffffff'; g.fillRect(22, 60, 46, 6);
+        g.fillRect(104, 0, 408, 34);                                             // top bar
+        g.fillStyle = '#1f2430'; g.fillRect(116, 10, 74, 9);
+        g.fillStyle = '#c9ced8'; g.fillRect(116, 23, 110, 4); g.fillRect(392, 11, 62, 12);
+        g.fillStyle = '#fbd9c6'; g.fillRect(460, 11, 42, 12);
+        for (i = 0; i < 4; i++){                                                 // four things to order
+          var y = 44 + i * 60;
+          g.fillStyle = '#ffffff'; g.fillRect(116, y, 232, 52);
+          g.fillStyle = '#f3ece4'; g.fillRect(124, y + 8, 36, 36);
+          g.fillStyle = ['#d98a3a', '#ee7a2a', '#e39a3c', '#efe7d6'][i]; g.beginPath(); g.ellipse(142, y + 26, 11 / wide, 11, 0, 0, Math.PI * 2); g.fill();
+          g.fillStyle = '#1f2430'; g.fillRect(170, y + 11, 56, 7);
+          g.fillStyle = '#e9ecf1'; g.fillRect(170, y + 25, 110, 5);
+          g.fillStyle = '#e8612c'; g.fillRect(170, y + 25, [56, 92, 92, 96][i], 5);
+          g.fillStyle = '#c9ced8'; g.fillRect(170, y + 36, 70, 4);
+          g.fillStyle = '#f0f2f6'; g.fillRect(292, y + 16, 46, 20);
+        }
+        g.fillStyle = '#ffffff'; g.fillRect(358, 44, 144, 124); g.fillRect(358, 176, 144, 100);   // the order, the deliveries
+        g.fillStyle = '#c9ced8'; g.fillRect(368, 54, 60, 5); g.fillRect(368, 70, 110, 4); g.fillRect(368, 82, 96, 4); g.fillRect(368, 186, 64, 5); g.fillRect(368, 204, 100, 4);
+        g.fillStyle = '#1f2430'; g.fillRect(368, 102, 34, 7); g.fillRect(462, 102, 30, 7);
+        g.fillStyle = '#e8612c'; g.fillRect(368, 126, 124, 26);
+        g.fillStyle = '#2f7de1'; g.fillRect(368, 222, 70, 5);
+        var tex = new T.CanvasTexture(cv); tex.encoding = T.sRGBEncoding; tex.anisotropy = 4;
+        var scr = new T.Mesh(new T.PlaneGeometry(sw, sh), new T.MeshBasicMaterial({ map: tex, toneMapped: false }));
+        scr.position.set(size.x * 0.0523, size.y * (0.659 + 0.341 / 2), size.z * 0.306 + 0.004);
+        holder.add(scr);
+      } });
+      addBox(doorO, z1 + 0.5, 1.5, 0.94, 0.8);
+      place('office_chair', { h: 1.05 }, null, doorO + 0.1, 0, z1 + 1.5, Math.PI + 0.3, { cast: true });
+      addBox(doorO + 0.1, z1 + 1.5, 0.55, 0.55, 0.5);
       place('filing_cabinet', { h: 1.35 }, null, x0 + 0.03, 0, zm - 1.1, Math.PI / 2, { back: true, cast: true });
       addBox(x0 + 0.35, zm - 1.1, 0.7, 0.5, 1.35);
       place('office_shelf', { h: 1.8 }, null, xo - 0.03, 0, z1 + 1.9, -Math.PI / 2, { back: true, cast: true });

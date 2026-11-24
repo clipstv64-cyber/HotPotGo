@@ -523,37 +523,65 @@
       '.hp-start button:first-of-type{margin-top:20px}.hp-start button.quiet{background:transparent;color:#4a3626}' +
       '.hp-start button:hover{background:#6b513a;color:#f4ead2}' +
       '.hp-hold .hp-money,.hp-hold .hp-open,.hp-hold .hp-carry,.hp-hold .hp-hint{visibility:hidden}' +
-      // the computer in the office: an old monitor with a plain grey program on it
-      '.hp-pc{position:fixed;left:0;top:0;right:0;bottom:0;display:none;align-items:center;justify-content:center;background:rgba(10,8,6,.74);z-index:18;' +
-      'font:15px/1.35 "Courier New",Consolas,monospace;color:#1d1b16;user-select:none}' +
+      // the computer in the office: a flat monitor showing the restaurant's back-office app
+      '.hp-pc{position:fixed;left:0;top:0;right:0;bottom:0;display:none;align-items:center;justify-content:center;background:rgba(8,9,12,.78);z-index:18;' +
+      'font:14px/1.4 "Segoe UI",system-ui,sans-serif;color:#1f2430;user-select:none}' +
       '.hp-pc.on{display:flex}' +
-      '.hp-pc .case{position:relative;flex:none;padding:26px 26px 46px;background:linear-gradient(#e4decd,#cdc5b0);border-radius:20px;' +
-      'box-shadow:0 30px 80px rgba(0,0,0,.6),inset 0 -7px 0 rgba(0,0,0,.13),inset 0 3px 0 rgba(255,255,255,.5)}' +
-      '.hp-pc .brand{position:absolute;left:0;right:0;bottom:13px;text-align:center;font:700 12px/1 system-ui,"Segoe UI",sans-serif;letter-spacing:3px;color:#8d8570}' +
-      '.hp-pc .case:after{content:"";position:absolute;right:36px;bottom:16px;width:9px;height:9px;border-radius:50%;background:#6fd24f;box-shadow:0 0 6px #6fd24f}' +
-      '.hp-pc .screen{width:860px;height:540px;display:flex;flex-direction:column;overflow:hidden;background:#2f716c;border-radius:12px;' +
-      'box-shadow:0 0 0 5px #23211d,inset 0 0 70px rgba(0,0,0,.45)}' +
-      '.hp-pc .win{flex:1;min-height:0;display:flex;flex-direction:column;margin:14px 16px 12px;background:#cfcbbd;border:2px solid;border-color:#fff #55514a #55514a #fff}' +
-      '.hp-pc .title{display:flex;justify-content:space-between;padding:4px 9px;background:#1f3f8c;color:#fff;font-weight:700}' +
-      '.hp-pc .body{flex:1;min-height:0;overflow:hidden;padding:10px 14px}' +
-      '.hp-pc .bar{display:flex;align-items:center;gap:7px;padding:5px 8px;background:#cfcbbd;border-top:2px solid #fff}' +
-      '.hp-pc .grow{flex:1}.hp-pc .clock{padding:3px 9px;border:2px solid;border-color:#55514a #fff #fff #55514a}' +
-      '.hp-pc button{font:inherit;font-weight:700;padding:4px 11px;color:#1d1b16;background:#cfcbbd;border:2px solid;border-color:#fff #55514a #55514a #fff;cursor:pointer}' +
-      '.hp-pc button:active,.hp-pc button.tab.on{border-color:#55514a #fff #fff #55514a;background:#e6e3d8}' +
-      '.hp-pc button:disabled{color:#8f8b80;cursor:default}' +
-      '.hp-pc kbd{font:inherit;padding:0 5px;margin-left:5px;border:1px solid #55514a;border-radius:3px}' +
-      '.hp-pc .line{display:grid;grid-template-columns:56px 1.25fr 1.5fr 60px 124px 66px;align-items:center;gap:10px;padding:4px 0;border-bottom:1px solid #a9a598}' +
-      '.hp-pc .line.head{font-weight:700;padding-bottom:5px;border-bottom:2px solid #55514a}' +
-      '.hp-pc .line img,.hp-pc .line i{display:block;width:52px;height:52px;background:#e9e6da;border:2px solid;border-color:#55514a #fff #fff #55514a}' +
-      '.hp-pc .line b{font-size:17px}.hp-pc small{font-size:12.5px;color:#55514a}' +
-      '.hp-pc .qty{display:flex;align-items:center;gap:8px}.hp-pc .qty b{min-width:22px;text-align:center}.hp-pc .qty button{width:34px;padding:2px 0;font-size:18px;line-height:1.2}' +
-      '.hp-pc .right{text-align:right}' +
-      '.hp-pc .foot{display:flex;align-items:center;gap:26px;padding:10px 0 8px}.hp-pc .foot b{font-size:19px}.hp-pc .foot button{padding:7px 18px;font-size:16px}' +
-      '.hp-pc .info{padding:7px 10px;background:#e9e6da;border:2px solid;border-color:#55514a #fff #fff #55514a;min-height:66px}' +
-      '.hp-pc .info p{margin:1px 0}.hp-pc .info .warn{color:#a3271a;font-weight:700}.hp-pc .info .ok{color:#1f6b2a;font-weight:700}' +
-      '.hp-pc h3{margin:4px 0 6px;font:700 16px/1.3 "Courier New",Consolas,monospace}' +
-      '.hp-pc table{width:100%;border-collapse:collapse;margin-bottom:12px}.hp-pc td,.hp-pc th{padding:2px 8px;border-bottom:1px solid #a9a598;text-align:right}' +
-      '.hp-pc td:first-child,.hp-pc th:first-child{text-align:left}.hp-pc th{border-bottom:2px solid #55514a}.hp-pc .neg{color:#a3271a}';   // nothing of the game on screen while it waits
+      '.hp-pc .case{position:relative;flex:none;margin-bottom:40px;padding:10px;background:#111317;border-radius:16px;box-shadow:0 30px 90px rgba(0,0,0,.65),0 0 0 1px #2a2e36}' +
+      '.hp-pc .case:before{content:"";position:absolute;left:50%;bottom:-30px;width:110px;height:30px;margin-left:-55px;background:linear-gradient(90deg,#1a1d22,#3a3f49,#1a1d22)}' +
+      '.hp-pc .case:after{content:"";position:absolute;left:50%;bottom:-40px;width:300px;height:11px;margin-left:-150px;border-radius:6px 6px 3px 3px;background:#2a2e36;box-shadow:0 6px 14px rgba(0,0,0,.5)}' +
+      '.hp-pc .screen{width:920px;height:570px;display:flex;overflow:hidden;border-radius:8px;background:#f3f4f7}' +
+      '.hp-pc svg{width:18px;height:18px;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}' +
+      '.hp-pc button{font:inherit;cursor:pointer;border:none}' +
+      '.hp-pc button:disabled{cursor:default}' +
+      // the side bar
+      '.hp-pc .side{width:186px;flex:none;display:flex;flex-direction:column;gap:4px;padding:18px 12px 14px;background:#1d222b;color:#c4c9d4}' +
+      '.hp-pc .logo{display:flex;align-items:center;gap:10px;padding:0 6px 16px;color:#fff;font-weight:700;font-size:15px;line-height:1.2}' +
+      '.hp-pc .logo i{width:30px;height:30px;flex:none;border-radius:9px;background:linear-gradient(135deg,#ff8a3d,#e2502a)}' +
+      '.hp-pc .logo small{display:block;font-weight:500;font-size:11.5px;color:#8a92a3}' +
+      '.hp-pc .nav{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:9px;background:transparent;color:#c4c9d4;font-weight:600;text-align:left}' +
+      '.hp-pc .nav:hover{background:#2a303b;color:#fff}.hp-pc .nav.on{background:#e8612c;color:#fff}' +
+      '.hp-pc kbd{font:600 11px/1 "Segoe UI",system-ui,sans-serif;padding:3px 6px;margin-left:auto;border-radius:5px;background:rgba(255,255,255,.14);color:inherit}' +
+      // the top bar and the page
+      '.hp-pc .main{flex:1;min-width:0;display:flex;flex-direction:column}' +
+      '.hp-pc .top{display:flex;align-items:center;gap:10px;height:62px;flex:none;padding:0 20px;background:#fff;border-bottom:1px solid #e3e6ec}' +
+      '.hp-pc .top h2{margin:0;font:700 20px/1.2 "Segoe UI",system-ui,sans-serif}.hp-pc .top h2 small{display:block;font-weight:500;font-size:12.5px;color:#7a8090}' +
+      '.hp-pc .grow{flex:1}' +
+      '.hp-pc .chip{display:flex;align-items:center;gap:7px;padding:6px 12px;border-radius:999px;background:#f0f2f6;font-weight:600;font-size:13px;white-space:nowrap}' +
+      '.hp-pc .chip i{width:8px;height:8px;border-radius:50%;background:#a3a9b6}.hp-pc .chip.open i{background:#22a559}.hp-pc .chip.till{background:#fff3ea;color:#b9471a}' +
+      '.hp-pc .page{flex:1;min-height:0;display:flex;gap:14px;padding:16px 20px}' +
+      '.hp-pc .col{display:flex;flex-direction:column;gap:10px;min-width:0}' +
+      '.hp-pc .card{background:#fff;border-radius:12px;box-shadow:0 1px 2px rgba(20,25,40,.07),0 0 0 1px #e6e9ef;padding:12px 14px}' +
+      '.hp-pc h4{margin:0 0 8px;font:700 12px/1.2 "Segoe UI",system-ui,sans-serif;letter-spacing:.6px;text-transform:uppercase;color:#7a8090}' +
+      '.hp-pc p{margin:0}.hp-pc .muted{color:#7a8090}.hp-pc .small{font-size:12px}' +
+      '.hp-pc .warn{color:#c93c2c;font-weight:600}.hp-pc .ok{color:#1c8a4b;font-weight:600}' +
+      // one thing to order
+      '.hp-pc .good{flex:1;display:flex;align-items:center;gap:16px;padding:10px 16px}' +
+      '.hp-pc .pic{width:78px;height:78px;flex:none;border-radius:14px;background:#f3ece4;display:flex;align-items:center;justify-content:center}.hp-pc .pic img{width:74px;height:74px}' +
+      '.hp-pc .what{flex:1;min-width:0}.hp-pc .what b{font-size:16px}.hp-pc .price{margin-left:8px;color:#7a8090;font-size:13px}' +
+      '.hp-pc .meter{display:flex;height:7px;margin:6px 0 4px;border-radius:4px;background:#e9ecf1;overflow:hidden}' +
+      '.hp-pc .meter i{background:#e8612c}.hp-pc .meter u{background:#f6b998}' +
+      '.hp-pc .what small{color:#7a8090;font-size:12px}' +
+      '.hp-pc .qty{display:flex;align-items:center;gap:4px;flex:none;padding:3px;border-radius:999px;background:#f0f2f6}' +
+      '.hp-pc .qty b{min-width:24px;text-align:center;font-size:16px}' +
+      '.hp-pc .qty button{width:30px;height:30px;border-radius:50%;background:#fff;color:#1f2430;font:700 18px/1 "Segoe UI",system-ui,sans-serif;box-shadow:0 1px 2px rgba(20,25,40,.18)}' +
+      '.hp-pc .qty button:hover{background:#e8612c;color:#fff}.hp-pc .qty button:disabled{background:transparent;color:#b9bec9;box-shadow:none}' +
+      // the order and the deliveries
+      '.hp-pc .row{display:flex;justify-content:space-between;gap:10px;padding:2px 0}' +
+      '.hp-pc .row.total{margin-top:6px;padding-top:8px;border-top:1px solid #e3e6ec;font-size:16px}' +
+      '.hp-pc .primary{display:block;width:100%;margin:10px 0 8px;padding:10px;border-radius:10px;background:#e8612c;color:#fff;font-weight:700;font-size:15px}' +
+      '.hp-pc .primary:hover{background:#d4531f}.hp-pc .primary:disabled{background:#e3e6ec;color:#9aa1ae}' +
+      '.hp-pc .ship{padding:6px 0;border-top:1px solid #eef0f4}.hp-pc .ship:first-of-type{border-top:none;padding-top:0}' +
+      '.hp-pc .ship .bar{height:5px;margin-top:5px;border-radius:3px;background:#e9ecf1;overflow:hidden}.hp-pc .ship .bar i{display:block;height:100%;background:#2f7de1}' +
+      '.hp-pc .cut{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
+      '.hp-pc .tag{display:inline-block;padding:1px 8px;margin-right:6px;border-radius:999px;font-size:11.5px;font-weight:700;background:#e5f0ff;color:#2265c4}.hp-pc .tag.here{background:#e3f6ea;color:#1c8a4b}' +
+      // the accounts
+      '.hp-pc .tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}' +
+      '.hp-pc .tile b{display:block;font-size:24px;line-height:1.15}.hp-pc .tile.neg b{color:#c93c2c}.hp-pc .tile.pos b{color:#1c8a4b}' +
+      '.hp-pc table{width:100%;border-collapse:collapse}.hp-pc td,.hp-pc th{padding:5px 8px;text-align:right;border-bottom:1px solid #eef0f4}' +
+      '.hp-pc th{font:700 11.5px/1.2 "Segoe UI",system-ui,sans-serif;letter-spacing:.5px;text-transform:uppercase;color:#7a8090}' +
+      '.hp-pc td:first-child,.hp-pc th:first-child{text-align:left}.hp-pc tr:last-child td{border-bottom:none}.hp-pc td.neg{color:#c93c2c}.hp-pc td.pos{color:#1c8a4b}' +
+      '.hp-pc .till b{font-size:30px;line-height:1.1;color:#b9471a}';
     document.head.appendChild(css);
     var moneyEl = document.createElement('div'); moneyEl.className = 'hp-money';
     moneyEl.innerHTML = '<span class="hp-coin"></span><span class="hp-amount"></span>'; document.body.appendChild(moneyEl);
@@ -1679,15 +1707,16 @@
     }
 
     // ---------- the computer in the office ------------------------------------------------------
-    // E at the desk shows its screen: ordering supplies, and the accounts. The mouse is
-    // free while it is on; E or Esc gets up again. The game goes on meanwhile.
+    // E at the desk shows its screen, the restaurant's back-office app: ordering supplies,
+    // and the accounts. The mouse is free while it is on; E or Esc gets up again. The game
+    // goes on meanwhile.
     var PC = V(5.2, 0, -15.8), DOCK = V(6.95, 0, -12.75);   // the desk; where deliveries are put down in the storeroom
     var pc = null;   // while it is used: { page: 'supplies' | 'accounts', cart, said: [text, kind], fresh, sig }
     var pcEl = document.createElement('div'); pcEl.className = 'hp-pc';
-    pcEl.innerHTML = '<div class="case"><div class="screen"></div><div class="brand">OFFICE PC</div></div>';
+    pcEl.innerHTML = '<div class="case"><div class="screen"></div></div>';
     document.body.appendChild(pcEl);
     var pcScreen = pcEl.querySelector('.screen'), pcCase = pcEl.querySelector('.case');
-    function fitPC(){ pcCase.style.transform = 'scale(' + Math.min(1, (window.innerWidth - 24) / 912, (window.innerHeight - 24) / 612) + ')'; }
+    function fitPC(){ pcCase.style.transform = 'scale(' + Math.min(1, (window.innerWidth - 24) / 944, (window.innerHeight - 24) / 650) + ')'; }
     window.addEventListener('resize', fitPC);
     function lockMouse(){
       var cv = document.querySelector('canvas');
@@ -1722,12 +1751,12 @@
         sc.add(instance(kind));
         var cam = new T.PerspectiveCamera(28, 1, 0.01, 20);
         cam.position.set(r * 1.5, sz.y / 2 + r * 1.3, r * 1.9); cam.lookAt(V(0, sz.y / 2, 0));
-        var oldTarget = Rn.getRenderTarget(), oldColor = new T.Color(), oldAlpha = Rn.getClearAlpha();
+        var oldTarget = Rn.getRenderTarget(), oldColor = new T.Color(), oldAlpha = Rn.getClearAlpha(), buf = new Uint8Array(px * px * 4);
         Rn.getClearColor(oldColor);
-        Rn.setRenderTarget(rt); Rn.setClearColor(0x000000, 0); Rn.clear(); Rn.render(sc, cam);
-        var buf = new Uint8Array(px * px * 4);
-        Rn.readRenderTargetPixels(rt, 0, 0, px, px, buf);
-        Rn.setRenderTarget(oldTarget); Rn.setClearColor(oldColor, oldAlpha); rt.dispose();
+        try {
+          Rn.setRenderTarget(rt); Rn.setClearColor(0x000000, 0); Rn.clear(); Rn.render(sc, cam);
+          Rn.readRenderTargetPixels(rt, 0, 0, px, px, buf);
+        } finally { Rn.setRenderTarget(oldTarget); Rn.setClearColor(oldColor, oldAlpha); rt.dispose(); }
         var cv = document.createElement('canvas'); cv.width = cv.height = px;
         var g = cv.getContext('2d'), img = g.createImageData(px, px);
         for (var y = 0; y < px; y++) img.data.set(buf.subarray((px - 1 - y) * px * 4, (px - y) * px * 4), y * px * 4);   // (it comes upside down)
@@ -1739,6 +1768,12 @@
     function clockText(){ var m = Math.floor(state.day.time + 1e-6); return Math.floor(m / 60) + ':' + (m % 60 < 10 ? '0' : '') + (m % 60); }
     function minSec(t){ t = Math.max(0, Math.ceil(t)); return Math.floor(t / 60) + ':' + (t % 60 < 10 ? '0' : '') + (t % 60); }
     function oneDec(x){ return Math.round(x * 10) / 10; }
+    var ICON = {
+      box: '<svg viewBox="0 0 24 24"><path d="M3 7.5 12 3l9 4.5v9L12 21l-9-4.5z"/><path d="M3 7.5 12 12l9-4.5M12 12v9"/></svg>',
+      chart: '<svg viewBox="0 0 24 24"><path d="M5 20V11M12 20V4M19 20v-6M2 20h20"/></svg>',
+      out: '<svg viewBox="0 0 24 24"><path d="M10 4H5v16h5M15 8l4 4-4 4M19 12H9"/></svg>'
+    };
+    function pct(x){ return Math.round(clamp(x) * 100); }
     // the screen follows the state: drawn again whenever something on it has changed
     function drawPC(){
       if (!pc) return;
@@ -1748,52 +1783,70 @@
                  day.n, clockText(), day.phase, day.served, day.lost, day.sales, day.tips, day.spent, state.history.length].join('|');
       if (sig === pc.sig) return;
       pc.sig = sig;
-      var html = '', title;
+      var html = '', title, sub;
       if (pc.page === 'supplies'){
-        title = 'Order supplies';
-        html += '<div class="line head"><span></span><span>Item</span><span>In the kitchen</span><span class="right">Price</span><span>Order</span><span class="right">Sum</span></div>';
+        title = 'Supplies'; sub = 'Order what the kitchen needs';
+        var cards = '';
         GOODS.forEach(function(k){
-          var pic = thumb(k), have = k === 'broth' ? 'for ' + oneDec(stockOf(k)) + ' of ' + holds(k) + ' pots' : stockOf(k) + ' of ' + holds(k), on = coming(k), n = pc.cart[k];
-          html += '<div class="line">' + (pic ? '<img src="' + pic + '" alt="">' : '<i></i>') +
-            '<span><b>' + GOOD[k].name + '</b>' + (k === 'broth' ? '<br><small>for one pot of stew</small>' : '') + '</span>' +
-            '<span>' + have + (on ? '<br><small>+ ' + on + ' on the way</small>' : '') + '</span>' +
-            '<span class="right">' + euro(RULES.cost[k]) + '</span>' +
-            '<span class="qty"><button data-do="minus:' + k + '"' + (n > 0 ? '' : ' disabled') + '>\u2212</button><b>' + n + '</b>' +
-            '<button data-do="plus:' + k + '"' + (n < room(k) ? '' : ' disabled') + '>+</button></span>' +
-            '<span class="right">' + (n ? euro(n * RULES.cost[k]) : '') + '</span></div>';
+          var pic = thumb(k), have = stockOf(k), cap = holds(k), on = coming(k), n = pc.cart[k];
+          cards += '<div class="card good"><div class="pic">' + (pic ? '<img src="' + pic + '" alt="">' : '') + '</div>' +
+            '<div class="what"><b>' + GOOD[k].name + '</b><span class="price">' + euro(RULES.cost[k]) + (k === 'broth' ? ' per pot' : ' each') + '</span>' +
+            '<div class="meter"><i style="width:' + pct(have / cap) + '%"></i><u style="width:' + pct(on / cap) + '%"></u></div>' +
+            '<small>' + (k === 'broth' ? 'For ' + oneDec(have) + ' of ' + cap + ' pots' : have + ' of ' + cap + (on ? '' : ' in the kitchen')) + (on ?' \u00b7 ' + on + ' on the way' : '') + '</small></div>' +
+            '<div class="qty"><button data-do="minus:' + k + '"' + (n > 0 ? '' : ' disabled') + '>\u2212</button><b>' + n + '</b>' +
+            '<button data-do="plus:' + k + '"' + (n < room(k) ? '' : ' disabled') + '>+</button></div></div>';
         });
-        var poor = total > state.money;
-        html += '<div class="foot"><span>Total <b>' + euro(total) + '</b></span><span>In the till <b>' + signed(state.money) + '</b></span><span class="grow"></span>' +
-                '<button data-do="buy"' + (total > 0 && !poor ? '' : ' disabled') + '>Order now</button></div><div class="info">';
-        if (poor) html += '<p class="warn">Not enough money in the till for this order.</p>';
-        if (pc.said) html += '<p class="' + pc.said[1] + '">' + pc.said[0] + '</p>';
-        state.orders.forEach(function(o){ html += '<p>On its way: ' + goodsText(o.goods) + ' \u2013 arrives in ' + minSec(o.left) + '</p>'; });
-        boxes.forEach(function(p){ html += '<p>' + (p.at === 'dock' ? 'Waiting in the storeroom: a box with ' : 'Not unpacked yet: a box with ') + goodsText(p.goods) + '</p>'; });
-        if (!poor && !pc.said && !state.orders.length && !boxes.length)
-          html += '<p>Orders arrive as a box in the storeroom after about ' + RULES.delivery + ' seconds.</p><p>Carry the box to the kitchen and unpack it at the crates and at the broth shelf.</p>' +
-                  (GOODS.every(function(k){ return room(k) === 0; }) ? '<p>The kitchen is full: there is no room for more right now.</p>' : '');
-        html += '</div>';
+        var poor = total > state.money, lines = '';
+        GOODS.forEach(function(k){ if (pc.cart[k] > 0) lines += '<div class="row"><span>' + pc.cart[k] + ' \u00d7 ' + GOOD[k].name + '</span><span>' + euro(pc.cart[k] * RULES.cost[k]) + '</span></div>'; });
+        var full = GOODS.every(function(k){ return room(k) === 0; });
+        var order = '<div class="card"><h4>Your order</h4>' + (lines || '<p class="muted">' + (full ? 'The kitchen is full \u2013 there is no room for more right now.' : 'Choose what you need with + and \u2212.') + '</p>') +
+          '<div class="row total"><span>Total</span><b>' + euro(total) + '</b></div>' +
+          '<div class="row muted"><span>Till afterwards</span><span>' + signed(state.money - total) + '</span></div>' +
+          (poor ? '<p class="warn">Not enough money in the till.</p>' : '') +
+          '<button class="primary" data-do="buy"' + (total > 0 && !poor ? '' : ' disabled') + '>Order now</button>' +
+          '<p class="muted small">Delivered to the storeroom in ' + RULES.delivery + ' s.</p></div>';
+        var ships = '';
+        if (pc.said) ships += '<p class="' + pc.said[1] + '" style="margin-bottom:6px">' + pc.said[0] + '</p>';
+        var rows = [];   // boxes that are there first, then what is on its way
+        boxes.forEach(function(p){
+          rows.push('<div class="ship"><span class="tag here">' + (p.at === 'dock' ? 'In the storeroom' : 'Not unpacked') + '</span><div class="small cut">A box with ' + goodsText(p.goods) + '</div></div>');
+        });
+        state.orders.forEach(function(o){
+          rows.push('<div class="ship"><span class="tag">On its way</span>' + minSec(o.left) + '<div class="small cut">' + goodsText(o.goods) + '</div>' +
+                    '<div class="bar"><i style="width:' + pct(1 - o.left / RULES.delivery) + '%"></i></div></div>');
+        });
+        ships += rows.slice(0, 2).join('');
+        if (rows.length > 2) ships += '<p class="muted small">+ ' + (rows.length - 2) + ' more</p>';
+        if (!state.orders.length && !boxes.length && !pc.said) ships += '<p class="muted">Nothing on its way.</p><p class="muted small">Carry a delivered box to the kitchen and unpack it at the crates and at the broth shelf.</p>';
+        html = '<div class="col" style="flex:1">' + cards + '</div><div class="col" style="width:252px;flex:none">' + order + '<div class="card" style="flex:1;min-height:0;overflow:hidden"><h4>Deliveries</h4>' + ships + '</div></div>';
       } else {
-        title = 'Accounts';
+        title = 'Accounts'; sub = 'Day ' + day.n + ' so far, and the days before';
         var soFar = day.sales + day.tips - day.spent;
-        function tr(name, value, neg){ return '<tr><td>' + name + '</td><td' + (neg ? ' class="neg"' : '') + '>' + value + '</td></tr>'; }
-        html += '<h3>Today \u2013 day ' + day.n + '</h3><table>' + tr('Guests served', day.served) + tr('Guests who left hungry', day.lost, day.lost > 0) +
-                tr('Stew sold', euro(day.sales)) + tr('Tips', euro(day.tips)) + tr('Supplies bought', signed(-day.spent), day.spent > 0) +
-                tr('<b>Profit so far</b>', '<b>' + signed(soFar) + '</b>', soFar < 0) + tr('<b>In the till</b>', '<b>' + signed(state.money) + '</b>', state.money < 0) + '</table>';
-        html += '<h3>Earlier days</h3>';
-        if (!state.history.length) html += '<p>No day is finished yet.</p>';
+        function tile(name, value, cls){ return '<div class="card tile' + (cls ? ' ' + cls : '') + '"><h4>' + name + '</h4><b>' + value + '</b></div>'; }
+        var days = '';
+        if (!state.history.length) days = '<p class="muted">No day is finished yet. End a day at the front door to see it here.</p>';
         else {
-          html += '<table><tr><th>Day</th><th>Guests</th><th>Stew + tips</th><th>Supplies</th><th>Profit</th><th>Till</th></tr>';
-          state.history.slice(-7).reverse().forEach(function(r){
-            html += '<tr><td>Day ' + r.n + '</td><td>' + r.served + '</td><td>' + euro(r.sales + r.tips) + '</td><td>' + signed(-r.cost) + '</td><td' + (r.profit < 0 ? ' class="neg"' : '') + '>' + signed(r.profit) + '</td><td>' + signed(r.money) + '</td></tr>';
+          days = '<table><tr><th>Day</th><th>Guests</th><th>Stew + tips</th><th>Supplies</th><th>Profit</th><th>Till</th></tr>';
+          state.history.slice(-5).reverse().forEach(function(r){
+            days += '<tr><td>Day ' + r.n + '</td><td>' + r.served + '</td><td>' + euro(r.sales + r.tips) + '</td><td>' + signed(-r.cost) + '</td><td class="' + (r.profit < 0 ? 'neg' : r.profit > 0 ? 'pos' : '') + '">' + signed(r.profit) + '</td><td>' + signed(r.money) + '</td></tr>';
           });
-          html += '</table>';
+          days += '</table>';
         }
+        html = '<div class="col" style="flex:1"><div class="tiles">' +
+          tile('Guests served', day.served) + tile('Left hungry', day.lost, day.lost > 0 ? 'neg' : '') + tile('Stew sold', euro(day.sales)) +
+          tile('Tips', euro(day.tips)) + tile('Supplies bought', signed(-day.spent), day.spent > 0 ? 'neg' : '') + tile('Profit so far', signed(soFar), soFar < 0 ? 'neg' : soFar > 0 ? 'pos' : '') +
+          '</div><div style="display:flex;gap:10px;flex:1;min-height:0">' +
+          '<div class="card till" style="width:190px;flex:none"><h4>In the till</h4><b>' + signed(state.money) + '</b><p class="muted small" style="margin-top:8px">Everything you earn and spend goes through the till.</p></div>' +
+          '<div class="card" style="flex:1;overflow:hidden"><h4>Earlier days</h4>' + days + '</div></div></div>';
       }
-      pcScreen.innerHTML = '<div class="win"><div class="title"><span>' + title + '</span><span>Hot Pot Go</span></div><div class="body">' + html + '</div></div>' +
-        '<div class="bar"><button class="tab' + (pc.page === 'supplies' ? ' on' : '') + '" data-do="page:supplies">Supplies</button>' +
-        '<button class="tab' + (pc.page === 'accounts' ? ' on' : '') + '" data-do="page:accounts">Accounts</button><span class="grow"></span>' +
-        '<span class="clock">Day ' + day.n + ' \u00b7 ' + clockText() + '</span><button data-do="close">Get up<kbd>E</kbd></button></div>';
+      pcScreen.innerHTML =
+        '<div class="side"><div class="logo"><i></i><span>Hot Pot Go<small>Back office</small></span></div>' +
+        '<button class="nav' + (pc.page === 'supplies' ? ' on' : '') + '" data-do="page:supplies">' + ICON.box + 'Supplies</button>' +
+        '<button class="nav' + (pc.page === 'accounts' ? ' on' : '') + '" data-do="page:accounts">' + ICON.chart + 'Accounts</button>' +
+        '<span class="grow"></span><button class="nav" data-do="close">' + ICON.out + 'Get up<kbd>E</kbd></button></div>' +
+        '<div class="main"><div class="top"><h2>' + title + '<small>' + sub + '</small></h2><span class="grow"></span>' +
+        '<span class="chip' + (day.phase === 'open' ? ' open' : '') + '"><i></i>Day ' + day.n + ' \u00b7 ' + clockText() + ' \u00b7 ' + (day.phase === 'open' ? 'Open' : 'Closed') + '</span>' +
+        '<span class="chip till">Till ' + signed(state.money) + '</span></div><div class="page">' + html + '</div></div>';
     }
     // a button on the screen: 'plus:potato', 'minus:potato', 'buy', 'page:accounts', 'close'
     function pcDo(cmd){
@@ -1804,7 +1857,7 @@
       else if (p[0] === 'minus'){ if (GOOD[k] && pc.cart[k] > 0) pc.cart[k]--; }
       else if (p[0] === 'page') pc.page = k === 'accounts' ? 'accounts' : 'supplies';
       else if (p[0] === 'buy'){
-        if (act('buy', pc.cart)){ pc.cart = emptyGoods(); pc.said = ['Ordered \u2013 thank you! The box comes to the storeroom.', 'ok']; saveNow(false); }
+        if (act('buy', pc.cart)){ pc.cart = emptyGoods(); pc.said = ['Ordered \u2013 thank you!', 'ok']; saveNow(false); }
         else pc.said = ['This order is not possible.', 'warn'];
       } else if (p[0] === 'close'){ closePC(); return; }
       drawPC();
