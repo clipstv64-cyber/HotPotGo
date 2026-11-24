@@ -158,7 +158,8 @@
       place('dogfigure', { h: 0.22 }, null, x, top, 3.6, -Math.PI / 2 - 0.5, { cast: true });
     }
 
-    var office = { chair: null, screen: null, room: null, desk: null };   // what the game needs of the office: the swivel chair, the monitor's screen
+    var office = { chair: null, screen: null, room: null, desk: null };
+    var lounge = { group: null }, loungeMats = [];   // the lounge (built with the back rooms, shown when bought)   // what the game needs of the office: the swivel chair, the monitor's screen
     // ---------- back rooms behind the kitchen: corridor, office, storeroom, cleaning closet ----
     (function(){
       var B = ctx.BACKROOMS;
@@ -243,6 +244,27 @@
         q.castShadow = false;
         return q;
       }
+      // ---------- the lounge behind the dining room's left wall (bought at the computer) ----------
+      // Built now and kept hidden: a floor of the kitchen's planks, plaster walls with an opening
+      // to the dining room, a ceiling and a lamp. index.html opens the wall.
+      (function(){
+        var LG = { x0: -15.5, x1: -10, z0: -1.0, z1: 6.0 }, dz = 2.33, dw = 1.4, dh = 2.4;
+        var g = new T.Group(); g.visible = false; root.add(g);
+        var before = root.children.length;
+        var loungePlaster = { mat: M.plaster.mat.clone(), tu: M.plaster.tu, tv: M.plaster.tv };
+        loungeMats.push(loungePlaster.mat);
+        floor(M.planks, LG.x0, LG.x1, LG.z0, LG.z1, 0.002);
+        floor(M.ceiling, LG.x0, LG.x1, LG.z0, LG.z1, H - 0.002, true);
+        wall('z', LG.x0, LG.z0, LG.z1, loungePlaster);                       // far wall
+        wall('x', LG.z0, LG.x0, LG.x1, loungePlaster);                       // side walls
+        wall('x', LG.z1, LG.x0, LG.x1, loungePlaster);
+        wall('z', LG.x1 - 0.012, LG.z0, LG.z1, loungePlaster, [[dz, dw, dh]]); // its side of the dining room's wall, with the opening
+        // everything just made belongs to the lounge
+        root.children.slice(before).forEach(function(o){ g.add(o); });
+        var lamp = new T.PointLight(0xffd29a, 1.0, 9, 2); lamp.position.set((LG.x0 + LG.x1) / 2, H - 0.7, (LG.z0 + LG.z1) / 2); g.add(lamp);
+        place('lamp_drum', { w: 0.5 }, g, (LG.x0 + LG.x1) / 2, H, (LG.z0 + LG.z1) / 2, 0, { anchor: 'top' });
+        lounge.group = g;
+      })();
       var xo = 6.5, xs = 9.3;                                 // room dividers: office | storeroom | closet
       var doorO = (x0 + xo) / 2, doorS = (xo + xs) / 2, doorC = (xs + x1) / 2;
       // floors and ceilings
@@ -391,7 +413,11 @@
         ctx.addBox(-9.42, z, 0.55, 0.55, 1.4);
       });
     }
-    return { dressTable: dressTable, showBought: showBought, update: update, root: root, entrance: entrance, office: office };
+    // the lounge's walls take the dining room's paint (tint as r, g, b)
+    function setWallTint(w){ loungeMats.forEach(function(m){ m.color.setRGB(0.7 * w[0], 0.7 * w[1], 0.7 * w[2]); }); }
+    return { dressTable: dressTable, showBought: showBought, setWallTint: setWallTint,
+             showLounge: function(){ if (lounge.group) lounge.group.visible = true; },
+             hideLounge: function(){ if (lounge.group) lounge.group.visible = false; }, update: update, root: root, entrance: entrance, office: office };
   }
 
   window.HotPotDecor = { build: build };

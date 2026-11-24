@@ -104,20 +104,38 @@
     onion:  { name: 'Onions', one: 'onion', many: 'onions' },
     broth:  { name: 'Broth', one: 'broth for 1 pot', many: 'broth for # pots' }
   };
-  // The shop at the computer: things for the restaurant, bought once each. Every one does
-  // something in the game (no decoration without an effect):
-  //   bowls   ten more bowls on the stack
-  //   candles candles on every table: the room is nicer (the reviews' "mood")
-  //   plants  potted plants along the dining room's wall: the same
-  //   stove   a stronger burner: the stew cooks in less time
+  // The shop at the computer, in sections. Everything does something in the game:
+  //   kitchen  more bowls; a strong burner (the stew cooks in less time)
+  //   room     candles, plants and the lounge (a new room) make the room nicer (the reviews' "mood")
+  //   furniture  bought as often as you like and placed freely (each piece makes the room nicer)
+  //   walls / floors  the dining room's paint and floor (a nicer look, switched freely once bought)
   var SHOP = [
-    { key: 'bowls',   name: 'More bowls',     price: 45,  pic: 'bowl',   text: 'Ten more bowls on the stack, so you run out less often.' },
-    { key: 'candles', name: 'Table candles',  price: 60,  pic: 'candle', text: 'A candle on every table. Guests like the room better.' },
-    { key: 'plants',  name: 'Potted plants',  price: 110, pic: 'plant',  text: 'Three big plants for the dining room. Guests like the room better.' },
-    { key: 'stove',   name: 'Strong burner',  price: 220, pic: 'pot',    text: 'A stronger flame under the pot: the stew is done in less time.' }
+    { key: 'bowls',   cat: 'kitchen', name: 'More bowls',    price: 45,  pic: 'bowl',   text: 'Ten more bowls on the stack, so you run out less often.' },
+    { key: 'stove',   cat: 'kitchen', name: 'Strong burner', price: 220, pic: 'pot',    text: 'A stronger flame under the pot: the stew is done in less time.' },
+    { key: 'candles', cat: 'room',    name: 'Table candles', price: 60,  pic: 'candle', text: 'A candle on every table. Guests like the room better.' },
+    { key: 'plants',  cat: 'room',    name: 'Potted plants', price: 110, pic: 'plant',  text: 'Three big plants for the dining room. Guests like the room better.' },
+    { key: 'lounge',  cat: 'room',    name: 'The lounge',    price: 400, pic: 'sofa',   text: 'Opens the wall to a new room behind the dining room, with space for furniture.' }
   ];
-  var SHOP_EFFECT = { bowls: 10, candles: 0.15, plants: 0.2, stove: 0.7 };   // more bowls; mood added (each); cooking time (share)
+  var SHOP_EFFECT = { bowls: 10, candles: 0.15, plants: 0.2, stove: 0.7, lounge: 0.08 };   // more bowls; mood added; cooking time (share)
+  // furniture: placed freely; size: its footprint is measured on the model; mood: what each piece adds
+  var FURNITURE = [
+    { key: 'sofa',     name: 'Leather sofa',  price: 140, mood: 0.06, text: 'An old leather sofa. Somewhere to wait in comfort.' },
+    { key: 'jukebox',  name: 'Jukebox',       price: 190, mood: 0.08, text: 'An old jukebox with warm lights. The room comes alive.' },
+    { key: 'aquarium', name: 'Fish tank',     price: 160, mood: 0.07, text: 'A fish tank on a cabinet. Guests love to watch the fish.' },
+    { key: 'coatrack', name: 'Coat rack',     price: 35,  mood: 0.02, text: 'A wooden coat rack for the guests\u2019 coats.' }
+  ];
+  var FURNITURE_MAX = 4;   // pieces of one kind at most
+  // the dining room's look (index.html shows it); free: what it has to start with
+  var LOOK = {
+    wall:  [{ key: 'cream', name: 'Cream plaster', price: 0, swatch: '#e9dcc0' }, { key: 'sage', name: 'Sage green', price: 80, swatch: '#a9bf96' },
+            { key: 'terracotta', name: 'Terracotta', price: 80, swatch: '#d79a72' }, { key: 'blue', name: 'Faded blue', price: 80, swatch: '#a7b9d6' }],
+    floor: [{ key: 'tiles', name: 'Old tiles', price: 0, img: 'textures/floor_color.jpg' }, { key: 'planks', name: 'Wooden planks', price: 150, img: 'textures/k_wood.webp' },
+            { key: 'slate', name: 'Slate', price: 150, img: 'textures/k_floor.webp' }]
+  };
+  var LOOK_MOOD = 0.04;   // a new paint or floor (not the one it had)
   function shopItem(key){ for (var i = 0; i < SHOP.length; i++) if (SHOP[i].key === key) return SHOP[i]; return null; }
+  function furnitureItem(key){ for (var i = 0; i < FURNITURE.length; i++) if (FURNITURE[i].key === key) return FURNITURE[i]; return null; }
+  function lookItem(part, key){ var l = LOOK[part] || []; for (var i = 0; i < l.length; i++) if (l[i].key === key) return l[i]; return null; }
   // the guests' names, for their reviews
   var GUEST_NAMES = { woman: 'Greta', sailor: 'Hein', biker: 'Bruno', nerd: 'Milo', oldman: 'Walter', glamour: 'Lola', butcher: 'Otto', goth: 'Raven' };
   // What a guest writes. It follows from the visit: f = how the food, the wait and the
@@ -185,7 +203,12 @@
     ladle:  { file: 'models/d_ladle.glb', height: 0.56 },
     parcel: { file: 'models/d_parcel.glb', width: 0.44 },                 // one box out of the storeroom's stack of boxes
     candle: { file: 'models/d_candlebottle.glb', height: 0.4 },           // (the shop's pictures)
-    plant:  { file: 'models/d_plant.glb', height: 1.75 }
+    plant:  { file: 'models/d_plant.glb', height: 1.75 },
+    // furniture (placed freely)
+    sofa:     { file: 'models/d_sofa.glb', width: 1.75 },
+    jukebox:  { file: 'models/d_jukebox.glb', height: 1.75 },
+    aquarium: { file: 'models/d_aquarium.glb', width: 1.2 },
+    coatrack: { file: 'models/d_coatrack.glb', height: 1.9 }
   };
 
   function num(v){ return typeof v === 'number' && isFinite(v); }
@@ -254,6 +277,8 @@
         history: [],                                  // the accounts of the days that are over (see 'endDay')
         reviews: [],                                  // what guests wrote: { id, day, who, stars, text, food, wait, clean }
         owned: {},                                    // what was bought in the shop: { bowls: true, ... }
+        look: { wall: 'cream', floor: 'tiles', have: ['wall:cream', 'floor:tiles'] },   // the dining room's paint and floor, and what was bought
+        furniture: [],                                // { id, key, x, z, rot, placed } (not placed yet: it is being put somewhere)
         day: newDay(1)
       };
       ['knife', 'broth', 'spice'].forEach(function(kind){
@@ -281,13 +306,20 @@
     }
     function room(kind){ return Math.max(0, Math.floor(holds(kind) - stockOf(kind) - coming(kind) + 1e-6)); }
     // how nice the room is (0 .. 1): shabby to start with, better with what was bought
-    function mood(){ return clamp(RULES.review.mood + (state.owned.candles ? SHOP_EFFECT.candles : 0) + (state.owned.plants ? SHOP_EFFECT.plants : 0)); }
+    function mood(){
+      var m = RULES.review.mood + (state.owned.candles ? SHOP_EFFECT.candles : 0) + (state.owned.plants ? SHOP_EFFECT.plants : 0) + (state.owned.lounge ? SHOP_EFFECT.lounge : 0);
+      state.furniture.forEach(function(f){ var it = furnitureItem(f.key); if (it && f.placed && !MODELS[f.key].failed) m += it.mood; });
+      if (state.look.wall !== 'cream') m += LOOK_MOOD;
+      if (state.look.floor !== 'tiles') m += LOOK_MOOD;
+      return clamp(m);
+    }
     // The restaurant's stars: the average of the latest reviews (0 = nobody has written one yet).
     function reputation(){
       var list = state.reviews.slice(-RULES.review.keep), sum = 0;
       list.forEach(function(r){ sum += r.stars; });
       return list.length ? sum / list.length : 0;
     }
+    function furniturePiece(id){ for (var i = 0; i < state.furniture.length; i++) if (state.furniture[i].id === id) return state.furniture[i]; return null; }
     function dirtyOnTables(){ return Object.keys(state.items).filter(function(id){ var o = state.items[id]; return o.kind === 'dirty' && o.at === 'table'; }).length; }
     // is a dirty bowl still standing at this guest's place? (nobody sits down there until it is cleared away)
     function dirtyAt(gid){ return Object.keys(state.items).some(function(id){ var o = state.items[id]; return o.kind === 'dirty' && o.at === 'table' && o.guest === gid; }); }
@@ -450,6 +482,28 @@
           state.money -= thing.price; day.spent += thing.price; state.owned[arg] = true;
           if (arg === 'bowls') state.bowls += SHOP_EFFECT.bowls;
           return true;
+        case 'buyFurniture':   // a piece of furniture: it waits to be placed (arg = its key)
+          var fi = furnitureItem(arg);
+          if (!fi || state.money < fi.price || state.furniture.some(function(f){ return !f.placed; }) || state.furniture.filter(function(f){ return f.key === arg; }).length >= FURNITURE_MAX) return false;
+          state.money -= fi.price; day.spent += fi.price;
+          state.furniture.push({ id: state.nextId++, key: arg, x: 0, z: 0, rot: 0, placed: false });
+          return true;
+        case 'place':      // a piece put down: arg = { id, x, z, rot } (checked by the one who places it: placeOk)
+          var pf = furniturePiece(arg && arg.id);
+          if (!pf || pf.placed || !num(arg.x) || !num(arg.z) || !num(arg.rot)) return false;
+          pf.x = arg.x; pf.z = arg.z; pf.rot = arg.rot; pf.placed = true; return true;
+        case 'unplace':    // picked up again to be moved
+          var uf = furniturePiece(arg);
+          if (!uf || !uf.placed || state.furniture.some(function(f){ return !f.placed; })) return false;
+          uf.placed = false; return true;
+        case 'buyLook':    // a paint or a floor: arg = 'wall:sage' / 'floor:planks' (bought once, then used)
+          var lp = String(arg).split(':'), li = lookItem(lp[0], lp[1]);
+          if (!li || state.look.have.indexOf(arg) >= 0 || state.money < li.price) return false;
+          state.money -= li.price; day.spent += li.price; state.look.have.push(arg); state.look[lp[0]] = lp[1]; return true;
+        case 'useLook':
+          var up = String(arg).split(':');
+          if (!lookItem(up[0], up[1]) || state.look.have.indexOf(arg) < 0) return false;
+          state.look[up[0]] = up[1]; return true;
         case 'buy':        // an order at the computer: arg = { potato, carrot, onion, broth } (how many of each)
           if (!arg) return false;
           var goods = emptyGoods(), any = false, fits = true;
@@ -716,6 +770,10 @@
       '.hp-pc .primary:disabled{background:transparent;border:2px dashed rgba(74,54,38,.35);color:rgba(74,54,38,.45)}' +
       '.hp-pc .ship{padding:6px 0;border-top:1px dotted rgba(74,54,38,.4)}.hp-pc .ship:first-of-type{border-top:none;padding-top:0}' +
       '.hp-pc .ship .bar{height:6px;margin-top:5px;border-radius:3px;background:rgba(74,54,38,.16);overflow:hidden}.hp-pc .ship .bar i{display:block;height:100%;background:#3f8a2c}' +
+      '.hp-pc .cats{display:flex;gap:6px;flex-wrap:wrap}' +
+      '.hp-pc .cat{padding:5px 12px;border-radius:3px;background:rgba(244,234,210,.16);color:#f4ead2;font:700 14px/1.2 Georgia,"Times New Roman",serif}' +
+      '.hp-pc .cat:hover{background:rgba(244,234,210,.3)}.hp-pc .cat.on{background:#f4ead2;color:#4a3626}' +
+      '.hp-pc .swatch{display:block;width:62px;height:62px;border-radius:50%;box-shadow:inset 0 0 0 2px rgba(74,54,38,.25)}' +
       '.hp-pc .small-btn{width:auto;margin:0;padding:6px 16px;font-size:16px;flex:none}' +
       '.hp-pc .cut{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
       // the reviews
@@ -789,8 +847,8 @@
           if (key === 'spice') md.tool = { grip: V(0, md.size.y * 0.45, 0), dir: V(0, 1, 0), up: V(1, 0, 0) };
           if (key === 'ladle') md.tool = { grip: V(0, md.size.y * 0.88, 0), dir: V(0, -1, 0), up: V(1, 0, 0) };   // held near the top, the bowl down
           md.obj = holder;
-        }, function(e){ console.error('Could not load ' + md.file + ':', e); }); })
-        .catch(function(e){ console.error('Could not load ' + md.file + ':', e); });
+        }, function(e){ md.failed = true; console.error('Could not load ' + md.file + ':', e); }); })
+        .catch(function(e){ md.failed = true; console.error('Could not load ' + md.file + ':', e); });
     });
     function instance(key){ return MODELS[key].obj.clone(true); }
     // all vertices of a model as [x, y, z, x, y, z, ...] (packed models store whole numbers that stand for fractions)
@@ -887,7 +945,7 @@
                edgeDrop: Math.abs((edge > 0 ? bz1 : bz0) - gz),     // from the handle's line down to the edge
                bladeMid: bx - gx, bladeLen: (N - first) / N * L };  // from the fist to the middle of the blade
     }
-    function allLoaded(){ return Object.keys(MODELS).every(function(k){ return MODELS[k].obj; }); }
+    function allLoaded(){ return Object.keys(MODELS).every(function(k){ return MODELS[k].obj || MODELS[k].failed; }); }   // (a model that cannot be loaded does not hold up the game)
 
     // ---------- cut vegetables ------------------------------------------------------------------
     // A cut vegetable is drawn as its own model once per piece, each clipped to its piece
@@ -1495,11 +1553,79 @@
     }
 
     var DOOR = V(-1.3, 0, 9.9);   // the entrance door in the front wall (decor.js)
+    // ---------- furniture: shown where it stands, and put somewhere new ---------------------------
+    // A piece that is not placed yet follows the view as a see-through ghost on the floor; E puts it
+    // down where it is green, F turns it. Placed pieces can be picked up again (E) to move them.
+    var furnObjs = {};   // id -> { obj, box, key, x, z, rot }
+    var ghost = null;    // { id, obj, rot, x, z, ok }
+    var ghostMats = { ok: new T.MeshBasicMaterial({ color: 0x6fd24f, transparent: true, opacity: 0.45, depthWrite: false }),
+                      no: new T.MeshBasicMaterial({ color: 0xd2503f, transparent: true, opacity: 0.45, depthWrite: false }) };
+    function footprint(key, rot){   // half sizes along x and z of a piece turned by rot
+      var sz = MODELS[key].size, c = Math.abs(Math.cos(rot)), sn = Math.abs(Math.sin(rot));
+      return { hx: (sz.x * c + sz.z * sn) / 2, hz: (sz.x * sn + sz.z * c) / 2 };
+    }
+    // where furniture may stand: the middle of the dining room (clear of the guests' way in from the door and
+    // of the tables) and the lounge once it is open; not on anything, not on the chef
+    function placeOk(key, x, z, rot){
+      var fp = footprint(key, rot), r = Math.max(fp.hx, fp.hz), L = ctx.lounge, chef = ctx.getChef();
+      var inLounge = state.owned.lounge && L && x - fp.hx > L.x0 + 0.05 && x + fp.hx < L.x1 - 0.1 && z - fp.hz > L.z0 + 0.05 && z + fp.hz < L.z1 - 0.05;
+      var inRoom = x - fp.hx > -4.75 && x + fp.hx < 2.3 && z - fp.hz > -9.7 && z + fp.hz < 8.1;   // (the guests walk along the front wall and the aisle by the tables)
+      if (!inLounge && !inRoom) return false;
+      if (chef && Math.abs(chef.position.x - x) < fp.hx + 0.4 && Math.abs(chef.position.z - z) < fp.hz + 0.4) return false;
+      if (inLounge && x - fp.hx < L.x1 && x + fp.hx > L.x1 - 1.5 && z + fp.hz > 1.33 && z - fp.hz < 3.33) return false;   // (the way in from the dining room stays free)
+      return ctx.boxFree ? ctx.boxFree(x - fp.hx, x + fp.hx, z - fp.hz, z + fp.hz) : true;
+    }
+    var aimDir2 = V(), aimFrom2 = V();
+    function syncFurniture(){
+      // the pieces that are placed: one object each, with an obstacle around it
+      Object.keys(furnObjs).forEach(function(id){
+        var f = furniturePiece(+id), o = furnObjs[id];
+        if (f && f.placed && f.key === o.key && f.x === o.x && f.z === o.z && f.rot === o.rot) return;
+        root.remove(o.obj); if (o.box && ctx.removeBox) ctx.removeBox(o.box); delete furnObjs[id];
+      });
+      state.furniture.forEach(function(f){
+        if (!f.placed || furnObjs[f.id] || !MODELS[f.key] || !MODELS[f.key].obj) return;
+        var obj = instance(f.key), fp = footprint(f.key, f.rot);
+        obj.position.set(f.x, 0, f.z); obj.rotation.y = f.rot; root.add(obj);
+        furnObjs[f.id] = { obj: obj, key: f.key, x: f.x, z: f.z, rot: f.rot, box: ctx.addBox ? ctx.addBox(f.x, f.z, fp.hx * 2, fp.hz * 2, MODELS[f.key].size.y) : null };
+      });
+      // a piece waiting to be placed whose model cannot be loaded: given back
+      state.furniture.slice().forEach(function(f){
+        if (f.placed || !MODELS[f.key].failed) return;
+        state.money += furnitureItem(f.key).price; state.furniture.splice(state.furniture.indexOf(f), 1);
+      });
+      // the piece being placed follows the view
+      var p = null;
+      state.furniture.forEach(function(f){ if (!f.placed && !p) p = f; });
+      var busy = hold || pc || (ctx.seat && ctx.seat.active()) || !p || !MODELS[p.key] || !MODELS[p.key].obj;
+      if (busy){ if (ghost){ root.remove(ghost.obj); ghost = null; } return; }
+      if (!ghost || ghost.id !== p.id || ghost.key !== p.key){
+        if (ghost) root.remove(ghost.obj);
+        var g = instance(p.key);
+        g.traverse(function(m){ if (m.isMesh){ m.castShadow = false; m.material = ghostMats.ok; } });
+        root.add(g); ghost = { id: p.id, key: p.key, obj: g, rot: p.rot || 0, x: 0, z: 0, ok: false };
+      }
+      camera.getWorldPosition(aimFrom2); camera.getWorldDirection(aimDir2);
+      var dist = aimDir2.y < -0.05 ? clamp(-aimFrom2.y / aimDir2.y, 1.3, 3.5) : 3.0;
+      ghost.x = aimFrom2.x + aimDir2.x * dist; ghost.z = aimFrom2.z + aimDir2.z * dist;
+      if (aimDir2.y >= -0.05){ var hl = Math.hypot(aimDir2.x, aimDir2.z) || 1; ghost.x = aimFrom2.x + aimDir2.x / hl * dist; ghost.z = aimFrom2.z + aimDir2.z / hl * dist; }
+      ghost.ok = placeOk(p.key, ghost.x, ghost.z, ghost.rot);
+      ghost.obj.position.set(ghost.x, 0.01, ghost.z); ghost.obj.rotation.y = ghost.rot;
+      var mat = ghost.ok ? ghostMats.ok : ghostMats.no;
+      ghost.obj.traverse(function(m){ if (m.isMesh) m.material = mat; });
+    }
+
     // ---------- what the chef can do: F picks up / puts down, E uses ---------------------------
     function list(words){ return words.join(', ').replace(/, ([^,]*)$/, ' and $1'); }
     play.addInteractables(function(hands){
       var out = [], it = carried(), pot = state.pot;
       if (!place.pot || hold || pc || (ctx.seat && ctx.seat.active())) return out;
+      if (ghost){   // a piece of furniture is being placed: that is all he can do
+        var me2 = ctx.getChef(), name = furnitureItem(ghost.key).name.toLowerCase();
+        return [ghost.ok ? { pos: me2.position, reach: 9, key: 'E', label: 'Put the ' + name + ' here', use: function(){ if (ghost && ghost.ok && act('place', { id: ghost.id, x: +ghost.x.toFixed(3), z: +ghost.z.toFixed(3), rot: ghost.rot })) saveNow(false); } }
+                          : { pos: me2.position, reach: 9, key: 'E', label: 'The ' + name + ' cannot stand here' },
+                { pos: me2.position, reach: 9, key: 'F', label: 'Turn it', use: function(){ if (ghost) ghost.rot = (ghost.rot + Math.PI / 4) % (Math.PI * 2); } }];
+      }
       if (state.day.phase === 'done'){   // the accounts are on screen: on to the next morning
         var me = ctx.getChef();
         return me ? [{ pos: me.position, reach: 9, key: 'E', label: 'Start day ' + (state.day.n + 1), use: function(){ act('nextDay'); } }] : out;
@@ -1597,6 +1723,12 @@
         if (!atDock) add({ pos: DOCK, reach: RULES.itemReach, key: 'F', label: 'Put the delivery box down', use: function(){ act('toDock'); } });
         if (it.goods.broth > 0) add({ pos: place.home.broth.pos, reach: RULES.shelfReach, key: 'E', label: 'Unpack the broth', use: function(){ act('unpack', 'broth'); }, obj: see(state.items[state.tools.broth]) });
       }
+      // furniture that stands somewhere: it can be moved
+      if (free) state.furniture.forEach(function(f){
+        var o = furnObjs[f.id];
+        if (!f.placed || !o) return;
+        add({ pos: V(f.x, 0, f.z), reach: Math.max(footprint(f.key, f.rot).hx, footprint(f.key, f.rot).hz) + 1.1, key: 'E', label: 'Move the ' + furnitureItem(f.key).name.toLowerCase(), use: function(){ act('unplace', f.id); }, obj: o.obj, bias: 0.6 });
+      });
       // the computer in the office
       var office = ctx.getOffice && ctx.getOffice(), swivel = office && office.chair, me = ctx.getChef();
       var inOffice = !!office && !!office.room && me.position.x > office.room.x0 && me.position.x < office.room.x1 && me.position.z > office.room.z0 && me.position.z < office.room.z1;
@@ -1742,6 +1874,7 @@
         label = 'Slide the mouse sideways, pull it down to cut   \u00b7   cut ' + (cutCount(ob) + 1) + ' of ' + (pl.a + pl.b);
       } else if (pouring) label = 'Pull the mouse down to tip the jug, push it up to stop   \u00b7   broth: ' + Math.round(state.pot.broth * 100) + '% of what is needed';
       else if (stirring) label = 'Move the mouse in circles to stir';
+      else if (ghost) label = 'Placing the ' + furnitureItem(ghost.key).name.toLowerCase() + ' – look where it should go';
       else if (note.t > 0) label = note.text;
       else if (!it) label = potStatus();
       if (carryEl.textContent !== label){ carryEl.textContent = label; carryEl.classList.toggle('on', !!label); }
@@ -1792,6 +1925,11 @@
         shown.delivered = state.delivered;
       }
       drawPC();
+      syncFurniture();
+      // the dining room's look and the lounge (index.html)
+      var lookKey = state.look.wall + '|' + state.look.floor;
+      if (shown.look !== lookKey && ctx.setLook){ shown.look = lookKey; ctx.setLook(state.look); }
+      if (state.owned.lounge && !shown.lounge && ctx.openLounge){ shown.lounge = true; ctx.openLounge(); }
       // while a tool is led the view goes to where it works
       var work = cutting ? { yaw: cutting.look, at: place.board.pos } : pouring ? { yaw: pouring.look, at: place.pot.pos } : stirring ? { yaw: stirring.look, at: place.pot.pos } : null;
       if (work){
@@ -2046,7 +2184,7 @@
       var day = state.day, total = priceOf(pc.cart), boxes = parcels();
       var sig = [pc.page, JSON.stringify(pc.cart), pc.said, state.money, GOODS.map(function(k){ return oneDec(stockOf(k)) + '/' + room(k) + '/' + coming(k) + '/' + (state.store[k] || 0); }).join(' '),
                  state.orders.map(function(o){ return Math.ceil(o.left); }).join(','), boxes.map(function(p){ return p.at + JSON.stringify(p.goods); }).join(','),
-                 day.n, day.phase, day.served, day.lost, day.sales, day.tips, day.spent, state.history.length, Object.keys(state.owned).join(','), state.reviews.length ? state.reviews[state.reviews.length - 1].id : 0].join('|');
+                 day.n, day.phase, day.served, day.lost, day.sales, day.tips, day.spent, state.history.length, Object.keys(state.owned).join(','), pc.shopCat, JSON.stringify(state.look), state.furniture.length, state.furniture.filter(function(f){ return f.placed; }).length, state.reviews.length ? state.reviews[state.reviews.length - 1].id : 0].join('|');
       var when = 'Day ' + day.n + ' · ' + clockText() + ' · ' + (day.phase === 'open' ? 'Open' : day.phase === 'prep' ? 'Closed' : 'Closed for today');
       if (sig === pc.sig){   // only the clock has moved on: its text alone is changed, the screen is not built again
         if (when !== pc.when){ pc.when = when; var clockEl = pcScreen.querySelector('.when'); if (clockEl) clockEl.textContent = when; }
@@ -2092,18 +2230,40 @@
         html = '<div class="col" style="flex:1">' + cards + '</div><div class="col" style="width:252px;flex:none">' + order + '<div class="card" style="flex:1;min-height:0"><h4>Deliveries</h4>' + ships + '</div></div>';
       } else if (pc.page === 'shop'){
         title = 'Shop'; sub = 'Things for the restaurant';
-        var items = '';
-        SHOP.forEach(function(t){
-          var pic = thumb(t.pic), have = !!state.owned[t.key], poor = state.money < t.price;
-          items += '<div class="card good">' + '<div class="pic">' + (pic ? '<img src="' + pic + '" alt="">' : '') + '</div>' +
-            '<div class="what"><b>' + t.name + '</b><span class="price">' + euro(t.price) + '</span><br><small>' + t.text + '</small></div>' +
-            (have ? '<span class="tag here">Bought</span>' : '<button class="primary small-btn" data-do="purchase:' + t.key + '"' + (poor ? ' disabled' : '') + '>Buy</button>') + '</div>';
+        var cat = pc.shopCat || 'kitchen', CATS = [['kitchen', 'Kitchen'], ['room', 'Room'], ['furniture', 'Furniture'], ['walls', 'Walls'], ['floors', 'Floors']];
+        var items = '<div class="cats">' + CATS.map(function(c){ return '<button class="cat' + (c[0] === cat ? ' on' : '') + '" data-do="cat:' + c[0] + '">' + c[1] + '</button>'; }).join('') + '</div>';
+        function card(picHtml, name, price, text, action){
+          return '<div class="card good">' + '<div class="pic">' + picHtml + '</div>' +
+            '<div class="what"><b>' + name + '</b>' + (price !== null ? '<span class="price">' + euro(price) + '</span>' : '') + '<br><small>' + text + '</small></div>' + action + '</div>';
+        }
+        function img(k){ var p = thumb(k); return p ? '<img src="' + p + '" alt="">' : ''; }
+        function buyBtn(cmd, price, label){ return '<button class="primary small-btn" data-do="' + cmd + '"' + (state.money < price ? ' disabled' : '') + '>' + (label || 'Buy') + '</button>'; }
+        if (cat === 'kitchen' || cat === 'room') SHOP.forEach(function(t){
+          if (t.cat !== cat) return;
+          items += card(img(t.pic), t.name, t.price, t.text, state.owned[t.key] ? '<span class="tag here">Bought</span>' : buyBtn('purchase:' + t.key, t.price));
         });
-        var info = '<div class="card note"><h4>The room</h4>' +
+        else if (cat === 'furniture') FURNITURE.forEach(function(t){
+          if (MODELS[t.key].failed) return;   // (its model is missing)
+          var n = state.furniture.filter(function(f){ return f.key === t.key; }).length, waiting = state.furniture.some(function(f){ return !f.placed; });
+          items += card(img(t.key), t.name, t.price, t.text + (n ? ' (you have ' + n + ')' : ''),
+            n >= FURNITURE_MAX ? '<span class="tag here">Enough</span>' : waiting ? '<span class="tag">Place the last one first</span>' : buyBtn('furniture:' + t.key, t.price));
+        });
+        else {
+          var part = cat === 'walls' ? 'wall' : 'floor';
+          LOOK[part].forEach(function(t){
+            var id = part + ':' + t.key, have = state.look.have.indexOf(id) >= 0, used = state.look[part] === t.key;
+            var pic = t.swatch ? '<i class="swatch" style="background:' + t.swatch + '"></i>' : '<i class="swatch" style="background:#3a2414 url(' + t.img + ') center/120px"></i>';
+            items += card(pic, t.name, have ? null : t.price, used ? 'In the dining room now.' : have ? 'Yours: switch to it at any time.' : 'Buy it once, then switch freely.',
+              used ? '<span class="tag here">In use</span>' : have ? '<button class="primary small-btn" data-do="look:' + id + '">Use</button>' : buyBtn('buylook:' + id, t.price));
+          });
+        }
+        var placedN = state.furniture.filter(function(f){ return f.placed; }).length;
+        var info = '<div class="card note"><h4>The restaurant</h4>' +
           '<div class="row"><span>How guests like the room</span><b>' + Math.round(mood() * 100) + ' %</b></div>' +
+          '<div class="row"><span>Furniture placed</span><b>' + placedN + '</b></div>' +
           '<div class="row"><span>Bowls</span><b>' + (RULES.bowls + (state.owned.bowls ? SHOP_EFFECT.bowls : 0)) + '</b></div>' +
           '<div class="row"><span>Cooking time</span><b>' + Math.round(RECIPE.cookTime * (state.owned.stove ? SHOP_EFFECT.stove : 1)) + ' s</b></div>' +
-          '<p class="muted small" style="margin-top:9px">Everything is delivered at once and paid from the till.</p>' +
+          '<p class="muted small" style="margin-top:9px">' + (cat === 'furniture' ? 'When you get up, the new piece follows your view: E puts it down, F turns it. E at a piece moves it again.' : 'Everything is delivered at once and paid from the till.') + '</p>' +
           (pc.said ? '<p class="' + pc.said[1] + '" style="margin-top:6px">' + pc.said[0] + '</p>' : '') + '</div>';
         html = '<div class="col" style="flex:1">' + items + '</div><div class="col" style="width:252px;flex:none">' + info + '</div>';
       } else if (pc.page === 'reviews'){
@@ -2161,6 +2321,17 @@
       if (p[0] === 'plus'){ if (GOOD[k] && pc.cart[k] < room(k)) pc.cart[k]++; }
       else if (p[0] === 'minus'){ if (GOOD[k] && pc.cart[k] > 0) pc.cart[k]--; }
       else if (p[0] === 'page') pc.page = k === 'accounts' || k === 'reviews' || k === 'shop' ? k : 'supplies';
+      else if (p[0] === 'cat') pc.shopCat = k;
+      else if (p[0] === 'furniture'){
+        var ft = furnitureItem(k);
+        if (ft && act('buyFurniture', k)){ pc.said = [ft.name + ' \u2013 bought! Get up and place it.', 'ok']; saveNow(false); }
+        else pc.said = ['This is not possible.', 'warn'];
+      }
+      else if (p[0] === 'buylook' || p[0] === 'look'){
+        var lid = k + ':' + p[2], lt = lookItem(k, p[2]);
+        if (lt && act(p[0] === 'look' ? 'useLook' : 'buyLook', lid)){ pc.said = [lt.name + (p[0] === 'look' ? ' \u2013 in use.' : ' \u2013 bought!'), 'ok']; saveNow(false); }
+        else pc.said = ['This is not possible.', 'warn'];
+      }
       else if (p[0] === 'purchase'){
         var t = shopItem(k);
         if (t && act('purchase', k)){ pc.said = [t.name + ' \u2013 bought!', 'ok']; saveNow(false); }
@@ -2238,6 +2409,21 @@
       var owned = {};   // (only things the shop has)
       if (st.owned && typeof st.owned === 'object') SHOP.forEach(function(t){ if (st.owned[t.key] === true) owned[t.key] = true; });
       st.owned = owned;
+      // the room's look: only known paints and floors
+      var look = { wall: 'cream', floor: 'tiles', have: ['wall:cream', 'floor:tiles'] };
+      if (st.look && Array.isArray(st.look.have)) st.look.have.forEach(function(id){ var q = String(id).split(':'); if (lookItem(q[0], q[1]) && look.have.indexOf(id) < 0) look.have.push(id); });
+      if (st.look && look.have.indexOf('wall:' + st.look.wall) >= 0) look.wall = st.look.wall;
+      if (st.look && look.have.indexOf('floor:' + st.look.floor) >= 0) look.floor = st.look.floor;
+      st.look = look;
+      // furniture: known pieces with numbers for places; at most one waiting to be placed
+      var waiting = false, ids = {};
+      st.furniture = (Array.isArray(st.furniture) ? st.furniture : []).filter(function(f){
+        if (!f || !furnitureItem(f.key) || !num(f.id) || !num(f.x) || !num(f.z) || !num(f.rot) || ids[f.id] || f.id >= st.nextId) return false;
+        ids[f.id] = true;
+        f.placed = f.placed === true;
+        if (!f.placed){ if (waiting) return false; waiting = true; }
+        return true;
+      }).slice(0, FURNITURE.length * FURNITURE_MAX);
       st.bowls = Math.max(0, Math.min(Math.floor(st.bowls), RULES.bowls + (owned.bowls ? SHOP_EFFECT.bowls : 0)));   // (whole bowls, no more than the stack holds)
       st.reviews = (Array.isArray(st.reviews) ? st.reviews : []).filter(function(r){
         return !!r && num(r.id) && num(r.day) && num(r.stars) && r.stars >= 1 && r.stars <= 5 && typeof r.text === 'string' && typeof r.who === 'string';
@@ -2288,7 +2474,8 @@
       Object.keys(objs).forEach(function(id){ if (objs[id].obj.parent) objs[id].obj.parent.remove(objs[id].obj); delete objs[id]; });
       play.setCarry(null);
       cutting = null; pouring = null; stirring = null; shake = null; scoop = null; note.t = 0;
-      closePC(); shown.delivered = undefined; shown.stars = null;
+      closePC(); shown.delivered = undefined; shown.stars = null; shown.look = null;
+      if (shown.lounge && !state.owned.lounge && ctx.closeLounge){ ctx.closeLounge(); shown.lounge = false; }
       Object.keys(views).forEach(function(id){ views[id].review = undefined; });   // (their reviews are the loaded game's)
       if (ctx.seat && ctx.seat.reset) ctx.seat.reset();   // (not sitting in a loaded game)
       shown.carry = null; shown.money = null; shown.hud = null; shown.phase = undefined; shown.told = true;
@@ -2348,6 +2535,7 @@
       // ---- for tests only ----
       debugPC: function(cmd){ if (cmd === 'open') openPC(); else if (cmd) pcDo(cmd); return pc ? { page: pc.page, cart: pc.cart, said: pc.said } : null; },
       debugStore: function(){ return { kitchen: VEG.map(function(k){ return state.crates[k]; }).join('/'), store: VEG.map(function(k){ return state.store[k]; }).join('/') }; },
+      debugFurniture: function(){ return { pieces: state.furniture.map(function(f){ return f.key + (f.placed ? '@' + f.x.toFixed(2) + ',' + f.z.toFixed(2) : ' waiting'); }), ghost: ghost ? { x: +ghost.x.toFixed(2), z: +ghost.z.toFixed(2), ok: ghost.ok } : null, look: state.look, lounge: !!state.owned.lounge }; },
       debugShop: function(){ return { owned: Object.keys(state.owned), mood: +mood().toFixed(2), bowls: state.bowls, money: state.money }; },
       debugReviews: function(){ return { stars: +reputation().toFixed(2), list: state.reviews.map(function(r){ return r.stars + ' ' + r.who + ' (food ' + r.food + ' wait ' + r.wait + ' clean ' + r.clean + '): ' + r.text; }) }; },
       debugSupplies: function(){ var o = {}; GOODS.forEach(function(k){ o[k] = oneDec(stockOf(k)) + ' room ' + room(k) + ' coming ' + coming(k); }); o.orders = state.orders.map(function(x){ return goodsText(x.goods) + ' in ' + Math.ceil(x.left); }); o.boxes = parcels().map(function(p){ return p.at + ': ' + goodsText(p.goods); }); return o; },
@@ -2383,6 +2571,7 @@
       debugPatience: function(id, left){ var g = guest(id); if (g) g.patience = left; },
       debugPhase: function(id, phase){ var g = guest(id); if (g){ g.phase = phase; g.t = 0; } },
       debugGuests: function(){ return state.guests.map(function(g){ return g.id + ':' + g.phase + '/' + views[g.id].info.where(); }).join(' '); },
+      debugMoney: function(n){ state.money = n; },
       debugAct: act, debugPot: function(){ return state.pot; }, debugCookRules: COOK,
       debugTools: function(){ return { ids: state.tools, jug: MODELS.broth.tool, home: place.home, left: state.items[state.tools.broth].left }; },
       debugCut: { start: startCutting, stop: stopCutting, limits: function(){ var o = state.items[state.board]; return o && cutAxis(o) ? cutLimits(o, cutAxis(o)) : null; },

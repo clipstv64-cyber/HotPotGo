@@ -276,6 +276,11 @@
     d.target = d.target > 0.5 ? 0 : 1;
   }
   var GROUND_HALF = 9.3;
+  var LOUNGE_DOOR = { z: 2.33, w: 1.4, h: 2.4 };          // the opening in the left wall to the lounge (behind the third table; decor.js has the same numbers)
+  var LOUNGE = { x0: -15.5, x1: -10, z0: -1.0, z1: 6.0 };  // the lounge behind it (decor.js builds it)
+  var loungePlug = null;                                    // the piece of wall that closes the opening until the lounge is bought
+  var loungeOpen = false;
+  var groundMesh = null, wallMatRef = null;                 // for the dining room's look (setLook)
 
   // Ground speed is derived from the walk cycle so the planted foot doesn't
   // slide: in the clip the foot on the ground moves back at STRIDE_SPEED
@@ -386,6 +391,7 @@
     ground.rotation.x = -Math.PI/2;
     ground.receiveShadow = true;
     scene.add(ground);
+    groundMesh = ground;
 
     // four walls around the floor: old painted plaster (ChatGPT texture with a
     // normal map made from it), repeating every PLASTER_TILE metres; skirting
@@ -403,6 +409,7 @@
       map: wallColor, normalMap: wallNormal, normalScale: new THREE.Vector2(0.8, 0.8), roughness: 0.9, metalness: 0,
       color: new THREE.Color().setScalar(WALL_BRIGHTNESS)
     });
+    wallMatRef = wallMat;
     // back wall (faces +Z) in pieces around the doorway to the back rooms
     (function(){
       var BD = BACKROOMS.door, d0 = BD.x - BD.w / 2, d1 = BD.x + BD.w / 2;
@@ -418,9 +425,21 @@
       addBox((d1 + BACKROOMS.x1) / 2, -10.05, BACKROOMS.x1 - d1, 0.1, WALL_HEIGHT);
       addBox(10.05, 0, 0.1, 20, WALL_HEIGHT);                                // kitchen side wall
     })();
+    // the left wall, faces +X: in pieces around the opening to the lounge (decor.js); the opening is
+    // closed by a piece of wall until the lounge is bought (openLounge)
+    (function(){
+      var L = LOUNGE_DOOR, d0 = L.z - L.w / 2, d1 = L.z + L.w / 2;
+      [[-10, d0, 0, WALL_HEIGHT], [d1, 10, 0, WALL_HEIGHT], [d0, d1, L.h, WALL_HEIGHT], [d0, d1, 0, L.h, true]].forEach(function(p){
+        var w = p[1] - p[0], hh = p[3] - p[2], geo = new THREE.PlaneGeometry(w, hh), uv = geo.attributes.uv;
+        for (var i = 0; i < uv.count; i++) uv.setXY(i, (10 - p[1] + uv.getX(i) * w) / 20, (p[2] + uv.getY(i) * hh) / WALL_HEIGHT);
+        var m = new THREE.Mesh(geo, wallMat);
+        m.position.set(-10, (p[2] + p[3]) / 2, (p[0] + p[1]) / 2); m.rotation.y = Math.PI / 2; m.receiveShadow = true; scene.add(m);
+        if (p[4]) loungePlug = { mesh: m, box: addBox(-10.05, L.z, 0.1, L.w, WALL_HEIGHT) };
+      });
+      addBox(-10.05, (-10 + d0) / 2, 0.1, d0 + 10, WALL_HEIGHT); addBox(-10.05, (d1 + 10) / 2, 0.1, 10 - d1, WALL_HEIGHT);
+    })();
     [
       { x: 0, z: 10, ry: Math.PI },        // front wall, faces -Z
-      { x: -10, z: 0, ry: Math.PI / 2 },   // left wall, faces +X
       { x: 10, z: 0, ry: -Math.PI / 2 }    // right wall, faces -X
     ].forEach(function(w){
       var wall = new THREE.Mesh(new THREE.PlaneGeometry(20, WALL_HEIGHT), wallMat);
@@ -530,7 +549,23 @@
             });
           },
           getEntrance: function(){ return decor && decor.entrance; },
-          showBought: function(key, on){ if (decor && decor.showBought) decor.showBought(key, on); } });
+          showBought: function(key, on){ if (decor && decor.showBought) decor.showBought(key, on); },
+          removeBox: removeBox, floorFree: floorFree, boxFree: boxFree,
+          closeLounge: function(){   // (a game without the lounge is loaded)
+            if (!loungeOpen) return; loungeOpen = false;
+            if (loungePlug){ scene.add(loungePlug.mesh); obstacles.push(loungePlug.box); }
+            if (decor && decor.hideLounge) decor.hideLounge();
+            if (model && model.position.x < -GROUND_HALF){ model.position.x = -9; model.position.z = LOUNGE_DOOR.z; }
+          },
+          // the lounge: where it is, and opening it (the piece of wall goes, the room appears)
+          lounge: LOUNGE,
+          openLounge: function(){
+            if (loungeOpen) return; loungeOpen = true;
+            if (loungePlug){ scene.remove(loungePlug.mesh); removeBox(loungePlug.box); }
+            if (decor && decor.showLounge) decor.showLounge();
+          },
+          // the dining room's look: wall paint (a tint over the plaster) and floor
+          setLook: function(look){ setLook(look); } });
         window.__hotpotRestaurant = restaurant;   // for tests
       } catch (e){ console.error('Setting up the restaurant failed:', e); }
     }
@@ -540,8 +575,14 @@
     var furnLoader = new THREE.GLTFLoader();
     if (window.MeshoptDecoder) furnLoader.setMeshoptDecoder(MeshoptDecoder);   // kitchen models are meshopt-compressed
     function addBox(cx, cz, sx, sz, top){
-      obstacles.push({ minX: cx - sx / 2, maxX: cx + sx / 2, minZ: cz - sz / 2, maxZ: cz + sz / 2, top: top });
+      var o = { minX: cx - sx / 2, maxX: cx + sx / 2, minZ: cz - sz / 2, maxZ: cz + sz / 2, top: top };
+      obstacles.push(o); return o;
     }
+    function removeBox(o){ var i = obstacles.indexOf(o); if (i >= 0) obstacles.splice(i, 1); }
+    // is this spot of the floor (a circle of radius r) free of furniture and walls?
+    // is this rectangle of the floor free of every obstacle?
+    function boxFree(x0, x1, z0, z1){ return !obstacles.some(function(b){ return x0 < b.maxX && x1 > b.minX && z0 < b.maxZ && z1 > b.minZ; }); }
+    function floorFree(x, z, r){ return !obstacles.some(function(b){ return x > b.minX - r && x < b.maxX + r && z > b.minZ - r && z < b.maxZ + r; }); }
     function loadFurniture(url, height, done){
       loadGLB(furnLoader, url, function(g){
         var obj = g.scene;
@@ -1875,6 +1916,7 @@
     var side = spot.x > TABLE_SPOTS[0][0] ? 1 : -1;     // aisle-side chairs step in from the aisle
     var sideX = spot.x + side * ENTRANCE_SIDE;
     return [new THREE.Vector3(ENTRANCE[0], 0, ENTRANCE[1] - 1.1),
+            new THREE.Vector3(ENTRANCE_AISLE_X, 0, ENTRANCE[1] - 1.1),   // (along the front wall: the middle of the room is free for furniture)
             new THREE.Vector3(ENTRANCE_AISLE_X, 0, zBehind),
             new THREE.Vector3(sideX, 0, zBehind),
             new THREE.Vector3(sideX, 0, spot.z)];
@@ -1882,7 +1924,7 @@
   // the way out: the same way back, and out through the door
   function exitRoute(ch){
     var r = ch.sit.route;
-    return [r[2], r[1], r[0], new THREE.Vector3(ENTRANCE[0], 0, ENTRANCE[1] + 0.9)];
+    return [r[3], r[2], r[1], r[0], new THREE.Vector3(ENTRANCE[0], 0, ENTRANCE[1] + 0.9)];
   }
 
   // the person has sat down: freeze the pose (and lay the skirt on the seat)
@@ -2919,6 +2961,34 @@
     reachHand({ arm: arm, fore: fore, hand: hand, right: out, fwd: fwd, handQ: wq(hand) }, target);
   }
 
+  // ---- the dining room's look (bought at the computer) -------------------------------
+  var LOOKS = {
+    wall: { cream: [1, 1, 1], sage: [0.6, 0.84, 0.52], terracotta: [1.12, 0.62, 0.44], blue: [0.58, 0.72, 1.0] },
+    floor: { tiles: { url: null }, planks: { url: 'textures/k_wood.webp', repeat: 8, shade: 0.75 }, slate: { url: 'textures/k_floor.webp', repeat: 10, shade: 0.95 } }
+  };
+  var floorTex = {}, floorOrig = null, shownLook = {};
+  function setLook(look){
+    if (!look) return;
+    var w = LOOKS.wall[look.wall] || LOOKS.wall.cream;
+    if (wallMatRef && shownLook.wall !== look.wall){ shownLook.wall = look.wall; wallMatRef.color.setRGB(w[0] * WALL_BRIGHTNESS, w[1] * WALL_BRIGHTNESS, w[2] * WALL_BRIGHTNESS); }
+    if (decor && decor.setWallTint) decor.setWallTint(w);
+    var f = LOOKS.floor[look.floor] || LOOKS.floor.tiles;
+    if (groundMesh && shownLook.floor !== look.floor){
+      shownLook.floor = look.floor;
+      var m = groundMesh.material;
+      if (!floorOrig) floorOrig = { map: m.map, normalMap: m.normalMap, color: m.color.clone() };
+      if (!f.url){ m.map = floorOrig.map; m.normalMap = floorOrig.normalMap; m.color.copy(floorOrig.color); }
+      else {
+        if (!floorTex[f.url]){
+          var t = new THREE.TextureLoader().load(f.url); t.encoding = THREE.sRGBEncoding; t.wrapS = t.wrapT = THREE.RepeatWrapping;
+          t.repeat.set(f.repeat, f.repeat); t.anisotropy = renderer.capabilities.getMaxAnisotropy(); floorTex[f.url] = t;
+        }
+        m.map = floorTex[f.url]; m.normalMap = null; m.color.setScalar(f.shade);
+      }
+      m.needsUpdate = true;
+    }
+  }
+
   function animate(){
     requestAnimationFrame(animate);
     var delta = Math.min(clock.getDelta(), 0.1);
@@ -2966,7 +3036,7 @@
       if (walkWeight > 0){
         model.position.addScaledVector(lastMoveDir, STRIDE_SPEED * animRate * walkWeight * delta);
         // the outer edge of the map (walls inside it are collision boxes)
-        model.position.x = Math.max(-GROUND_HALF, Math.min(BACKROOMS.x1 - 0.35, model.position.x));
+        model.position.x = Math.max(loungeOpen ? LOUNGE.x0 + 0.35 : -GROUND_HALF, Math.min(BACKROOMS.x1 - 0.35, model.position.x));
         model.position.z = Math.max(BACKROOMS.z1 + 0.35, Math.min(GROUND_HALF, model.position.z));
         resolveCollisions(model.position, jumpY);
       }
