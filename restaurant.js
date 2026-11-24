@@ -106,7 +106,9 @@
   };
   // The shop at the computer, in sections. Everything does something in the game:
   //   kitchen  more bowls; a strong burner (the stew cooks in less time)
-  //   room     candles, plants and the lounge (a new room) make the room nicer (the reviews' "mood")
+  //   room     candles and plants make the room nicer (the reviews' "mood")
+  //   expand   the restaurant's own areas grow: a bigger dining room (room for furniture, more guests),
+  //            bigger crates in the kitchen, more crates in the storeroom
   //   furniture  bought as often as you like and placed freely (each piece makes the room nicer)
   //   walls / floors  the dining room's paint and floor (a nicer look, switched freely once bought)
   var SHOP = [
@@ -114,9 +116,11 @@
     { key: 'stove',   cat: 'kitchen', name: 'Strong burner', price: 220, pic: 'pot',    text: 'A stronger flame under the pot: the stew is done in less time.' },
     { key: 'candles', cat: 'room',    name: 'Table candles', price: 60,  pic: 'candle', text: 'A candle on every table. Guests like the room better.' },
     { key: 'plants',  cat: 'room',    name: 'Potted plants', price: 110, pic: 'plant',  text: 'Three big plants for the dining room. Guests like the room better.' },
-    { key: 'lounge',  cat: 'room',    name: 'The lounge',    price: 400, pic: 'sofa',   text: 'Opens the wall to a new room behind the dining room, with space for furniture.' }
+    { key: 'bigroom',    cat: 'expand', name: 'Bigger dining room', price: 450, pic: 'table',  text: 'The left wall moves back: more room for furniture, and more guests come.' },
+    { key: 'bigkitchen', cat: 'expand', name: 'Bigger kitchen crates', price: 220, pic: 'crate', text: 'Each vegetable crate in the kitchen holds 12 instead of 6.' },
+    { key: 'bigstore',   cat: 'expand', name: 'More storage',     price: 180, pic: 'crate', text: 'A second crate for each vegetable in the storeroom: 24 instead of 12.' }
   ];
-  var SHOP_EFFECT = { bowls: 10, candles: 0.15, plants: 0.2, stove: 0.7, lounge: 0.08 };   // more bowls; mood added; cooking time (share)
+  var SHOP_EFFECT = { bowls: 10, candles: 0.15, plants: 0.2, stove: 0.7, bigroom: 0.08, guests: 1.2 };   // more bowls; mood added; cooking time (share)
   // furniture: placed freely; size: its footprint is measured on the model; mood: what each piece adds
   var FURNITURE = [
     { key: 'sofa',     name: 'Leather sofa',  price: 140, mood: 0.06, text: 'An old leather sofa. Somewhere to wait in comfort.' },
@@ -204,6 +208,7 @@
     parcel: { file: 'models/d_parcel.glb', width: 0.44 },                 // one box out of the storeroom's stack of boxes
     candle: { file: 'models/d_candlebottle.glb', height: 0.4 },           // (the shop's pictures)
     plant:  { file: 'models/d_plant.glb', height: 1.75 },
+    table:  { file: 'models/table.glb', width: 1.4 },
     // furniture (placed freely)
     sofa:     { file: 'models/d_sofa.glb', width: 1.75 },
     jukebox:  { file: 'models/d_jukebox.glb', height: 1.75 },
@@ -297,7 +302,9 @@
     // (a whole vegetable taken out and not cut yet still counts: it goes back into a crate)
     function loose(kind){ return Object.keys(state.items).filter(function(id){ var o = state.items[id]; return o.kind === kind && !o.cut; }).length; }
     function stockOf(kind){ return kind === 'broth' ? state.broth + state.items[state.tools.broth].left : state.crates[kind] + state.store[kind] + loose(kind); }
-    function holds(kind){ return kind === 'broth' ? COOK.stock : RULES.crateStock + RULES.storeStock; }
+    function kitchenCap(){ return RULES.crateStock * (state.owned.bigkitchen ? 2 : 1); }
+    function storeCap(){ return RULES.storeStock * (state.owned.bigstore ? 2 : 1); }
+    function holds(kind){ return kind === 'broth' ? COOK.stock : kitchenCap() + storeCap(); }
     function coming(kind){   // ordered or delivered, but not unpacked yet
       var n = 0;
       state.orders.forEach(function(o){ n += o.goods[kind] || 0; });
@@ -307,7 +314,7 @@
     function room(kind){ return Math.max(0, Math.floor(holds(kind) - stockOf(kind) - coming(kind) + 1e-6)); }
     // how nice the room is (0 .. 1): shabby to start with, better with what was bought
     function mood(){
-      var m = RULES.review.mood + (state.owned.candles ? SHOP_EFFECT.candles : 0) + (state.owned.plants ? SHOP_EFFECT.plants : 0) + (state.owned.lounge ? SHOP_EFFECT.lounge : 0);
+      var m = RULES.review.mood + (state.owned.candles ? SHOP_EFFECT.candles : 0) + (state.owned.plants ? SHOP_EFFECT.plants : 0) + (state.owned.bigroom ? SHOP_EFFECT.bigroom : 0);
       state.furniture.forEach(function(f){ var it = furnitureItem(f.key); if (it && f.placed && !MODELS[f.key].failed) m += it.mood; });
       if (state.look.wall !== 'cream') m += LOOK_MOOD;
       if (state.look.floor !== 'tiles') m += LOOK_MOOD;
@@ -389,17 +396,17 @@
           if (it || !isVeg(arg) || state.crates[arg] <= 0) return false;
           state.crates[arg]--; newItem(arg); return true;
         case 'putBack':    // ... and back into it
-          if (!it || !isVeg(it.kind) || it.cut || state.crates[it.kind] >= RULES.crateStock) return false;
+          if (!it || !isVeg(it.kind) || it.cut || state.crates[it.kind] >= kitchenCap()) return false;
           state.crates[it.kind]++; dropItem(it); return true;
         case 'takeStore':  // a vegetable out of its crate in the storeroom
           if (it || !isVeg(arg) || state.store[arg] <= 0) return false;
           state.store[arg]--; newItem(arg); return true;
         case 'putStore':   // ... and back into it
-          if (!it || !isVeg(it.kind) || it.cut || state.store[it.kind] >= RULES.storeStock) return false;
+          if (!it || !isVeg(it.kind) || it.cut || state.store[it.kind] >= storeCap()) return false;
           state.store[it.kind]++; dropItem(it); return true;
         case 'unpackStore':   // out of the delivery box into the storeroom's crate: arg = which vegetable
           if (!it || it.kind !== 'parcel' || !isVeg(arg) || !(it.goods[arg] > 0)) return false;
-          var putS = Math.min(it.goods[arg], RULES.storeStock - state.store[arg]);
+          var putS = Math.min(it.goods[arg], storeCap() - state.store[arg]);
           if (putS <= 0) return false;
           state.store[arg] += putS; it.goods[arg] -= putS;
           if (!GOODS.some(function(k){ return it.goods[k] > 0; })) dropItem(it);
@@ -519,7 +526,7 @@
           return true;
         case 'unpack':     // out of the delivery box in his hands into the kitchen's stock: arg = which goods
           if (!it || it.kind !== 'parcel' || !(it.goods[arg] > 0)) return false;
-          var put = arg === 'broth' ? it.goods.broth : Math.min(it.goods[arg], RULES.crateStock - state.crates[arg]);
+          var put = arg === 'broth' ? it.goods.broth : Math.min(it.goods[arg], kitchenCap() - state.crates[arg]);
           if (put <= 0) return false;
           if (arg === 'broth'){
             var jug2 = state.items[state.tools.broth];
@@ -651,7 +658,7 @@
       if (state.nextGuest <= 0){
         if (away.length) act('arrive', away[Math.floor(Math.random() * away.length)].id);
         var stars = reputation(), draw = stars ? RULES.review.draw[0] + (RULES.review.draw[1] - RULES.review.draw[0]) * (stars - 1) / 4 : 1;
-        state.nextGuest = rnd(RULES.guestEvery[0], RULES.guestEvery[1]) / draw;   // a good name brings more guests
+        state.nextGuest = rnd(RULES.guestEvery[0], RULES.guestEvery[1]) / draw / (state.owned.bigroom ? SHOP_EFFECT.guests : 1);   // a good name brings more guests
       }
     }
 
@@ -1202,8 +1209,10 @@
     var place = { pot: null, crates: {}, stacks: null, board: null, knifeHome: null, recipe: null };
     var knifeHold = null, toolHold = {};   // how the tools are held (see gameplay.js: a tool)
     var STEW_COL = new T.Color(0x9a938c), BURNT_COL = new T.Color(0x1d1612);
-    var STORE_X = [7.85, 8.4, 8.95], STORE_Z = -14.75;   // the storeroom's crates (in front of the rack, see decor.js)
+    var STORE_X = [7.85, 8.4, 8.95], STORE_Z = -14.75, STORE_Z2 = -14.15;   // (second crates: bought)   // the storeroom's crates (in front of the rack, see decor.js)
+    var STORE_GRID = null;   // (CRATE_GRID with a second layer: set below)
     var CRATE_GRID = [[-0.19, -0.075], [0, -0.075], [0.19, -0.075], [-0.19, 0.085], [0, 0.085], [0.19, 0.085]];
+    STORE_GRID = CRATE_GRID.concat(CRATE_GRID.map(function(g){ return [g[0] + 0.09, g[1] + 0.04, 1]; }));
     function buildPlaces(){
       var k = ctx.getKitchen();
       if (place.pot || !allLoaded() || !k || !k.potAt || !k.bowlsAt || !k.board) return;
@@ -1243,9 +1252,9 @@
         grp.position.set(7.62 + i * 0.52, 0, wallZ + 0.06 + cs.x / 2); grp.rotation.y = Math.PI / 2;   // short side to the wall
         grp.add(model); root.add(grp);
         if (ctx.addBox) ctx.addBox(grp.position.x, grp.position.z, cs.z, cs.x, cs.y);
-        var inside = CRATE_GRID.map(function(g){
+        var inside = STORE_GRID.map(function(g){   // (a second layer once the crates are bigger)
           var v = instance(kind);
-          v.position.set(g[0] + rnd(-0.015, 0.015), 0.045, g[1] + rnd(-0.01, 0.01));
+          v.position.set(g[0] + rnd(-0.015, 0.015), g[2] ? 0.13 : 0.045, g[1] + rnd(-0.01, 0.01));
           v.rotation.y = kind === 'carrot' ? 1.57 + rnd(-0.25, 0.25) : rnd(0, 6.28);
           grp.add(v); return v;
         });
@@ -1253,7 +1262,7 @@
       });
       // the storeroom: three crates in front of the big rack, up to twelve in each (two layers)
       place.store = {};
-      var STORE_GRID = CRATE_GRID.concat(CRATE_GRID.map(function(g){ return [g[0] + 0.09, g[1] + 0.04, 1]; }));
+
       VEG.forEach(function(kind, i){
         var grp = new T.Group(), model = instance('crate');
         grp.position.set(STORE_X[i], 0, STORE_Z); grp.rotation.y = Math.PI / 2;
@@ -1265,7 +1274,17 @@
           v.rotation.y = kind === 'carrot' ? 1.57 + rnd(-0.25, 0.25) : rnd(0, 6.28);
           grp.add(v); return v;
         });
-        place.store[kind] = { grp: grp, model: model, inside: inside, pos: grp.position };
+        // the second crate (bought): in front of the first one, hidden until then
+        var grp2 = new T.Group(), model2 = instance('crate');
+        grp2.position.set(STORE_X[i], 0, STORE_Z2); grp2.rotation.y = Math.PI / 2; grp2.visible = false;
+        grp2.add(model2); root.add(grp2);
+        var inside2 = STORE_GRID.map(function(g){
+          var v = instance(kind);
+          v.position.set(g[0] + rnd(-0.015, 0.015), g[2] ? 0.13 : 0.045, g[1] + rnd(-0.01, 0.01));
+          v.rotation.y = kind === 'carrot' ? 1.57 + rnd(-0.25, 0.25) : rnd(0, 6.28);
+          grp2.add(v); return v;
+        });
+        place.store[kind] = { grp: grp, model: model, inside: inside.concat(inside2), pos: grp.position, second: grp2, box2: null };
       });
       // the clean bowls: two stacks side by side
       var st = new T.Group(); st.position.copy(k.bowlsAt); root.add(st);
@@ -1565,14 +1584,13 @@
       return { hx: (sz.x * c + sz.z * sn) / 2, hz: (sz.x * sn + sz.z * c) / 2 };
     }
     // where furniture may stand: the middle of the dining room (clear of the guests' way in from the door and
-    // of the tables) and the lounge once it is open; not on anything, not on the chef
+    // of the tables) and its extension once it is bought; not on anything, not on the chef
     function placeOk(key, x, z, rot){
-      var fp = footprint(key, rot), r = Math.max(fp.hx, fp.hz), L = ctx.lounge, chef = ctx.getChef();
-      var inLounge = state.owned.lounge && L && x - fp.hx > L.x0 + 0.05 && x + fp.hx < L.x1 - 0.1 && z - fp.hz > L.z0 + 0.05 && z + fp.hz < L.z1 - 0.05;
+      var fp = footprint(key, rot), r = Math.max(fp.hx, fp.hz), L = ctx.extension, chef = ctx.getChef();
+      var inExtension = state.owned.bigroom && L && x - fp.hx > L.x0 + 0.05 && x + fp.hx < L.x1 - 0.1 && z - fp.hz > L.z0 + 0.05 && z + fp.hz < L.z1 - 0.05;
       var inRoom = x - fp.hx > -4.75 && x + fp.hx < 2.3 && z - fp.hz > -9.7 && z + fp.hz < 8.1;   // (the guests walk along the front wall and the aisle by the tables)
-      if (!inLounge && !inRoom) return false;
+      if (!inExtension && !inRoom) return false;
       if (chef && Math.abs(chef.position.x - x) < fp.hx + 0.4 && Math.abs(chef.position.z - z) < fp.hz + 0.4) return false;
-      if (inLounge && x - fp.hx < L.x1 && x + fp.hx > L.x1 - 1.5 && z + fp.hz > 1.33 && z - fp.hz < 3.33) return false;   // (the way in from the dining room stays free)
       return ctx.boxFree ? ctx.boxFree(x - fp.hx, x + fp.hx, z - fp.hz, z + fp.hz) : true;
     }
     var aimDir2 = V(), aimFrom2 = V();
@@ -1641,12 +1659,12 @@
         if (it && it.kind === 'parcel'){   // unpacking a delivery
           if (!(it.goods[kind] > 0)) return;
           e.key = 'E';
-          if (state.crates[kind] >= RULES.crateStock) e.label = 'This crate is full';
+          if (state.crates[kind] >= kitchenCap()) e.label = 'This crate is full';
           else { e.label = 'Unpack the ' + K.many + ' (' + it.goods[kind] + ')'; e.use = function(){ act('unpack', kind); }; e.obj = c.model; }
           add(e); return;
         }
         if (it && it.kind === kind && !it.cut){
-          if (state.crates[kind] >= RULES.crateStock) e.label = 'This crate is full';
+          if (state.crates[kind] >= kitchenCap()) e.label = 'This crate is full';
           else { e.label = 'Put ' + K.the + ' back'; e.use = function(){ act('putBack'); }; }
         }
         else if (it) return;
@@ -1661,12 +1679,12 @@
         if (it && it.kind === 'parcel'){
           if (!(it.goods[kind] > 0)) return;
           e.key = 'E';
-          if (state.store[kind] >= RULES.storeStock) e.label = 'This crate is full';
+          if (state.store[kind] >= storeCap()) e.label = 'This crate is full';
           else { e.label = 'Store the ' + K.many + ' here (' + it.goods[kind] + ')'; e.use = function(){ act('unpackStore', kind); }; e.obj = c.model; }
           add(e); return;
         }
         if (it && it.kind === kind && !it.cut){
-          if (state.store[kind] >= RULES.storeStock) e.label = 'This crate is full';
+          if (state.store[kind] >= storeCap()) e.label = 'This crate is full';
           else { e.label = 'Put ' + K.the + ' in the store'; e.use = function(){ act('putStore'); }; }
         }
         else if (it) return;
@@ -1926,10 +1944,10 @@
       }
       drawPC();
       syncFurniture();
-      // the dining room's look and the lounge (index.html)
+      // the dining room's look and its extension (index.html)
       var lookKey = state.look.wall + '|' + state.look.floor;
       if (shown.look !== lookKey && ctx.setLook){ shown.look = lookKey; ctx.setLook(state.look); }
-      if (state.owned.lounge && !shown.lounge && ctx.openLounge){ shown.lounge = true; ctx.openLounge(); }
+      if (!!state.owned.bigroom !== !!shown.bigroom && ctx.openExtension){ shown.bigroom = !!state.owned.bigroom; ctx.openExtension(shown.bigroom); }
       // while a tool is led the view goes to where it works
       var work = cutting ? { yaw: cutting.look, at: place.board.pos } : pouring ? { yaw: pouring.look, at: place.pot.pos } : stirring ? { yaw: stirring.look, at: place.pot.pos } : null;
       if (work){
@@ -1971,7 +1989,16 @@
       }
       // crates and bowl stacks show what is left
       VEG.forEach(function(kind){ place.crates[kind].inside.forEach(function(v, i){ v.visible = i < state.crates[kind]; }); });
-      VEG.forEach(function(kind){ place.store[kind].inside.forEach(function(v, i){ v.visible = i < state.store[kind]; }); });
+      VEG.forEach(function(kind){
+        var c = place.store[kind], two = !!state.owned.bigstore;
+        if (c.second.visible !== two){
+          c.second.visible = two;
+          if (two && ctx.addBox) c.box2 = ctx.addBox(c.second.position.x, c.second.position.z, MODELS.crate.size.z, MODELS.crate.size.x, MODELS.crate.size.y);
+          else if (!two && c.box2 && ctx.removeBox){ ctx.removeBox(c.box2); c.box2 = null; }
+        }
+        // the first crate fills up first, then the second
+        c.inside.forEach(function(v, i){ v.visible = i < state.store[kind]; });
+      });
       place.stacks.bowls.forEach(function(b, i){ b.visible = i < state.bowls; });
       // what was bought for the dining room (decor.js puts it there)
       SHOP.forEach(function(t){ if (!!state.owned[t.key] !== !!shown['own_' + t.key]){ shown['own_' + t.key] = !!state.owned[t.key]; if (ctx.showBought) ctx.showBought(t.key, !!state.owned[t.key]); } });
@@ -2230,7 +2257,7 @@
         html = '<div class="col" style="flex:1">' + cards + '</div><div class="col" style="width:252px;flex:none">' + order + '<div class="card" style="flex:1;min-height:0"><h4>Deliveries</h4>' + ships + '</div></div>';
       } else if (pc.page === 'shop'){
         title = 'Shop'; sub = 'Things for the restaurant';
-        var cat = pc.shopCat || 'kitchen', CATS = [['kitchen', 'Kitchen'], ['room', 'Room'], ['furniture', 'Furniture'], ['walls', 'Walls'], ['floors', 'Floors']];
+        var cat = pc.shopCat || 'kitchen', CATS = [['kitchen', 'Kitchen'], ['room', 'Room'], ['furniture', 'Furniture'], ['walls', 'Walls'], ['floors', 'Floors'], ['expand', 'Expand']];
         var items = '<div class="cats">' + CATS.map(function(c){ return '<button class="cat' + (c[0] === cat ? ' on' : '') + '" data-do="cat:' + c[0] + '">' + c[1] + '</button>'; }).join('') + '</div>';
         function card(picHtml, name, price, text, action){
           return '<div class="card good">' + '<div class="pic">' + picHtml + '</div>' +
@@ -2238,7 +2265,7 @@
         }
         function img(k){ var p = thumb(k); return p ? '<img src="' + p + '" alt="">' : ''; }
         function buyBtn(cmd, price, label){ return '<button class="primary small-btn" data-do="' + cmd + '"' + (state.money < price ? ' disabled' : '') + '>' + (label || 'Buy') + '</button>'; }
-        if (cat === 'kitchen' || cat === 'room') SHOP.forEach(function(t){
+        if (cat === 'kitchen' || cat === 'room' || cat === 'expand') SHOP.forEach(function(t){
           if (t.cat !== cat) return;
           items += card(img(t.pic), t.name, t.price, t.text, state.owned[t.key] ? '<span class="tag here">Bought</span>' : buyBtn('purchase:' + t.key, t.price));
         });
@@ -2261,6 +2288,7 @@
         var info = '<div class="card note"><h4>The restaurant</h4>' +
           '<div class="row"><span>How guests like the room</span><b>' + Math.round(mood() * 100) + ' %</b></div>' +
           '<div class="row"><span>Furniture placed</span><b>' + placedN + '</b></div>' +
+          '<div class="row"><span>Crates (kitchen / store)</span><b>' + kitchenCap() + ' / ' + storeCap() + '</b></div>' +
           '<div class="row"><span>Bowls</span><b>' + (RULES.bowls + (state.owned.bowls ? SHOP_EFFECT.bowls : 0)) + '</b></div>' +
           '<div class="row"><span>Cooking time</span><b>' + Math.round(RECIPE.cookTime * (state.owned.stove ? SHOP_EFFECT.stove : 1)) + ' s</b></div>' +
           '<p class="muted small" style="margin-top:9px">' + (cat === 'furniture' ? 'When you get up, the new piece follows your view: E puts it down, F turns it. E at a piece moves it again.' : 'Everything is delivered at once and paid from the till.') + '</p>' +
@@ -2384,9 +2412,10 @@
         !!st.crates && !!st.pot && !!st.pot.has && !!st.tools && !!st.day && num(st.day.n) && st.day.n >= 1 && num(st.day.time) &&
         oneOf(st.day.phase, ['prep', 'open', 'closed', 'done']) && oneOf(st.pot.phase, ['empty', 'filling', 'ready', 'burnt']);
       ok = ok && VEG.every(function(k){ return num(st.crates[k]) && num(st.pot.has[k]); });
+      if (ok) VEG.forEach(function(k){ st.crates[k] = Math.max(0, Math.min(RULES.crateStock * (st.owned && st.owned.bigkitchen === true ? 2 : 1), Math.floor(st.crates[k]))); });
       if (ok){   // (an older save has no store)
         var store = { potato: 0, carrot: 0, onion: 0 };
-        VEG.forEach(function(k){ if (st.store && num(st.store[k])) store[k] = Math.max(0, Math.min(RULES.storeStock, Math.floor(st.store[k]))); });
+        VEG.forEach(function(k){ if (st.store && num(st.store[k])) store[k] = Math.max(0, Math.min(RULES.storeStock * (st.owned && st.owned.bigstore === true ? 2 : 1), Math.floor(st.store[k]))); });
         st.store = store;
       }
       ok = ok && Object.keys(HOME).every(function(k){ var o = st.items[st.tools[k]]; return !!o && o.kind === k; });
@@ -2406,6 +2435,7 @@
       st.orders = (Array.isArray(st.orders) ? st.orders : []).filter(function(o){ return !!o && !!o.goods && num(o.left) && GOODS.every(function(k){ return num(o.goods[k]) && o.goods[k] >= 0; }); });
       st.history = (Array.isArray(st.history) ? st.history : []).filter(function(r){ return !!r && ['n', 'served', 'lost', 'sales', 'tips', 'cost', 'profit', 'money'].every(function(k){ return num(r[k]); }); });
       if (!num(st.delivered)) st.delivered = 0;
+      if (st.owned && st.owned.lounge === true && !st.owned.bigroom) st.owned.bigroom = true;   // (an older game had a lounge there instead)
       var owned = {};   // (only things the shop has)
       if (st.owned && typeof st.owned === 'object') SHOP.forEach(function(t){ if (st.owned[t.key] === true) owned[t.key] = true; });
       st.owned = owned;
@@ -2475,7 +2505,6 @@
       play.setCarry(null);
       cutting = null; pouring = null; stirring = null; shake = null; scoop = null; note.t = 0;
       closePC(); shown.delivered = undefined; shown.stars = null; shown.look = null;
-      if (shown.lounge && !state.owned.lounge && ctx.closeLounge){ ctx.closeLounge(); shown.lounge = false; }
       Object.keys(views).forEach(function(id){ views[id].review = undefined; });   // (their reviews are the loaded game's)
       if (ctx.seat && ctx.seat.reset) ctx.seat.reset();   // (not sitting in a loaded game)
       shown.carry = null; shown.money = null; shown.hud = null; shown.phase = undefined; shown.told = true;
@@ -2535,7 +2564,7 @@
       // ---- for tests only ----
       debugPC: function(cmd){ if (cmd === 'open') openPC(); else if (cmd) pcDo(cmd); return pc ? { page: pc.page, cart: pc.cart, said: pc.said } : null; },
       debugStore: function(){ return { kitchen: VEG.map(function(k){ return state.crates[k]; }).join('/'), store: VEG.map(function(k){ return state.store[k]; }).join('/') }; },
-      debugFurniture: function(){ return { pieces: state.furniture.map(function(f){ return f.key + (f.placed ? '@' + f.x.toFixed(2) + ',' + f.z.toFixed(2) : ' waiting'); }), ghost: ghost ? { x: +ghost.x.toFixed(2), z: +ghost.z.toFixed(2), ok: ghost.ok } : null, look: state.look, lounge: !!state.owned.lounge }; },
+      debugFurniture: function(){ return { pieces: state.furniture.map(function(f){ return f.key + (f.placed ? '@' + f.x.toFixed(2) + ',' + f.z.toFixed(2) : ' waiting'); }), ghost: ghost ? { x: +ghost.x.toFixed(2), z: +ghost.z.toFixed(2), ok: ghost.ok } : null, look: state.look, bigroom: !!state.owned.bigroom }; },
       debugShop: function(){ return { owned: Object.keys(state.owned), mood: +mood().toFixed(2), bowls: state.bowls, money: state.money }; },
       debugReviews: function(){ return { stars: +reputation().toFixed(2), list: state.reviews.map(function(r){ return r.stars + ' ' + r.who + ' (food ' + r.food + ' wait ' + r.wait + ' clean ' + r.clean + '): ' + r.text; }) }; },
       debugSupplies: function(){ var o = {}; GOODS.forEach(function(k){ o[k] = oneDec(stockOf(k)) + ' room ' + room(k) + ' coming ' + coming(k); }); o.orders = state.orders.map(function(x){ return goodsText(x.goods) + ' in ' + Math.ceil(x.left); }); o.boxes = parcels().map(function(p){ return p.at + ': ' + goodsText(p.goods); }); return o; },

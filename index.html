@@ -276,10 +276,13 @@
     d.target = d.target > 0.5 ? 0 : 1;
   }
   var GROUND_HALF = 9.3;
-  var LOUNGE_DOOR = { z: 2.33, w: 1.4, h: 2.4 };          // the opening in the left wall to the lounge (behind the third table; decor.js has the same numbers)
-  var LOUNGE = { x0: -15.5, x1: -10, z0: -1.0, z1: 6.0 };  // the lounge behind it (decor.js builds it)
-  var loungePlug = null;                                    // the piece of wall that closes the opening until the lounge is bought
-  var loungeOpen = false;
+  // The dining room can be enlarged (bought at the computer): this stretch of its left wall opens
+  // and the room goes on behind it. The extension is built hidden and shown when it is bought.
+  var EXTENSION = { x0: -15.5, x1: -10, z0: -1.0, z1: 6.0 };
+  var extensionWall = null;   // the stretch of wall that stands there until then: { mesh, box }
+  var extension = null;       // the extension: { group, boxes: [...] }
+  var extensionOpen = false;
+  var mapBounds = { x0: -GROUND_HALF, x1: BACKROOMS.x1, z0: BACKROOMS.z1, z1: GROUND_HALF };   // the outer edge of the map for gameplay.js (it grows with the extension)
   var groundMesh = null, wallMatRef = null;                 // for the dining room's look (setLook)
 
   // Ground speed is derived from the walk cycle so the planted foot doesn't
@@ -425,16 +428,15 @@
       addBox((d1 + BACKROOMS.x1) / 2, -10.05, BACKROOMS.x1 - d1, 0.1, WALL_HEIGHT);
       addBox(10.05, 0, 0.1, 20, WALL_HEIGHT);                                // kitchen side wall
     })();
-    // the left wall, faces +X: in pieces around the opening to the lounge (decor.js); the opening is
-    // closed by a piece of wall until the lounge is bought (openLounge)
+    // the left wall, faces +X: in pieces, the middle one opens when the dining room is enlarged (openExtension)
     (function(){
-      var L = LOUNGE_DOOR, d0 = L.z - L.w / 2, d1 = L.z + L.w / 2;
-      [[-10, d0, 0, WALL_HEIGHT], [d1, 10, 0, WALL_HEIGHT], [d0, d1, L.h, WALL_HEIGHT], [d0, d1, 0, L.h, true]].forEach(function(p){
+      var d0 = EXTENSION.z0, d1 = EXTENSION.z1;
+      [[-10, d0, 0, WALL_HEIGHT], [d1, 10, 0, WALL_HEIGHT], [d0, d1, 0, WALL_HEIGHT, true]].forEach(function(p){
         var w = p[1] - p[0], hh = p[3] - p[2], geo = new THREE.PlaneGeometry(w, hh), uv = geo.attributes.uv;
         for (var i = 0; i < uv.count; i++) uv.setXY(i, (10 - p[1] + uv.getX(i) * w) / 20, (p[2] + uv.getY(i) * hh) / WALL_HEIGHT);
         var m = new THREE.Mesh(geo, wallMat);
         m.position.set(-10, (p[2] + p[3]) / 2, (p[0] + p[1]) / 2); m.rotation.y = Math.PI / 2; m.receiveShadow = true; scene.add(m);
-        if (p[4]) loungePlug = { mesh: m, box: addBox(-10.05, L.z, 0.1, L.w, WALL_HEIGHT) };
+        if (p[4]) extensionWall = { mesh: m, box: addBox(-10.05, (d0 + d1) / 2, 0.1, d1 - d0, WALL_HEIGHT) };
       });
       addBox(-10.05, (-10 + d0) / 2, 0.1, d0 + 10, WALL_HEIGHT); addBox(-10.05, (d1 + 10) / 2, 0.1, 10 - d1, WALL_HEIGHT);
     })();
@@ -504,6 +506,34 @@
     ceiling.rotation.x = Math.PI / 2; // faces down
     ceiling.position.y = WALL_HEIGHT;
     scene.add(ceiling);
+    // the dining room's extension: its floor, walls and ceiling with the dining room's own materials
+    // (their textures continue across: the same UV mapping as the 20 x 20 m room)
+    (function(){
+      var E = EXTENSION, g = new THREE.Group(); g.visible = false; scene.add(g);
+      function plane(mat, w, hh, u0, v0, us, vs){   // a rectangle with UVs from where it lies (u0, v0 at its corner, us / vs per metre)
+        var geo = new THREE.PlaneGeometry(w, hh), uv = geo.attributes.uv;
+        for (var i = 0; i < uv.count; i++) uv.setXY(i, u0 + uv.getX(i) * w * us, v0 + uv.getY(i) * hh * vs);
+        var m = new THREE.Mesh(geo, mat); m.receiveShadow = true; g.add(m); return m;
+      }
+      var w = E.x1 - E.x0, dz = E.z1 - E.z0;
+      var fl = plane(ground.material, w, dz, (E.x0 + 10) / 20, (10 - E.z1) / 20, 1 / 20, 1 / 20);
+      fl.rotation.x = -Math.PI / 2; fl.position.set((E.x0 + E.x1) / 2, 0, (E.z0 + E.z1) / 2);
+      var ce = plane(ceiling.material, w, dz, (E.x0 + 10) / 20, (E.z0 + 10) / 20, 1 / 20, 1 / 20);
+      ce.rotation.x = Math.PI / 2; ce.position.set((E.x0 + E.x1) / 2, WALL_HEIGHT, (E.z0 + E.z1) / 2);
+      var far = plane(wallMat, dz, WALL_HEIGHT, 0, 0, 1 / 20, 1 / WALL_HEIGHT);
+      far.rotation.y = Math.PI / 2; far.position.set(E.x0, WALL_HEIGHT / 2, (E.z0 + E.z1) / 2);
+      var s0 = plane(wallMat, w, WALL_HEIGHT, 0.3, 0, 1 / 20, 1 / WALL_HEIGHT);
+      s0.position.set((E.x0 + E.x1) / 2, WALL_HEIGHT / 2, E.z0);
+      var s1 = plane(wallMat, w, WALL_HEIGHT, 0.6, 0, 1 / 20, 1 / WALL_HEIGHT);
+      s1.rotation.y = Math.PI; s1.position.set((E.x0 + E.x1) / 2, WALL_HEIGHT / 2, E.z1);
+      // the ends of the dining room's wall where it opens, as thick as a wall
+      [E.z0, E.z1].forEach(function(z){
+        var post = new THREE.Mesh(new THREE.BoxGeometry(0.24, WALL_HEIGHT, 0.24), wallMat);
+        post.position.set(-10, WALL_HEIGHT / 2, z); post.castShadow = post.receiveShadow = true; g.add(post);
+      });
+      var lamp = new THREE.PointLight(0xffd29a, 0.8, 9, 2); lamp.position.set((E.x0 + E.x1) / 2, WALL_HEIGHT - 0.7, (E.z0 + E.z1) / 2); g.add(lamp);
+      extension = { group: g, boxes: [] };
+    })();
 
     // furnishing of the guest room (wallpaper, pictures, lamps, odds and ends ...)
     if (window.HotPotDecor){
@@ -515,7 +545,7 @@
         gameplay = HotPotGameplay.build({ scene: scene, camera: camera, canvas: renderer.domElement, obstacles: obstacles, BACKROOMS: BACKROOMS,
           getChef: function(){ return model; },
           getChefLift: function(){ return modelBaseY; },   // model origin above its feet
-          bounds: { x0: -GROUND_HALF, x1: BACKROOMS.x1, z0: BACKROOMS.z1, z1: GROUND_HALF },   // the outer edge of the map
+          bounds: mapBounds,   // the outer edge of the map
           getDoor: function(){ return window.kitchenDoors && kitchenDoors.kitchenDoor; } });
         window.__hotpotGameplay = gameplay;   // for tests
       } catch (e){ console.error('Setting up the gameplay failed:', e); }
@@ -551,18 +581,24 @@
           getEntrance: function(){ return decor && decor.entrance; },
           showBought: function(key, on){ if (decor && decor.showBought) decor.showBought(key, on); },
           removeBox: removeBox, floorFree: floorFree, boxFree: boxFree,
-          closeLounge: function(){   // (a game without the lounge is loaded)
-            if (!loungeOpen) return; loungeOpen = false;
-            if (loungePlug){ scene.add(loungePlug.mesh); obstacles.push(loungePlug.box); }
-            if (decor && decor.hideLounge) decor.hideLounge();
-            if (model && model.position.x < -GROUND_HALF){ model.position.x = -9; model.position.z = LOUNGE_DOOR.z; }
-          },
-          // the lounge: where it is, and opening it (the piece of wall goes, the room appears)
-          lounge: LOUNGE,
-          openLounge: function(){
-            if (loungeOpen) return; loungeOpen = true;
-            if (loungePlug){ scene.remove(loungePlug.mesh); removeBox(loungePlug.box); }
-            if (decor && decor.showLounge) decor.showLounge();
+          // the dining room's extension: where it is, opening it and (for a loaded game without it) closing it again
+          extension: EXTENSION,
+          openExtension: function(open){
+            if (!!open === extensionOpen) return; extensionOpen = !!open;
+            var E = EXTENSION;
+            if (open){
+              scene.remove(extensionWall.mesh); removeBox(extensionWall.box);
+              extension.group.visible = true;
+              extension.boxes = [addBox(E.x0 - 0.05, (E.z0 + E.z1) / 2, 0.1, E.z1 - E.z0, WALL_HEIGHT),
+                                 addBox((E.x0 + E.x1) / 2, E.z0 - 0.05, E.x1 - E.x0, 0.1, WALL_HEIGHT),
+                                 addBox((E.x0 + E.x1) / 2, E.z1 + 0.05, E.x1 - E.x0, 0.1, WALL_HEIGHT)];
+            } else {
+              scene.add(extensionWall.mesh); obstacles.push(extensionWall.box);
+              extension.group.visible = false; extension.boxes.forEach(removeBox); extension.boxes = [];
+              if (model && model.position.x < -GROUND_HALF){ model.position.x = -9; model.position.z = (E.z0 + E.z1) / 2; }
+            }
+            if (decor && decor.openLeftWall) decor.openLeftWall(open);
+            if (mapBounds) mapBounds.x0 = open ? E.x0 : -GROUND_HALF;
           },
           // the dining room's look: wall paint (a tint over the plaster) and floor
           setLook: function(look){ setLook(look); } });
@@ -2971,7 +3007,6 @@
     if (!look) return;
     var w = LOOKS.wall[look.wall] || LOOKS.wall.cream;
     if (wallMatRef && shownLook.wall !== look.wall){ shownLook.wall = look.wall; wallMatRef.color.setRGB(w[0] * WALL_BRIGHTNESS, w[1] * WALL_BRIGHTNESS, w[2] * WALL_BRIGHTNESS); }
-    if (decor && decor.setWallTint) decor.setWallTint(w);
     var f = LOOKS.floor[look.floor] || LOOKS.floor.tiles;
     if (groundMesh && shownLook.floor !== look.floor){
       shownLook.floor = look.floor;
@@ -3036,7 +3071,7 @@
       if (walkWeight > 0){
         model.position.addScaledVector(lastMoveDir, STRIDE_SPEED * animRate * walkWeight * delta);
         // the outer edge of the map (walls inside it are collision boxes)
-        model.position.x = Math.max(loungeOpen ? LOUNGE.x0 + 0.35 : -GROUND_HALF, Math.min(BACKROOMS.x1 - 0.35, model.position.x));
+        model.position.x = Math.max(extensionOpen ? EXTENSION.x0 + 0.35 : -GROUND_HALF, Math.min(BACKROOMS.x1 - 0.35, model.position.x));
         model.position.z = Math.max(BACKROOMS.z1 + 0.35, Math.min(GROUND_HALF, model.position.z));
         resolveCollisions(model.position, jumpY);
       }

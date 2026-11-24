@@ -76,7 +76,7 @@ aufnehmen, freie Platzwahl der Gäste, Spülen, Pausenmenü.
 | 4 | Geräte kaufen | teilweise: Seite „Shop“ am Computer mit vier Dingen, jedes mit Wirkung: mehr Schüsseln (45 €, 20 statt 10 auf dem Stapel), Tischkerzen (60 €) und Topfpflanzen (110 €) machen den Raum schöner und heben die Bewertungen, ein stärkerer Brenner (220 €) kocht den Eintopf in 28 statt 40 Sekunden; Gekauftes steht sofort im Restaurant und bleibt im Spielstand |
 | 5 | Möbel kaufen und platzieren | fertig in der ersten Fassung: Ledersofa, Jukebox, Aquarium (neue Meshy-Modelle), Garderobe; nach dem Kauf steht man auf, das Möbel folgt dem Blick als grüner oder roter Umriss, E stellt es hin, F dreht es, E an einem Möbel verschiebt es; jedes Möbel macht den Raum schöner (Bewertungen) |
 | 6 | Wände und Böden verändern | fertig in der ersten Fassung: vier Wandfarben (Creme, Salbeigrün, Terrakotta, Blassblau) und drei Böden (alte Fliesen, Holzdielen, Schiefer); einmal kaufen, dann jederzeit wechseln |
-| 7 | Neue Räume freischalten | fertig in der ersten Fassung: die Lounge hinter der linken Wand des Gastraums (400 €), mit Platz für Möbel; noch ohne Tische für Gäste |
+| 7 | Neue Räume freischalten | auf Wunsch anders gelöst: statt neuer Räume werden die vorhandenen Bereiche erweitert (Abschnitt „Expand“ im Shop): größerer Gastraum (die linke Wand rückt nach hinten, mehr Platz für Möbel, mehr Gäste), größere Küchenkisten (12 statt 6), mehr Lager (zweite Kistenreihe, 24 statt 12) |
 | 8 | Kundenzufriedenheit und Sternebewertungen | fertig in der ersten Fassung: jeder Gast bewertet seinen Besuch (Essen 35 %, Wartezeit 25 %, Sauberkeit 20 %, Preis 10 %, Atmosphäre 10 %), daraus werden 1 bis 5 Sterne und ein passender Satz; die Sterne des Restaurants sind der Schnitt der letzten 30 Bewertungen und bringen mehr oder weniger Gäste. Atmosphäre ist noch ein fester Wert, bis es Möbel zu kaufen gibt; Gästetypen fehlen |
 | 9 | Weitere Rezepte | fehlt |
 | 10 | Reinigungssystem | teilweise: Flecken und Besen; Abwasch: die leere Schüssel bleibt mit dem Rest Eintopf auf dem Tisch, man räumt sie ab (F), spült sie an der Spüle (E) und stellt sie zurück auf den Stapel; an einem Platz mit schmutziger Schüssel setzt sich kein Gast, und schmutzige Schüsseln kosten in den Bewertungen Sauberkeit |
@@ -125,6 +125,7 @@ Danach folgen Mehrspieler und Mitarbeiter (Phase 3).
   auf, tritt zur Seite und schiebt den Stuhl wieder an den Tisch. Der Stuhl ist ein eigenes
   Meshy-Modell für ihn (niedrig, breit, ohne Armlehnen). Der Aktenschrank steht dafür neben
   der Bürotür.
+- **Erweitern statt neuer Räume** (Wunsch vom 24.11.2026): Küche, Gastraum und Lager werden größer, es kommen keine neuen Räume dazu. Die zuerst gebaute Lounge ist wieder entfernt.
 - **Shop in Abschnitten** (Wunsch vom 24.11.2026): Kitchen, Room, Furniture, Walls, Floors. Damit die Raummitte frei für Möbel ist, gehen die Gäste jetzt an der Vorderwand entlang zu den Tischen.
 - **Bewertungen** (24.11.2026): Ein Gast schreibt nach dem Essen mit 75 % Wahrscheinlichkeit
   eine Bewertung, wer hungrig geht, immer (1 Stern). Der Satz dazu nennt, was am

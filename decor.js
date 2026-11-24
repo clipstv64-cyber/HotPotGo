@@ -107,7 +107,7 @@
 
     // ---------- left wall: mounted pike and deer antlers -------------------------
     place('fish', { w: 1.05 }, onWall('left', 10 + 4.66, 2.4), 0, 0, 0, 0, { back: true, anchor: 'center' }).rotation.z = -0.03;
-    place('antlers', { w: 0.8 }, onWall('left', 10 - 4.66, 2.7), 0, 0, 0, 0, { back: true, anchor: 'center' });
+    place('antlers', { w: 0.8 }, onWall('left', 10 - 7.9, 2.7), 0, 0, 0, 0, { back: true, anchor: 'center' });
 
     // ---------- back wall: chalkboard, slot machine, fridge with the TV on top, plant, coat rack ----
     place('chalkboard', { w: 1.9 }, onWall('back', 10 - 3.5, 2.25), 0, 0, 0, 0, { back: true, anchor: 'center' });
@@ -159,7 +159,8 @@
     }
 
     var office = { chair: null, screen: null, room: null, desk: null };
-    var lounge = { group: null }, loungeMats = [];   // the lounge (built with the back rooms, shown when bought)   // what the game needs of the office: the swivel chair, the monitor's screen
+    var leftSkirt = null;   // the skirting board along the part of the left wall that can open
+   // what the game needs of the office: the swivel chair, the monitor's screen
     // ---------- back rooms behind the kitchen: corridor, office, storeroom, cleaning closet ----
     (function(){
       var B = ctx.BACKROOMS;
@@ -230,13 +231,14 @@
         var g = along === 'x' ? new T.BoxGeometry(len, 0.12, d) : new T.BoxGeometry(d, 0.12, len);
         var mesh = new T.Mesh(g, trim); mesh.receiveShadow = true;
         if (along === 'x') mesh.position.set(c, 0.06, at + off); else mesh.position.set(at + off, 0.06, c);
-        root.add(mesh);
+        root.add(mesh); return mesh;
       }
       // skirting boards in the guest room (outer walls and the guest side of the partition)
       var KDOOR0 = PART.door.z - PART.door.w / 2, KDOOR1 = PART.door.z + PART.door.w / 2;
       skirt('x', -10, -10, X1, 1);                                     // back wall
       skirt('x', 10, -10, -2.05, -1); skirt('x', 10, -0.55, X1, -1);   // front wall, around the entrance door
-      skirt('z', -10, -10, 10, 1);                                     // left wall
+      skirt('z', -10, -10, -1, 1); skirt('z', -10, 6, 10, 1);          // left wall (and the part that opens, see openLeftWall)
+      leftSkirt = skirt('z', -10, -1, 6, 1);
       skirt('z', X1, -10, KDOOR0 - 0.16, -1); skirt('z', X1, KDOOR1 + 0.16, PART.pieces[1][1], -1); skirt('z', X1, PART.pieces[0][0], 10, -1);
       function floor(m, ax, bx, az, bz, y, down){
         var q = quad(m, bx - ax, bz - az, ax, az);
@@ -244,27 +246,6 @@
         q.castShadow = false;
         return q;
       }
-      // ---------- the lounge behind the dining room's left wall (bought at the computer) ----------
-      // Built now and kept hidden: a floor of the kitchen's planks, plaster walls with an opening
-      // to the dining room, a ceiling and a lamp. index.html opens the wall.
-      (function(){
-        var LG = { x0: -15.5, x1: -10, z0: -1.0, z1: 6.0 }, dz = 2.33, dw = 1.4, dh = 2.4;
-        var g = new T.Group(); g.visible = false; root.add(g);
-        var before = root.children.length;
-        var loungePlaster = { mat: M.plaster.mat.clone(), tu: M.plaster.tu, tv: M.plaster.tv };
-        loungeMats.push(loungePlaster.mat);
-        floor(M.planks, LG.x0, LG.x1, LG.z0, LG.z1, 0.002);
-        floor(M.ceiling, LG.x0, LG.x1, LG.z0, LG.z1, H - 0.002, true);
-        wall('z', LG.x0, LG.z0, LG.z1, loungePlaster);                       // far wall
-        wall('x', LG.z0, LG.x0, LG.x1, loungePlaster);                       // side walls
-        wall('x', LG.z1, LG.x0, LG.x1, loungePlaster);
-        wall('z', LG.x1 - 0.012, LG.z0, LG.z1, loungePlaster, [[dz, dw, dh]]); // its side of the dining room's wall, with the opening
-        // everything just made belongs to the lounge
-        root.children.slice(before).forEach(function(o){ g.add(o); });
-        var lamp = new T.PointLight(0xffd29a, 1.0, 9, 2); lamp.position.set((LG.x0 + LG.x1) / 2, H - 0.7, (LG.z0 + LG.z1) / 2); g.add(lamp);
-        place('lamp_drum', { w: 0.5 }, g, (LG.x0 + LG.x1) / 2, H, (LG.z0 + LG.z1) / 2, 0, { anchor: 'top' });
-        lounge.group = g;
-      })();
       var xo = 6.5, xs = 9.3;                                 // room dividers: office | storeroom | closet
       var doorO = (x0 + xo) / 2, doorS = (xo + xs) / 2, doorC = (xs + x1) / 2;
       // floors and ceilings
@@ -408,16 +389,14 @@
         if (t.i === 0 || t.i === 2) return;   // (these have one from the start)
         place('candlebottle', { h: 0.4 }, g, t.spot[0] + 0.28, t.y, t.spot[1] + 0.01, 0, {});
       });
-      else [-4.66, 0, 4.66].forEach(function(z, n){   // between the tables, at the left wall
-        place('plant', { h: 1.6 }, g, -9.42, 0, z, [0.3, 2.1, 4.0][n], { cast: true });
-        ctx.addBox(-9.42, z, 0.55, 0.55, 1.4);
+      else [[-9.42, -4.66], [-3.7, -9.42], [-2.5, -9.42]].forEach(function(p, n){   // at the left wall between two tables, and at the back wall
+        place('plant', { h: 1.6 }, g, p[0], 0, p[1], [0.3, 2.1, 4.0][n], { cast: true });
+        ctx.addBox(p[0], p[1], 0.55, 0.55, 1.4);
       });
     }
-    // the lounge's walls take the dining room's paint (tint as r, g, b)
-    function setWallTint(w){ loungeMats.forEach(function(m){ m.color.setRGB(0.7 * w[0], 0.7 * w[1], 0.7 * w[2]); }); }
-    return { dressTable: dressTable, showBought: showBought, setWallTint: setWallTint,
-             showLounge: function(){ if (lounge.group) lounge.group.visible = true; },
-             hideLounge: function(){ if (lounge.group) lounge.group.visible = false; }, update: update, root: root, entrance: entrance, office: office };
+    return { dressTable: dressTable, showBought: showBought,
+             // the skirting board along the part of the left wall that opens when the dining room is enlarged
+             openLeftWall: function(open){ if (leftSkirt) leftSkirt.visible = !open; }, update: update, root: root, entrance: entrance, office: office };
   }
 
   window.HotPotDecor = { build: build };
