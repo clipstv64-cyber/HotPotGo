@@ -42,7 +42,8 @@
   };
   var RULES = {
     startMoney: 250,          // euros in the till at the start
-    crateStock: 6,            // vegetables in each crate at the start
+    crateStock: 6,            // vegetables in each crate at the start (and what a kitchen crate holds)
+    storeStock: 12,           // what each of the storeroom's crates holds (they are empty at the start)
     bowls: 10,                // clean bowls on the stack at the start
     firstGuest: 3,            // seconds after opening until the first guest comes in
     guestEvery: [14, 26],     // seconds between guests coming in
@@ -235,6 +236,7 @@
         tools: {},                                    // ids of the tools: knife, broth (the jug: item.left = what is in it), spice
         carry: null,                                  // id of the item in the chef's hands
         crates: { potato: RULES.crateStock, carrot: RULES.crateStock, onion: RULES.crateStock },
+        store: { potato: 0, carrot: 0, onion: 0 },    // vegetables in the storeroom's crates
         bowls: RULES.bowls,                           // clean bowls on the stack
         // the pot: 'empty' | 'filling' (things are put in, it cooks) | 'ready' | 'burnt'
         pot: { phase: 'empty', has: { potato: 0, carrot: 0, onion: 0 }, cut: {}, qs: [], broth: 0, spice: 0,
@@ -265,8 +267,10 @@
     // supplies: what is in the kitchen, what the kitchen holds, and how much more may be ordered
     function emptyGoods(){ return { potato: 0, carrot: 0, onion: 0, broth: 0 }; }
     function parcels(){ return Object.keys(state.items).map(function(id){ return state.items[id]; }).filter(function(o){ return o.kind === 'parcel'; }); }
-    function stockOf(kind){ return kind === 'broth' ? state.broth + state.items[state.tools.broth].left : state.crates[kind]; }
-    function holds(kind){ return kind === 'broth' ? COOK.stock : RULES.crateStock; }
+    // (a whole vegetable taken out and not cut yet still counts: it goes back into a crate)
+    function loose(kind){ return Object.keys(state.items).filter(function(id){ var o = state.items[id]; return o.kind === kind && !o.cut; }).length; }
+    function stockOf(kind){ return kind === 'broth' ? state.broth + state.items[state.tools.broth].left : state.crates[kind] + state.store[kind] + loose(kind); }
+    function holds(kind){ return kind === 'broth' ? COOK.stock : RULES.crateStock + RULES.storeStock; }
     function coming(kind){   // ordered or delivered, but not unpacked yet
       var n = 0;
       state.orders.forEach(function(o){ n += o.goods[kind] || 0; });
@@ -348,8 +352,21 @@
           if (it || !isVeg(arg) || state.crates[arg] <= 0) return false;
           state.crates[arg]--; newItem(arg); return true;
         case 'putBack':    // ... and back into it
-          if (!it || !isVeg(it.kind) || it.cut) return false;
+          if (!it || !isVeg(it.kind) || it.cut || state.crates[it.kind] >= RULES.crateStock) return false;
           state.crates[it.kind]++; dropItem(it); return true;
+        case 'takeStore':  // a vegetable out of its crate in the storeroom
+          if (it || !isVeg(arg) || state.store[arg] <= 0) return false;
+          state.store[arg]--; newItem(arg); return true;
+        case 'putStore':   // ... and back into it
+          if (!it || !isVeg(it.kind) || it.cut || state.store[it.kind] >= RULES.storeStock) return false;
+          state.store[it.kind]++; dropItem(it); return true;
+        case 'unpackStore':   // out of the delivery box into the storeroom's crate: arg = which vegetable
+          if (!it || it.kind !== 'parcel' || !isVeg(arg) || !(it.goods[arg] > 0)) return false;
+          var putS = Math.min(it.goods[arg], RULES.storeStock - state.store[arg]);
+          if (putS <= 0) return false;
+          state.store[arg] += putS; it.goods[arg] -= putS;
+          if (!GOODS.some(function(k){ return it.goods[k] > 0; })) dropItem(it);
+          return true;
         case 'takeBowl':
           if (it || state.bowls <= 0) return false;
           state.bowls--; newItem('bowl'); return true;
@@ -665,6 +682,7 @@
       '.hp-pc .what{flex:1;min-width:0}.hp-pc .what b{font-size:20px}.hp-pc .price{margin-left:9px;font-style:italic;color:#8a6f55}' +
       '.hp-pc .stock{display:flex;gap:4px;margin:6px 0 4px}' +
       '.hp-pc .stock i{width:15px;height:15px;border:2px solid #4a3626;border-radius:2px}' +
+      '.hp-pc .stock.many{gap:2px}.hp-pc .stock.many i{width:8px;height:15px;border-width:1.5px}' +
       '.hp-pc .stock i.full{background:#c9641f}.hp-pc .stock i.half{background:linear-gradient(90deg,#c9641f 50%,transparent 50%)}' +
       '.hp-pc .stock i.way{border-style:dashed;border-color:#a0591c;background:repeating-linear-gradient(135deg,rgba(201,100,31,.4) 0 3px,transparent 3px 6px)}' +
       '.hp-pc .what small{font-style:italic;color:#8a6f55;font-size:13px}' +
@@ -1111,6 +1129,7 @@
     var place = { pot: null, crates: {}, stacks: null, board: null, knifeHome: null, recipe: null };
     var knifeHold = null, toolHold = {};   // how the tools are held (see gameplay.js: a tool)
     var STEW_COL = new T.Color(0x9a938c), BURNT_COL = new T.Color(0x1d1612);
+    var STORE_X = [7.85, 8.4, 8.95], STORE_Z = -14.75;   // the storeroom's crates (in front of the rack, see decor.js)
     var CRATE_GRID = [[-0.19, -0.075], [0, -0.075], [0.19, -0.075], [-0.19, 0.085], [0, 0.085], [0.19, 0.085]];
     function buildPlaces(){
       var k = ctx.getKitchen();
@@ -1158,6 +1177,22 @@
           grp.add(v); return v;
         });
         place.crates[kind] = { grp: grp, model: model, inside: inside, pos: grp.position };
+      });
+      // the storeroom: three crates in front of the big rack, up to twelve in each (two layers)
+      place.store = {};
+      var STORE_GRID = CRATE_GRID.concat(CRATE_GRID.map(function(g){ return [g[0] + 0.09, g[1] + 0.04, 1]; }));
+      VEG.forEach(function(kind, i){
+        var grp = new T.Group(), model = instance('crate');
+        grp.position.set(STORE_X[i], 0, STORE_Z); grp.rotation.y = Math.PI / 2;
+        grp.add(model); root.add(grp);
+        if (ctx.addBox) ctx.addBox(grp.position.x, grp.position.z, cs.z, cs.x, cs.y);
+        var inside = STORE_GRID.map(function(g){
+          var v = instance(kind);
+          v.position.set(g[0] + rnd(-0.015, 0.015), g[2] ? 0.13 : 0.045, g[1] + rnd(-0.01, 0.01));
+          v.rotation.y = kind === 'carrot' ? 1.57 + rnd(-0.25, 0.25) : rnd(0, 6.28);
+          grp.add(v); return v;
+        });
+        place.store[kind] = { grp: grp, model: model, inside: inside, pos: grp.position };
       });
       // the clean bowls: two stacks side by side
       var st = new T.Group(); st.position.copy(k.bowlsAt); root.add(st);
@@ -1469,11 +1504,34 @@
           else { e.label = 'Unpack the ' + K.many + ' (' + it.goods[kind] + ')'; e.use = function(){ act('unpack', kind); }; e.obj = c.model; }
           add(e); return;
         }
-        if (it && it.kind === kind && !it.cut){ e.label = 'Put ' + K.the + ' back'; e.use = function(){ act('putBack'); }; }
+        if (it && it.kind === kind && !it.cut){
+          if (state.crates[kind] >= RULES.crateStock) e.label = 'This crate is full';
+          else { e.label = 'Put ' + K.the + ' back'; e.use = function(){ act('putBack'); }; }
+        }
         else if (it) return;
         else if (!free) e.label = 'Hands full';
-        else if (state.crates[kind] <= 0) e.label = 'No ' + K.many + ' left \u2013 order some at the computer in the office';
+        else if (state.crates[kind] <= 0) e.label = state.store[kind] > 0 ? 'No ' + K.many + ' left \u2013 fetch some from the storeroom' : 'No ' + K.many + ' left \u2013 order some at the computer in the office';
         else { e.label = 'Take ' + K.a; e.use = function(){ act('take', kind); }; e.obj = c.model; }
+        add(e);
+      });
+      // the storeroom's crates
+      VEG.forEach(function(kind){
+        var c = place.store[kind], K = KINDS[kind], e = { pos: c.pos, reach: RULES.reach, key: 'F' };
+        if (it && it.kind === 'parcel'){
+          if (!(it.goods[kind] > 0)) return;
+          e.key = 'E';
+          if (state.store[kind] >= RULES.storeStock) e.label = 'This crate is full';
+          else { e.label = 'Store the ' + K.many + ' here (' + it.goods[kind] + ')'; e.use = function(){ act('unpackStore', kind); }; e.obj = c.model; }
+          add(e); return;
+        }
+        if (it && it.kind === kind && !it.cut){
+          if (state.store[kind] >= RULES.storeStock) e.label = 'This crate is full';
+          else { e.label = 'Put ' + K.the + ' in the store'; e.use = function(){ act('putStore'); }; }
+        }
+        else if (it) return;
+        else if (!free) e.label = 'Hands full';
+        else if (state.store[kind] <= 0) e.label = 'No ' + K.many + ' in the store';
+        else { e.label = 'Take ' + K.a + ' (' + state.store[kind] + ' in the store)'; e.use = function(){ act('takeStore', kind); }; e.obj = c.model; }
         add(e);
       });
       // the stack of clean bowls
@@ -1734,6 +1792,7 @@
       }
       // crates and bowl stacks show what is left
       VEG.forEach(function(kind){ place.crates[kind].inside.forEach(function(v, i){ v.visible = i < state.crates[kind]; }); });
+      VEG.forEach(function(kind){ place.store[kind].inside.forEach(function(v, i){ v.visible = i < state.store[kind]; }); });
       place.stacks.bowls.forEach(function(b, i){ b.visible = i < state.bowls; });
       // what was bought for the dining room (decor.js puts it there)
       SHOP.forEach(function(t){ if (!!state.owned[t.key] !== !!shown['own_' + t.key]){ shown['own_' + t.key] = !!state.owned[t.key]; if (ctx.showBought) ctx.showBought(t.key, !!state.owned[t.key]); } });
@@ -1944,7 +2003,7 @@
     function drawPC(){
       if (!pc) return;
       var day = state.day, total = priceOf(pc.cart), boxes = parcels();
-      var sig = [pc.page, JSON.stringify(pc.cart), pc.said, state.money, GOODS.map(function(k){ return oneDec(stockOf(k)) + '/' + room(k) + '/' + coming(k); }).join(' '),
+      var sig = [pc.page, JSON.stringify(pc.cart), pc.said, state.money, GOODS.map(function(k){ return oneDec(stockOf(k)) + '/' + room(k) + '/' + coming(k) + '/' + (state.store[k] || 0); }).join(' '),
                  state.orders.map(function(o){ return Math.ceil(o.left); }).join(','), boxes.map(function(p){ return p.at + JSON.stringify(p.goods); }).join(','),
                  day.n, day.phase, day.served, day.lost, day.sales, day.tips, day.spent, state.history.length, Object.keys(state.owned).join(','), state.reviews.length ? state.reviews[state.reviews.length - 1].id : 0].join('|');
       var when = 'Day ' + day.n + ' · ' + clockText() + ' · ' + (day.phase === 'open' ? 'Open' : day.phase === 'prep' ? 'Closed' : 'Closed for today');
@@ -1961,8 +2020,8 @@
           var pic = thumb(k), have = stockOf(k), cap = holds(k), on = coming(k), n = pc.cart[k];
           cards += '<div class="card good"><div class="pic">' + (pic ? '<img src="' + pic + '" alt="">' : '') + '</div>' +
             '<div class="what"><b>' + GOOD[k].name + '</b><span class="price">' + euro(RULES.cost[k]) + (k === 'broth' ? ' per pot' : ' each') + '</span>' +
-            '<div class="stock">' + stockBoxes(have, on, cap) + '</div>' +
-            '<small>' + (k === 'broth' ? 'For ' + oneDec(have) + ' of ' + cap + ' pots' : have + ' of ' + cap + (on ? '' : ' in the kitchen')) + (on ?' \u00b7 ' + on + ' on the way' : '') + '</small></div>' +
+            '<div class="stock' + (cap > 8 ? ' many' : '') + '">' + stockBoxes(have, on, cap) + '</div>' +
+            '<small>' + (k === 'broth' ? 'For ' + oneDec(have) + ' of ' + cap + ' pots' : state.crates[k] + ' in the kitchen \u00b7 ' + state.store[k] + ' in the store') + (on ?' \u00b7 ' + on + ' on the way' : '') + '</small></div>' +
             '<div class="qty"><button data-do="minus:' + k + '"' + (n > 0 ? '' : ' disabled') + '>\u2212</button><b>' + n + '</b>' +
             '<button data-do="plus:' + k + '"' + (n < room(k) ? '' : ' disabled') + '>+</button></div></div>';
         });
@@ -1988,7 +2047,7 @@
         var fit = GOODS.filter(function(k){ return pc.cart[k] > 0; }).length >= 3 ? 1 : 2;   // (a long order leaves less room below it)
         ships += '<div class="' + (Math.min(fit, rows.length) === 1 ? 'one' : '') + '">' + rows.slice(0, fit).join('') + '</div>';
         if (rows.length > fit) ships += '<p class="muted small">+ ' + (rows.length - fit) + ' more</p>';
-        if (!state.orders.length && !boxes.length && !pc.said) ships += '<p class="muted">Nothing on its way.</p><p class="muted small">Carry a delivered box to the kitchen and unpack it at the crates and at the broth shelf.</p>';
+        if (!state.orders.length && !boxes.length && !pc.said) ships += '<p class="muted">Nothing on its way.</p><p class="muted small">Unpack a delivered box at the crates in the storeroom or in the kitchen, and the broth at its shelf.</p>';
         html = '<div class="col" style="flex:1">' + cards + '</div><div class="col" style="width:252px;flex:none">' + order + '<div class="card" style="flex:1;min-height:0"><h4>Deliveries</h4>' + ships + '</div></div>';
       } else if (pc.page === 'shop'){
         title = 'Shop'; sub = 'Things for the restaurant';
@@ -2113,6 +2172,11 @@
         !!st.crates && !!st.pot && !!st.pot.has && !!st.tools && !!st.day && num(st.day.n) && st.day.n >= 1 && num(st.day.time) &&
         oneOf(st.day.phase, ['prep', 'open', 'closed', 'done']) && oneOf(st.pot.phase, ['empty', 'filling', 'ready', 'burnt']);
       ok = ok && VEG.every(function(k){ return num(st.crates[k]) && num(st.pot.has[k]); });
+      if (ok){   // (an older save has no store)
+        var store = { potato: 0, carrot: 0, onion: 0 };
+        VEG.forEach(function(k){ if (st.store && num(st.store[k])) store[k] = Math.max(0, Math.min(RULES.storeStock, Math.floor(st.store[k]))); });
+        st.store = store;
+      }
       ok = ok && Object.keys(HOME).every(function(k){ var o = st.items[st.tools[k]]; return !!o && o.kind === k; });
       ok = ok && Object.keys(st.items).every(function(id){
         var o = st.items[id];
@@ -2242,6 +2306,7 @@
       atScreen: function(){ return !!pc || hold || !!(ctx.seat && ctx.seat.active()); },   // the keys belong to a screen (or he is sitting down), not to the chef
       // ---- for tests only ----
       debugPC: function(cmd){ if (cmd === 'open') openPC(); else if (cmd) pcDo(cmd); return pc ? { page: pc.page, cart: pc.cart, said: pc.said } : null; },
+      debugStore: function(){ return { kitchen: VEG.map(function(k){ return state.crates[k]; }).join('/'), store: VEG.map(function(k){ return state.store[k]; }).join('/') }; },
       debugShop: function(){ return { owned: Object.keys(state.owned), mood: +mood().toFixed(2), bowls: state.bowls, money: state.money }; },
       debugReviews: function(){ return { stars: +reputation().toFixed(2), list: state.reviews.map(function(r){ return r.stars + ' ' + r.who + ' (food ' + r.food + ' wait ' + r.wait + ' clean ' + r.clean + '): ' + r.text; }) }; },
       debugSupplies: function(){ var o = {}; GOODS.forEach(function(k){ o[k] = oneDec(stockOf(k)) + ' room ' + room(k) + ' coming ' + coming(k); }); o.orders = state.orders.map(function(x){ return goodsText(x.goods) + ' in ' + Math.ceil(x.left); }); o.boxes = parcels().map(function(p){ return p.at + ': ' + goodsText(p.goods); }); return o; },

@@ -72,7 +72,7 @@ aufnehmen, freie Platzwahl der Gäste, Spülen, Pausenmenü.
 |---|---|---|
 | 1 | Voll funktionsfähiger Restaurant-Computer | teilweise: der Computer im Büro hat einen eigenen Bildschirm mit drei Seiten, „Supplies“ (bestellen), „Accounts“ (heutige Zahlen und frühere Tage) und „Reviews“ (Sterne und was die Gäste schreiben); Shop und Restaurantverwaltung fehlen |
 | 2 | Zutaten bestellen | fertig: Menge wählen, Summe, Kassenstand, bestellen |
-| 3 | Warenlieferung und Lagerverwaltung | teilweise: Lieferung kommt nach 30 Sekunden als Karton ins Lager und wird in der Küche ausgepackt; ein eigener Lagerbestand im Lagerraum fehlt |
+| 3 | Warenlieferung und Lagerverwaltung | fertig in der ersten Fassung: Lieferung kommt nach 30 Sekunden als Karton ins Lager; auspacken in die drei Kisten im Lagerraum (je 12) oder in die Küchenkisten (je 6); aus dem Lager holt der Koch einzelnes Gemüse in die Küche. Bestellen kann man, was in Küche und Lager zusammen passt |
 | 4 | Geräte kaufen | teilweise: Seite „Shop“ am Computer mit vier Dingen, jedes mit Wirkung: mehr Schüsseln (45 €, 20 statt 10 auf dem Stapel), Tischkerzen (60 €) und Topfpflanzen (110 €) machen den Raum schöner und heben die Bewertungen, ein stärkerer Brenner (220 €) kocht den Eintopf in 28 statt 40 Sekunden; Gekauftes steht sofort im Restaurant und bleibt im Spielstand |
 | 5 | Möbel kaufen und platzieren | fehlt |
 | 6 | Wände und Böden verändern | fehlt |

@@ -328,7 +328,7 @@
       addBox(x0 + 0.35, zm - 0.45, 0.7, 0.5, 1.35);   // (by the door: the chef walks past it to pull out his chair)
       place('office_shelf', { h: 1.8 }, null, xo - 0.03, 0, z1 + 1.9, -Math.PI / 2, { back: true, cast: true });
       addBox(xo - 0.2, z1 + 1.9, 0.4, 1.0, 1.8);
-      // storeroom: big rack at the back, sacks, boxes, a pallet of water
+      // storeroom: big rack at the back, sacks, boxes (and the stock's crates: restaurant.js)
       place('storage_rack', { w: 1.7 }, null, doorS, 0, z1 + 0.03, 0, { back: true, cast: true });
       addBox(doorS, z1 + 0.35, 1.7, 0.7, 2.2);
       place('boxes', { h: 1.2 }, null, xs - 0.03, 0, zm - 1.0, -Math.PI / 2, { back: true, cast: true });
@@ -338,10 +338,7 @@
         place('sacks', { w: 1.0 }, null, xo + 0.03, 0, z1 + 1.9, Math.PI / 2, { back: true, cast: true });
         addBox(xo + 0.55, z1 + 1.9, 1.0, 1.0, 0.9);
       });
-      ifModel('water_pallet', function(){
-        place('water_pallet', { w: 0.9 }, null, xs - 0.55, 0, z1 + 1.55, -0.2, { cast: true });
-        addBox(xs - 0.55, z1 + 1.55, 0.9, 0.9, 0.8);
-      });
+      // (in front of the rack stand the three crates of the storeroom's stock: restaurant.js, STORE_X)
       // cleaning closet: shelf with supplies, utility sink, mop bucket, brooms
       ifModel('cleaning_shelf', function(){
         place('cleaning_shelf', { w: 1.1 }, null, doorC, 0, z1 + 0.03, 0, { back: true, cast: true });
