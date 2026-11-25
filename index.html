@@ -2780,7 +2780,7 @@
   var WAITER = { height: 2.3, speed: 1.45, turn: 9,
                  stride: 1.62,   // (how fast the walk cycle's feet go back: it is played at speed / stride so they do not slide)
                  home: new THREE.Vector3(PARTITION.x - 1.25, 0, 0),             // at the bar, between two stools, on the guests' side
-                 pass: [-0.3, 0, 0.3].map(function(z){ return new THREE.Vector3(PARTITION.x - 0.2, 0, z); }),   // where full bowls are put on the bar (y: the bar top)
+                 pass: [-0.3, 0, 0.3, -0.85, 0.85].map(function(z){ return new THREE.Vector3(PARTITION.x - 0.2, 0, z); }),   // on the bar: full bowls (0-2), dirty ones (3-4) (y: the bar top)
                  lane: PARTITION.x - 1.25,                                       // (he walks along the bar to the front wall: no furniture there)
                  barTop: K.barH };
   function loadWaiter(loader){
@@ -2846,6 +2846,8 @@
     face: function(yaw){ if (waiter) waiter.face = yaw; },
     // something carried in front with both hands (an Object3D, or null)
     hold: function(obj){ if (waiter) waiter.carry = obj || null; },
+    // the way from the door to a chair (as the guests go), for clearing a table
+    routeTo: function(k){ return chairSpots[k] ? entranceRoute(chairSpots[k]) : null; },
     // the game stands still (the pause card): so does he
     freeze: function(on){ if (waiter) waiter.frozen = !!on; }
   };

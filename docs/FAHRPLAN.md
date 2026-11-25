@@ -85,7 +85,7 @@ Phase 1 ist vollständig (der Kühlschrank hat seit dem 25.11.2026 eine Aufgabe:
 
 | Nr. | Punkt aus dem Konzept | Stand |
 |---|---|---|
-| 1 | Mitarbeiter | angefangen: ein Kellner (neues Meshy-Modell mit Laufanimation), am Computer unter „Staff“ eingestellt (150 €, danach 30 € Lohn am Ende jedes Tages). Der Koch stellt volle Schüsseln auf die Theke (F, drei Plätze), der Kellner bringt sie dem Gast, der dieses Gericht bestellt hat, und nimmt an den Tischen die Bestellungen auf; er geht dabei den Weg der Gäste (an der Theke entlang, an der Vorderwand, dann den Gang bei den Tischen) und von Tisch zu Tisch, solange keine Schüssel auf ihn wartet. Der Koch kann weiter selbst bedienen |
+| 1 | Mitarbeiter | angefangen: ein Kellner (neues Meshy-Modell mit Laufanimation), am Computer unter „Staff“ eingestellt (150 €, danach 30 € Lohn am Ende jedes Tages). Der Koch stellt volle Schüsseln auf die Theke (F, drei Plätze), der Kellner bringt sie dem Gast, der dieses Gericht bestellt hat, und nimmt an den Tischen die Bestellungen auf; er geht dabei den Weg der Gäste (an der Theke entlang, an der Vorderwand, dann den Gang bei den Tischen) und von Tisch zu Tisch, solange keine Schüssel auf ihn wartet. Hat er nichts zu tun, räumt er schmutzige Schüsseln von den Tischen ab und stellt sie an die beiden Enden der Theke, wo der Koch sie zum Spülen holt. Der Koch kann weiter selbst bedienen |
 | 2 | Mehrspieler | offen |
 
 ## Absprachen

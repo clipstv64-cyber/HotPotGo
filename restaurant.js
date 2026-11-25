@@ -761,7 +761,7 @@
       g.got = got; g.price = dishPrice(got);
       g.pay = g.price + Math.round(RULES.tip * g.patience * (0.4 + 0.6 * g.q));   // quick service and a well made dish tip better
     }
-    var PASS_SLOTS = 3;   // full bowls on the bar for the waiter
+    var PASS_SLOTS = 3, DIRTY_SLOTS = [3, 4];   // full bowls on the bar for the waiter; where he puts the dirty ones he cleared
     function passTaken(k){ return Object.keys(state.items).some(function(id){ var o = state.items[id]; return o.at === 'pass' && o.slot === k; }); }
     // a pot on the range as time passes (state.pot)
     function cookPot(dt){
@@ -2665,12 +2665,13 @@
     }
     function waiterHere(){ return !!(ctx.getWaiter && ctx.getWaiter().ready()); }   // (his model loaded)
     function guestSeated(g){ return !!views[g.id] && views[g.id].info.where() === 'seated'; }
+    function barPlace(kind){ var ks = kind === 'dirty' ? DIRTY_SLOTS : [0, 1, 2]; for (var i = 0; i < ks.length; i++) if (!passTaken(ks[i])) return ks[i]; return -1; }
     function dropWaiterBowl(){
       var W = ctx.getWaiter();
       Object.keys(state.items).forEach(function(id){
         var o = state.items[id]; if (o.at !== 'waiter') return;
-        for (var k = 0; k < PASS_SLOTS; k++) if (!passTaken(k)) break;
-        if (k < PASS_SLOTS){ o.at = 'pass'; o.slot = k; }
+        var k = barPlace(o.kind);
+        if (k >= 0){ o.at = 'pass'; o.slot = k; }
         else { o.at = 'surface'; o.x = W.place.pass[1].x; o.y = W.place.barTop; o.z = W.place.pass[2].z + 0.45; o.rot = 0; }   // (on the bar beside the others)
       });
     }
@@ -2693,9 +2694,16 @@
           if (g.phase !== 'ready' || !guestSeated(g) || !waiterWay(g)) return;
           if (!best || g.patience < best.g.patience) best = { kind: 'order', g: g };
         });
+        if (!best && barPlace('dirty') >= 0) Object.keys(state.items).forEach(function(id){
+          var o = state.items[id];
+          if (best || o.kind !== 'dirty' || o.at !== 'table' || !num(o.seat) || !num(o.x)) return;
+          var rt = W.routeTo(o.seat);
+          if (rt && rt.length >= 5) best = { kind: 'clear', item: o, way: [V(W.place.lane, 0, rt[1].z), rt[1], rt[2], rt[3], rt[4]] };
+        });
         if (!best) return;
-        var way = waiterWay(best.g);
-        job = { kind: best.kind, guest: best.g.id, item: best.item ? best.item.id : null, step: 'go', t: 0, way: way };
+        var way = best.way || waiterWay(best.g);
+        job = { kind: best.kind, guest: best.g ? best.g.id : null, item: best.item ? best.item.id : null, step: 'go', t: 0, way: way };
+        if (best.kind === 'clear'){ W.walk(way, function(){ if (job) { job.step = 'there'; job.t = 0; } }); return; }
         if (best.item){ best.item.at = 'waiter'; delete best.item.slot; }
         W.walk(way, function(){ if (job) { job.step = 'there'; job.t = 0; } });
         return;
@@ -2703,12 +2711,13 @@
       var g = guest(job.guest), bowl = job.item ? state.items[job.item] : null;
       if (bowl && bowl.at === 'waiter' && objs[bowl.id]) W.hold(objs[bowl.id].obj);
       if (job.step === 'there'){
-        var bv = views[job.guest];
-        if (bv) W.face(Math.atan2(bv.bowlAt.x - W.pos().x, bv.bowlAt.z - W.pos().z));
+        var bv = views[job.guest], at = job.kind === 'clear' && bowl ? bowl : bv && bv.bowlAt;
+        if (at) W.face(Math.atan2(at.x - W.pos().x, at.z - W.pos().z));
         job.t += dt;
         if (job.t < RULES.staff.wait) return;
         if (job.kind === 'order' && g && g.phase === 'ready') act('order', g.id);
         if (job.kind === 'serve' && bowl && g && act('serveBy', { guest: g.id, item: bowl.id })) W.hold(null);
+        if (job.kind === 'clear' && bowl && bowl.kind === 'dirty' && bowl.at === 'table'){ bowl.at = 'waiter'; delete bowl.guest; delete bowl.seat; }   // (he takes it along)
         // the next guest who wants to order, straight from this table (unless a bowl on the bar is waiting for somebody)
         var bowlFor = Object.keys(state.items).some(function(id){ var o = state.items[id]; return o.at === 'pass' && o.kind === 'stew' && state.guests.some(function(q){ return q.phase === 'waiting' && guestSeated(q) && (o.dish || 'stew') === (q.want || 'stew'); }); });
         var next = null;
@@ -3333,9 +3342,10 @@
         var onBar = {};
         Object.keys(st.items).forEach(function(id){
           var o = st.items[id]; if (!o || (o.at !== 'pass' && o.at !== 'waiter')) return;
-          var k = 0; while (k < PASS_SLOTS && onBar[k]) k++;
-          if (o.kind !== 'stew' || k >= PASS_SLOTS){ if (o.kind === 'stew' || o.kind === 'bowl' || o.kind === 'dirty') st.bowls++; delete st.items[id]; return; }   // (only bowls of stew go on the bar)
-          if (o.at === 'pass' && num(o.slot) && o.slot >= 0 && o.slot < PASS_SLOTS && o.slot === Math.floor(o.slot) && !onBar[o.slot]) k = o.slot;
+          var ks = o.kind === 'dirty' ? DIRTY_SLOTS : [0, 1, 2], k = -1;
+          if (o.at === 'pass' && ks.indexOf(o.slot) >= 0 && !onBar[o.slot]) k = o.slot;
+          for (var q = 0; k < 0 && q < ks.length; q++) if (!onBar[ks[q]]) k = ks[q];
+          if ((o.kind !== 'stew' && o.kind !== 'dirty') || k < 0){ if (o.kind === 'stew' || o.kind === 'bowl' || o.kind === 'dirty') st.bowls++; delete st.items[id]; return; }   // (only bowls go on the bar)
           o.at = 'pass'; o.slot = k; onBar[k] = true;
         });
       }
