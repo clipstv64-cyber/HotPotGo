@@ -133,6 +133,7 @@
     movable('crates', place('crates', { h: 0.95 }, null, 3.1, 0, 9.45, -Math.PI / 2, { cast: true }), addBox(3.1, 9.45, 0.5, 0.5, 0.95), true);
 
     // ---------- ceiling: lamps over the tables (with their light), ceiling fan ----
+    var tableLamps = [];   // per table: its lamp and light (they go along when the table is moved)
     [[-7.5, -7, 'lamp_enamel'], [-7.5, -2.33, 'lamp_tiffany'], [-7.5, 2.33, 'lamp_drum'], [-7.5, 7, 'lamp_enamel']].forEach(function(p, i){
       var lamp = place(p[2], { w: p[2] === 'lamp_tiffany' ? 0.55 : 0.48 }, null, p[0], H, p[1], i * 0.7, { anchor: 'top', done: function(h, s){
         h.traverse(function(m){ if (m.isMesh && m.material){ m.material = m.material.clone(); m.material.emissive = new T.Color(1, 0.8, 0.55); m.material.emissiveIntensity = 0.18; if (m.material.map) m.material.emissiveMap = m.material.map; } });
@@ -140,7 +141,14 @@
       } });
       var light = new T.PointLight(0xffc98a, 0.95, 6.5, 2);
       light.position.set(p[0], H - 0.6, p[1]); root.add(light);
+      tableLamps[i] = [lamp, light];
     });
+    var tableMoves = [];   // per table: how far it was moved (dx, dz): the candles bought later go there too
+    function tableMoved(i, dx, dz){
+      (tableLamps[i] || []).forEach(function(o){ o.position.x += dx; o.position.z += dz; });
+      var mv = tableMoves[i] = tableMoves[i] || { x: 0, z: 0 }; mv.x += dx; mv.z += dz;
+      if (bought.candles) bought.candles.children.forEach(function(c){ if (c.userData.table === i){ c.position.x += dx; c.position.z += dz; } });
+    }
     (function(){
       var g = new T.Group(); g.position.set(-3.2, H, 0.2); root.add(g);
       var spin = place('ceilingfan', { w: 1.5 }, g, 0, 0, 0, 0, { anchor: 'top' });
@@ -383,14 +391,15 @@
       var g = bought[key] = new T.Group(); root.add(g);
       if (key === 'candles') tables.forEach(function(t){
         if (t.i === 0 || t.i === 2) return;   // (these have one from the start)
-        place('candlebottle', { h: 0.4 }, g, t.spot[0] + 0.28, t.y, t.spot[1] + 0.01, 0, {});
+        var mv = tableMoves[t.i] || { x: 0, z: 0 };
+        place('candlebottle', { h: 0.4 }, g, t.spot[0] + 0.28 + mv.x, t.y, t.spot[1] + 0.01 + mv.z, 0, {}).userData.table = t.i;
       });
       else [[-9.42, -4.66], [-3.7, -9.42], [-2.5, -9.42]].forEach(function(p, n){   // at the left wall between two tables, and at the back wall
         place('plant', { h: 1.6 }, g, p[0], 0, p[1], [0.3, 2.1, 4.0][n], { cast: true });
         ctx.addBox(p[0], p[1], 0.55, 0.55, 1.4);
       });
     }
-    return { dressTable: dressTable, showBought: showBought, movables: movables,
+    return { dressTable: dressTable, showBought: showBought, movables: movables, tableMoved: tableMoved,
              // the skirting board along the part of the left wall that opens when the dining room is enlarged
              openLeftWall: function(open){ if (leftSkirt) leftSkirt.visible = !open; }, update: update, root: root, entrance: entrance, office: office };
   }

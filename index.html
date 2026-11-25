@@ -588,7 +588,7 @@
           getObstacles: function(){ return obstacles; },   // (the furniture's boxes: what falling things land on)
           getMovables: function(){ return decor && decor.movables ? decor.movables : []; },   // (decor.js: what can be moved)
           // the tables with their chairs: where each stands, how much room it takes, moving it
-          tables: { list: function(){ return tableSets.map(function(s, i){ return { i: i, x: s.at.x, z: s.at.z, half: s.half, obj: s.obj, boxes: [s.box].concat(s.chairs.reduce(function(a, c){ return a.concat(c.boxes); }, [])) }; }); },
+          tables: { list: function(){ return tableSets.map(function(s, i){ return { i: i, x: s.at.x, z: s.at.z, home: s.home, half: s.half, obj: s.obj, boxes: [s.box].concat(s.chairs.reduce(function(a, c){ return a.concat(c.boxes); }, [])) }; }); },
                     move: moveTableSet },
           showBought: function(key, on){ if (decor && decor.showBought) decor.showBought(key, on); },
           removeBox: removeBox, floorFree: floorFree, boxFree: boxFree,
@@ -1016,7 +1016,7 @@
         TABLE_SPOTS.forEach(function(spot, ti){
           var t = table.clone(); t.position.set(spot[0], 0, spot[1]); scene.add(t);
           if (decor) decor.dressTable(t, spot, tSize, ti);
-          var set = { obj: t, box: addBox(spot[0], spot[1], tSize.x, tSize.z, tSize.y), at: { x: spot[0], z: spot[1] }, chairs: [] };
+          var set = { obj: t, box: addBox(spot[0], spot[1], tSize.x, tSize.z, tSize.y), at: { x: spot[0], z: spot[1] }, home: { x: spot[0], z: spot[1] }, chairs: [] };
           tableSets.push(set);
           // two chairs on each long side, facing the table (chair front is +Z)
           var dz = tSize.z / 2 + cSize.z / 2 - CHAIR_TUCK, dx = tSize.x / 4;
@@ -1955,14 +1955,16 @@
   // A guest comes in through the entrance door and walks to their chair ...
   // a guest outside takes another chair: the seated pose is worked out again for it
   // a table with its chairs moved to (x, z) (only while every guest is outside): the chairs' places, the boxes,
-  // and the seated poses and ways in, worked out again
+  // and the seated poses and ways in, worked out again (below: a guest outside takes another chair)
   function moveTableSet(ti, x, z){
+    if (!isFinite(x) || !isFinite(z)) return false;
     var set = tableSets[ti]; if (!set) return false;
     var dx = x - set.at.x, dz = z - set.at.z;
     if (!dx && !dz) return true;
     if (characters.some(function(c){ return c.state !== 'away'; })) return false;
     function shift(b){ b.minX += dx; b.maxX += dx; b.minZ += dz; b.maxZ += dz; }
     set.obj.position.x += dx; set.obj.position.z += dz; shift(set.box); set.at = { x: x, z: z };
+    if (decor && decor.tableMoved) decor.tableMoved(ti, dx, dz);   // (its lamp, its bought candle)
     set.chairs.forEach(function(c){
       c.obj.position.x += dx; c.obj.position.z += dz; c.boxes.forEach(shift);
       var sp = chairSpots[c.k]; sp.x += dx; sp.z += dz; sp.table.x = x; sp.table.z = z;
@@ -2016,7 +2018,7 @@
   function entranceRoute(spot){
     var back = spot.rot === 0 ? -1 : 1;                 // chair back points this way along Z
     var zBehind = spot.z + back * ENTRANCE_BEHIND;
-    var side = spot.x > TABLE_SPOTS[0][0] ? 1 : -1;     // aisle-side chairs step in from the aisle
+    var side = spot.x > spot.table.x ? 1 : -1;          // aisle-side chairs step in from the aisle (the side away from the table's middle)
     var sideX = spot.x + side * ENTRANCE_SIDE;
     return [new THREE.Vector3(ENTRANCE[0], 0, ENTRANCE[1] - 1.1),
             new THREE.Vector3(ENTRANCE_AISLE_X, 0, ENTRANCE[1] - 1.1),   // (along the front wall: the middle of the room is free for furniture)
