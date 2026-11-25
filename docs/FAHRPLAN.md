@@ -95,14 +95,14 @@ Phase 1 ist vollständig (der Kühlschrank hat seit dem 25.11.2026 eine Aufgabe:
 - **Tasten (geändert auf Wunsch vom 25.11.2026):** Kleine Dinge (Gemüse, Schüsseln, Pakete,
   Eimer, kleine Deko wie Kasse, Kerzen, Gewürzständer) hält man mit gedrückter linker
   Maustaste vor sich; lässt man los, kommt es an die Stelle, auf die man schaut (Brett,
-  Kiste, Schüsselstapel, Theke, Kühlschrank), sonst fällt es mit echter Physik und bleibt
+  Kiste, Schüsselstapel, Theke, Kühlschrank; mit dem Mausrad dreht man es), sonst fällt es mit echter Physik und bleibt
   liegen, wo es landet (in den Topf gefallenes geschnittenes Gemüse ist im Topf, eine Schüssel
   vor dem wartenden Gast ist serviert). Kochen (schneiden, rühren, gießen, würzen) bleibt auf
   der Maustaste. Werkzeuge (Messer, Krug, Streuer, Rolle, Hammer, Tuch, Besen) nimmt man mit
   E. Große Dinge (Pflanze, Garderobe, Spielautomat, Kisten, Regale und Möbel in den
   Hinterzimmern, die Regale mit Gläsern und Gemüse in der Küche, Tische, Stühle, gekaufte
   Möbel) hebt man an, indem man die linke Maustaste gedrückt hält, bis sich ein kleiner Kreis
-  gefüllt hat; solange man hält, folgen sie dem Blick, F dreht, Loslassen stellt sie hin (oder
+  gefüllt hat; solange man hält, folgen sie dem Blick, das Mausrad (oder F) dreht, Loslassen stellt sie hin (oder
   zurück, wenn dort kein Platz ist). Aufheben und die weiße Umrandung gibt es nur für das, was
   man direkt anschaut. Tische werden mit ihren vier Stühlen verschoben, einzelne Stühle an
   ihrem Tisch, aber nur, wenn niemand daran sitzt oder auf dem Weg dahin ist, und nicht auf die Wege der Gäste und des

@@ -2311,14 +2311,14 @@
       if (movingProp){   // a big decor thing is being moved: that is all he can do
         var me4 = ctx.getChef(), mp = movingProp;
         return [mp.ok ? { pos: me4.position, reach: 9, key: 'E', label: 'Put the ' + propName(mp) + ' here', use: putMoving } : { pos: me4.position, reach: 9, key: 'E', label: 'No room here' },
-                { pos: me4.position, reach: 9, key: 'F', label: 'Turn it', use: function(){ if (movingProp) movingProp.rot = (movingProp.rot + Math.PI / 4) % (Math.PI * 2); } }];
+                { pos: me4.position, reach: 9, key: 'F', label: 'Turn it (or the mouse wheel)', use: function(){ if (movingProp) movingProp.rot = (movingProp.rot + Math.PI / 4) % (Math.PI * 2); } }];
       }
       if (heldProp) return [];   // (a decor thing in his hands: let go of it first)
       if (ghost){   // a piece of furniture is being placed: that is all he can do
         var me2 = ctx.getChef(), name = furnitureItem(ghost.key).name.toLowerCase();
         return [ghost.ok ? { pos: me2.position, reach: 9, key: 'E', label: 'Put the ' + name + ' here', use: function(){ if (ghost && ghost.ok && act('place', { id: ghost.id, x: +ghost.x.toFixed(3), z: +ghost.z.toFixed(3), rot: ghost.rot })) saveNow(false); } }
                           : { pos: me2.position, reach: 9, key: 'E', label: 'The ' + name + ' cannot stand here' },
-                { pos: me2.position, reach: 9, key: 'F', label: 'Turn it', use: function(){ if (ghost) ghost.rot = (ghost.rot + Math.PI / 4) % (Math.PI * 2); } }];
+                { pos: me2.position, reach: 9, key: 'F', label: 'Turn it (or the mouse wheel)', use: function(){ if (ghost) ghost.rot = (ghost.rot + Math.PI / 4) % (Math.PI * 2); } }];
       }
       if (state.day.phase === 'done'){   // the accounts are on screen: on to the next morning
         var me = ctx.getChef();
@@ -2619,6 +2619,7 @@
         if (o.at === 'hand' && !HOME[o.kind]){   // held with the mouse button: it floats in front of where he looks
           if (shown.carry === o.id){ play.setCarry(null); shown.carry = null; }
           if (v.obj.parent !== root) root.add(v.obj);
+          if (v.floating !== true) v.obj.userData.wheelTurn = 0;   // (just picked up: as he looks)
           v.obj.visible = true; v.placed = false; floatAt(v.obj, dt, v.floating !== true); v.floating = true;
           return;
         }
@@ -2914,9 +2915,9 @@
       floatTo.copy(camera.position).addScaledVector(floatDir, d);
       floatTo.y = Math.max(floatTo.y, 0.05 + r0 * 0.5);
       var yaw0 = Math.atan2(floatDir.x, floatDir.z);
-      floatTo.add(obj.userData.floatOff.clone().applyAxisAngle(V(0, 1, 0), yaw0));   // (its middle goes there, not its foot)
+      floatTo.add(obj.userData.floatOff.clone().applyAxisAngle(V(0, 1, 0), yaw0 + (obj.userData.wheelTurn || 0)));   // (its middle goes there, not its foot)
       if (jump) obj.position.copy(floatTo); else obj.position.lerp(floatTo, 1 - Math.exp(-FLOAT.ease * dt));
-      var yaw = Math.atan2(floatDir.x, floatDir.z);
+      var yaw = Math.atan2(floatDir.x, floatDir.z) + (obj.userData.wheelTurn || 0);   // (turned further with the mouse wheel)
       obj.quaternion.setFromEuler(new T.Euler(0, yaw, 0));
     }
     var PROP_NAME = { k_shelfjars: 'shelf with jars', k_shelfveg: 'vegetable shelf', filing_cabinet: 'filing cabinet', office_shelf: 'office shelf', storage_rack: 'storage rack', boxes: 'boxes', sacks: 'sacks', cleaning_shelf: 'cleaning shelf', mop_bucket: 'mop bucket', brooms: 'brooms', umbrellastand: 'umbrella stand', slotmachine: 'slot machine', fridge: 'old fridge', plant: 'plant', coatrack: 'coat rack', wetsign: 'wet floor sign', crates: 'beer crates',
@@ -2925,7 +2926,7 @@
     function grabProp(m){
       if (carried() || heldProp || movingProp) return;
       if (!m.home) m.home = m.holder.parent;
-      heldProp = m; m.floatJump = true; m.holder.userData.floatR = 0;
+      heldProp = m; m.floatJump = true; m.holder.userData.floatR = 0; m.holder.userData.wheelTurn = 0;
       if (m.box){ if (!m.half) m.half = { x: (m.box.maxX - m.box.minX) / 2, z: (m.box.maxZ - m.box.minZ) / 2, yaw: 0 }; m.boxWas = { minX: m.box.minX, maxX: m.box.maxX, minZ: m.box.minZ, maxZ: m.box.maxZ }; m.box.minX = m.box.maxX = m.box.minZ = m.box.maxZ = 999; }   // (boxAlong puts it where it lands)
       m.holder.visible = true;   // (it floats in front of the view: showProps / floatAt)
     }
@@ -3013,6 +3014,17 @@
       }
     }
     // the mouse button let go: put there if he looks at a place for it, else let it fall
+    window.addEventListener('wheel', function(e){
+      if (hold || pc || !e.deltaY || !ctx.renderer || document.pointerLockElement !== ctx.renderer.domElement) return;
+      wheelTurn(e.deltaY > 0 ? 1 : -1);
+    }, { passive: true });
+    function wheelTurn(s){
+      var it = carried(), v = it && !HOME[it.kind] && objs[it.id];
+      if (movingProp) movingProp.rot = (movingProp.rot + s * Math.PI / 8) % (Math.PI * 2);
+      else if (ghost) ghost.rot = (ghost.rot + s * Math.PI / 8 + Math.PI * 2) % (Math.PI * 2);
+      else if (heldProp) heldProp.holder.userData.wheelTurn = (heldProp.holder.userData.wheelTurn || 0) + s * Math.PI / 12;
+      else if (v) v.obj.userData.wheelTurn = (v.obj.userData.wheelTurn || 0) + s * Math.PI / 12;
+    }
     var furnWas = null;   // a bought piece picked up again: where it stood ({ id, x, z, rot })
     function letGo(){
       if (hold || pc) return;   // (the pause card, the computer screen: clicks there are not letting go)
@@ -4100,6 +4112,7 @@
       debugMoney: function(n){ state.money = n; },
       debugPhys: function(){ if (!phys) return null; var out = { statics: phys.statics.length, sig: phys.sig.length, falling: Object.keys(falling).map(function(id){ var b = falling[id].body; return [id, +b.position.x.toFixed(2), +b.position.y.toFixed(2), +b.position.z.toFixed(2)]; }) }; out.near = phys.statics.filter(function(b){ return Math.abs(b.position.x + 7.5) < 1 && Math.abs(b.position.z + 2.33) < 1; }).map(function(b){ return [b.position.x, b.position.y, b.position.z, b.shapes[0].halfExtents.y]; }); return out; },
       debugChair: function(){ return movingChair && { x: +movingChair.x.toFixed(2), z: +movingChair.z.toFixed(2), ok: movingChair.ok, t: [movingChair.t.x, movingChair.t.z, movingChair.t.top] }; },
+      debugWheel: function(s){ wheelTurn(s); },
       debugLetGo: letGo, debugTables: function(){ return ctx.tables ? ctx.tables.list().map(function(t){ return [t.x, t.z]; }) : null; },
       debugMoveTable: function(i){ var t = ctx.tables.list()[i]; if (t) startTable(t); return !!movingTable; }, debugPutTable: function(){ putTable(false); return !movingTable; }, debugProps: function(){ return { props: state.props, held: heldProp && heldProp.key, moving: movingProp && movingProp.key, movables: (ctx.getMovables ? ctx.getMovables() : []).map(function(m){ return m.key; }) }; },
       debugGrabProp: function(k){ var m = (ctx.getMovables() || []).filter(function(x){ return x.key === k; })[0]; if (m){ if (m.big) startMoving(m); else grabProp(m); } return !!m; }, debugPutMoving: function(){ putMoving(); return !movingProp; }, debugFalling: function(){ return Object.keys(falling).length; },
