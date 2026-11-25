@@ -34,12 +34,12 @@ Rest dran kommt. Er wird nach jeder Etappe aktualisiert.
 | 11 | Fertiger Eintopf mit genau 20 Portionen | fertig: genau 20 Portionen (getestet), Füllstand sinkt sichtbar; angebrannter Eintopf muss weggeworfen werden; Qualität aus Schnitt, Brühe, Würze und Anbrennen bestimmt das Trinkgeld |
 | 12 | Schüssel nehmen und Portion einfüllen | fertig: leere Schüssel vom Stapel, Schöpfkelle füllt eine Portion ein; Schüsseln kommen nach dem Essen von selbst zurück (Spülen folgt später) |
 | 13 | Kunden treten ein und setzen sich | fertig: solange geöffnet ist, kommen Gäste einzeln durch die Eingangstür, gehen zu ihrem Platz und setzen sich; jeder der acht Gäste hat noch seinen festen Stuhl |
-| 14 | Bestellung entgegennehmen | teilweise: Gäste lesen kurz die Karte (drei Punkte) und bestellen dann von selbst mit einer Blase |
+| 14 | Bestellung entgegennehmen | fertig: Gäste lesen kurz die Karte (drei Punkte), dann zeigt ein Notizblock über dem Kopf, dass sie bestellen möchten (mit eigener Geduld); der Koch geht an den Tisch und nimmt die Bestellung mit E auf, erst dann wartet der Gast auf das Gericht (Sprechblase in dessen Farbe) |
 | 15 | Essen zum Tisch bringen | fertig |
 | 16 | Kunden bezahlen lassen | fertig: 9 € pro Portion plus Trinkgeld für schnelle Bedienung, Startgeld 250 € |
 | 17 | Geduldsanzeige und Verlassen des Restaurants | fertig: nach dem Bezahlen oder wenn die Geduld aufgebraucht ist, stehen sie auf und gehen durch die Tür hinaus |
 | 18 | Einfache Tagesabrechnung | fertig: Tag mit Uhr (11 bis 21 Uhr), Feierabend, Abrechnungszettel mit Gästen, Verkauf, Trinkgeld, Zutatenkosten, Tagesgewinn und Kassenstand; danach beginnt der nächste Tag |
-| 19 | Speichern und Laden | fertig: das Spiel speichert von selbst (alle 20 Sekunden, bei jedem Abschnitt des Tages, beim Schließen des Fensters) und bietet beim Start „Continue“ oder „New restaurant“ an; Sicherungskopie vom Vortag; ein Pausenmenü mit eigenem Speichern-Punkt fehlt noch |
+| 19 | Speichern und Laden | fertig: das Spiel speichert von selbst (alle 20 Sekunden, bei jedem Abschnitt des Tages, beim Schließen des Fensters) und bietet beim Start „Continue“ oder „New restaurant“ an; Sicherungskopie vom Vortag; Esc hält das Spiel an und zeigt eine Pausenkarte: zurück ins Spiel, jetzt speichern, speichern und beenden |
 
 Schon vorhanden, obwohl erst für später geplant: Flecken auf dem Boden und Kehren mit
 dem Besen; Büro mit Computer, Lagerraum und Putzkammer als Räume (noch ohne Funktion).
@@ -63,14 +63,14 @@ dem der Gastgeber die Aktionen prüft.
    und Laden. Damit ist das Abnahmekriterium von Phase 1 erfüllt: Spiel starten, Eintopf
    kochen, Gäste bedienen, Geld verdienen, den Tag beenden, Fortschritt speichern.
 
-Offen aus Phase 1 (bewusst vereinfacht): Kühlschrank ohne Funktion, Bestellung am Tisch
-aufnehmen, freie Platzwahl der Gäste, Spülen, Pausenmenü.
+Offen aus Phase 1 (bewusst vereinfacht): Kühlschrank ohne Funktion,
+freie Platzwahl der Gäste. (Spülen, Pausenmenü und Bestellen am Tisch sind inzwischen da.)
 
 ## Stand von Phase 2 (Restaurant-Management)
 
 | Nr. | Punkt aus dem Konzept | Stand |
 |---|---|---|
-| 1 | Voll funktionsfähiger Restaurant-Computer | teilweise: der Computer im Büro hat einen eigenen Bildschirm mit drei Seiten, „Supplies“ (bestellen), „Accounts“ (heutige Zahlen und frühere Tage) und „Reviews“ (Sterne und was die Gäste schreiben); Shop und Restaurantverwaltung fehlen |
+| 1 | Voll funktionsfähiger Restaurant-Computer | fertig in der ersten Fassung: fünf Seiten, „Supplies“ (bestellen), „Accounts“ (heutige Zahlen und frühere Tage), „Reviews“ (Sterne und was die Gäste schreiben), „Menu“ (welche Gerichte heute auf der Karte stehen und was eine Schüssel kostet, 5 bis 16 €; teurer bringt mehr Geld pro Schüssel, aber schlechtere Bewertungen für den Preis und etwas weniger Gäste) und „Shop“ |
 | 2 | Zutaten bestellen | fertig: Menge wählen, Summe, Kassenstand, bestellen |
 | 3 | Warenlieferung und Lagerverwaltung | fertig in der ersten Fassung: Lieferung kommt nach 30 Sekunden als Karton ins Lager; auspacken in die drei Kisten im Lagerraum (je 12) oder in die Küchenkisten (je 6); aus dem Lager holt der Koch einzelnes Gemüse in die Küche. Bestellen kann man, was in Küche und Lager zusammen passt |
 | 4 | Geräte kaufen | teilweise: Seite „Shop“ am Computer mit vier Dingen, jedes mit Wirkung: mehr Schüsseln (45 €, 20 statt 10 auf dem Stapel), Tischkerzen (60 €) und Topfpflanzen (110 €) machen den Raum schöner und heben die Bewertungen, ein stärkerer Brenner (220 €) kocht den Eintopf in 28 statt 40 Sekunden; Gekauftes steht sofort im Restaurant und bleibt im Spielstand |
@@ -78,7 +78,7 @@ aufnehmen, freie Platzwahl der Gäste, Spülen, Pausenmenü.
 | 6 | Wände und Böden verändern | fertig: vier Wandfarben (Creme, Salbeigrün, Terrakotta, Blassblau) und drei Böden (alte Fliesen, Holzdielen, Schiefer), gekauft als Farbeimer (reicht für 8 Wandstücke) oder Dielenpaket (6 Bodenfelder); sie werden geliefert, man stellt sie im Gastraum ab und arbeitet mit Werkzeug aus dem Lager: die Farbrolle (langer Stiel) wird in den Eimer getaucht und mit der Maus Bahn für Bahn über die Wand geführt; mit dem Gummihammer kniet der Koch am Bodenfeld und klopft die Dielen Reihe für Reihe fest |
 | 7 | Neue Räume freischalten | auf Wunsch anders gelöst: statt neuer Räume werden die vorhandenen Bereiche erweitert (Abschnitt „Expand“ im Shop): größerer Gastraum (die linke Wand rückt nach hinten, mehr Platz für Möbel, mehr Gäste), größere Küchenkisten (12 statt 6), mehr Lager (zweite Kistenreihe, 24 statt 12) |
 | 8 | Kundenzufriedenheit und Sternebewertungen | fertig in der ersten Fassung: jeder Gast bewertet seinen Besuch (Essen 35 %, Wartezeit 25 %, Sauberkeit 20 %, Preis 10 %, Atmosphäre 10 %), daraus werden 1 bis 5 Sterne und ein passender Satz; die Sterne des Restaurants sind der Schnitt der letzten 30 Bewertungen und bringen mehr oder weniger Gäste. Atmosphäre ist noch ein fester Wert, bis es Möbel zu kaufen gibt; Gästetypen fehlen |
-| 9 | Weitere Rezepte | fehlt |
+| 9 | Weitere Rezepte | fertig in der ersten Fassung: neben dem Gemüseeintopf (9 €) gibt es Kartoffelsuppe (2 Kartoffeln, 1 Zwiebel, 8 €) und Karottensuppe (2 Karotten, 1 Zwiebel, 10 €); die Rezepte kauft man am Computer (Abschnitt „Recipes“, 70 € und 120 €); was in den Topf kommt, entscheidet, was daraus wird; das Rezept an der Wand zeigt das Gericht, die Suppe hat ihre eigene Farbe in Topf und Schüssel; Gäste bestellen eines der Gerichte auf der Karte (Farbe in der Sprechblase), bekommen sie etwas anderes, ist das Essen weniger wert |
 | 10 | Reinigungssystem | teilweise: Flecken und Besen; Abwasch: die leere Schüssel bleibt mit dem Rest Eintopf auf dem Tisch, man räumt sie ab (F), spült sie an der Spüle (E) und stellt sie zurück auf den Stapel; an einem Platz mit schmutziger Schüssel setzt sich kein Gast, und schmutzige Schüsseln kosten in den Bewertungen Sauberkeit |
 
 Danach folgen Mehrspieler und Mitarbeiter (Phase 3).
