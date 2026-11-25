@@ -995,7 +995,8 @@
 
     // ---------- things you can use with E ---------------------------------------------
     // An entry: { pos, reach, label, use, key, obj, bias }.
-    //   key   'F' picks something up or puts it down, 'E' uses something, 'LMB' works with
+    //   key   'HOLD' (left mouse button held down) holds something, 'F' is where it goes when let go,
+    //         'E' uses something (and takes or puts back a tool), 'LMB' works with
     //         a tool (as in the game's concept); 'E' if not given
     //   use   what happens; without it the entry is only a note shown in passing ("Hands full")
     //   obj   the thing itself: it gets a thin outline while it can be used
@@ -1004,16 +1005,16 @@
     // and returns such entries.
     var moreInteractables = [];
     function interactables(){
-      var list = [], full = { reach: USE_REACH, label: 'Hands full', key: 'F' };
-      if (broomAt === 'closet') list.push(carry ? { pos: broomSpot, reach: full.reach, label: full.label, key: 'F' }
-                                               : { pos: broomSpot, reach: USE_REACH, label: 'Pick up broom', use: takeBroom, key: 'F', obj: standing });
-      if (broomAt === 'hand') list.push({ pos: broomSpot, reach: USE_REACH, label: 'Put the broom back', use: storeBroom, key: 'F' });
+      var list = [], full = { reach: USE_REACH, label: 'Hands full', key: 'E' };
+      if (broomAt === 'closet') list.push(carry ? { pos: broomSpot, reach: full.reach, label: full.label, key: 'E' }
+                                               : { pos: broomSpot, reach: USE_REACH, label: 'Pick up broom', use: takeBroom, key: 'E', obj: standing });
+      if (broomAt === 'hand') list.push({ pos: broomSpot, reach: USE_REACH, label: 'Put the broom back', use: storeBroom, key: 'E' });
       if (broomAt === 'floor'){   // any part of it within reach will do
         var chef = ctx.getChef(), a = held.position, d = V(0, 1, 0).applyQuaternion(held.quaternion);
         var t = clamp((chef.position.x - a.x) * d.x + (chef.position.z - a.z) * d.z, 0, BROOM_LEN);
         var at = V(a.x + d.x * t, 0, a.z + d.z * t);
-        list.push(carry ? { pos: at, reach: FLOOR_REACH, label: full.label, key: 'F' }
-                        : { pos: at, reach: FLOOR_REACH, label: 'Pick up broom', use: takeBroom, key: 'F', obj: held });
+        list.push(carry ? { pos: at, reach: FLOOR_REACH, label: full.label, key: 'E' }
+                        : { pos: at, reach: FLOOR_REACH, label: 'Pick up broom', use: takeBroom, key: 'E', obj: held });
       }
       var door = ctx.getDoor && ctx.getDoor();
       if (door && door.center){
@@ -1025,9 +1026,10 @@
       return list;
     }
     // what each key would act on right now: the nearest thing in front of him
-    var focus = { E: null, F: null, LMB: null };
+    var focus = { E: null, F: null, LMB: null, HOLD: null };
     function findFocus(){
-      var chef = ctx.getChef(), out = { E: null, F: null, LMB: null }, rank = { E: 1e9, F: 1e9, LMB: 1e9 };
+      var chef = ctx.getChef(), out = { E: null, F: null, LMB: null, HOLD: null }, rank = { E: 1e9, F: 1e9, LMB: 1e9, HOLD: 1e9 };
+      out.rank = rank;
       if (!chef) return out;
       var fx = Math.sin(chef.rotation.y), fz = Math.cos(chef.rotation.y);   // he faces where you look
       interactables().forEach(function(it){
@@ -1043,10 +1045,11 @@
       return out;
     }
     function busy(){ return !!sweep || !!move || broomAt === 'falling'; }
-    function interact(){   // E: use something
+    function interact(){   // E: use something, take a tool or put it back
       if (busy()) return;
       var it = findFocus().E;
       if (it && it.use) it.use();
+      else if (holding) dropBroom();   // (the broom: dropped right here)
     }
     function grab(){       // F: pick up / put down
       if (busy()) return;
@@ -1054,12 +1057,19 @@
       if (it){ if (it.use) it.use(); }
       else if (holding) dropBroom();   // drop it right here
     }
-    function click(){      // left mouse button: work with what he holds
+    function click(){      // left mouse button: work with what he holds, or hold on to something (as long as it is pressed)
       if (holding){ trySweep(); if (sweep) return; }
       if (busy()) return;
-      var it = findFocus().LMB;
-      if (it && it.use) it.use();
+      var f = findFocus(), it = f.LMB && f.LMB.use ? f.LMB : null, h = f.HOLD && f.HOLD.use ? f.HOLD : null;
+      if (it && h && f.rank.HOLD < f.rank.LMB) it = h;   // (whichever he is looking at more)
+      (it || h || {}).use && (it || h).use();
     }
+    // the button let go: whatever is held that way is put where he looks (a place for it), or let fall
+    var releasers = [], holdInfo = function(){ return false; }, pressed = false;
+    function letGo(){ if (!pressed) return; pressed = false; releasers.forEach(function(fn){ fn(); }); }
+    window.addEventListener('mousedown', function(e){ if (e.button === 0 && document.pointerLockElement === canvas) pressed = true; });
+    window.addEventListener('mouseup', function(e){ if (e.button === 0) letGo(); });
+    window.addEventListener('blur', letGo);   // (the window lost the mouse: as if let go)
 
     // A thin light outline around a thing: its own shape again, drawn inside out behind
     // it and pushed outward on the screen by a few pixels (the same width near and far).
@@ -1123,15 +1133,19 @@
       // hint and aim dot
       var aimed = sweep ? null : aimedStain();
       var tooClose = !!aimed && stainDist(aimed) < STAIN.near;
-      focus = busy() ? { E: null, F: null, LMB: null } : findFocus();
+      focus = busy() ? { E: null, F: null, LMB: null, HOLD: null } : findFocus();
       var locked = document.pointerLockElement === canvas;
       dot.classList.toggle('on', holding && locked);
       dot.classList.toggle('hit', !!(holding && aimed && !tooClose));
       // what can be done right now, one entry per key; else a note; else what the broom offers
       var parts = [], notes = [], glow = [];
-      [['F', keyHint('F', '')], ['E', keyHint('E', '')], ['LMB', MOUSE_SVG]].forEach(function(k){
+      var holdingMouse = holdInfo();
+      [['F', keyHint('F', '')], ['E', keyHint('E', '')], ['LMB', MOUSE_SVG], ['HOLD', MOUSE_SVG]].forEach(function(k){
         var it = focus[k[0]];
-        if (it && it.use){ parts.push(k[0] === 'LMB' ? MOUSE_SVG + '<span>' + it.label + '</span>' : keyHint(k[0], it.label)); glow.push(it.obj); }
+        if (k[0] === 'F' && holdingMouse){   // (let go: there, or it falls)
+          parts.push(MOUSE_SVG + '<span>Let go: ' + (it && it.use ? it.label : 'drop it') + '</span>'); if (it && it.use) glow.push(it.obj); return;
+        }
+        if (it && it.use){ parts.push(k[0] === 'LMB' ? MOUSE_SVG + '<span>' + it.label + '</span>' : k[0] === 'HOLD' ? MOUSE_SVG + '<span>Hold: ' + it.label + '</span>' : keyHint(k[0], it.label)); glow.push(it.obj); }
         else if (it) notes.push(it.label);
       });
       if (aimed && holding && !tooClose) parts.push(MOUSE_SVG + '<span>Sweep</span>');
@@ -1141,7 +1155,7 @@
       else if (notes.length) setHint('<span>' + notes[0] + '</span>', true);
       else if (aimed && holding && tooClose) setHint('<span>Step back a little</span>', true);
       else if (aimed && !move && !holding) setHint('<span>Get ' + (broomAt === 'closet' ? 'a broom from the cleaning closet' : 'the broom') + '</span>', true);
-      else if (holding && !sweep) setHint(keyHint('F', 'Drop broom'), true);
+      else if (holding && !sweep) setHint(keyHint('E', 'Drop broom'), true);
       else setHint('');
     }
 
@@ -1149,7 +1163,9 @@
     function afterAnimation(dt){ posePlayer(dt); }
 
     return {
-      interact: interact, grab: grab, click: click, update: update, getStains: getStains, setStains: setStains, afterAnimation: afterAnimation,
+      interact: interact, grab: grab, click: click,
+      // holding with the mouse button: what happens when it is let go, whether something is held that way, what is in focus
+      onLetGo: function(fn){ releasers.push(fn); }, holdInfo: function(fn){ holdInfo = fn; }, focusNow: function(){ return findFocus(); }, debugLetGo: function(){ pressed = true; letGo(); }, root: root, update: update, getStains: getStains, setStains: setStains, afterAnimation: afterAnimation,
       isHolding: function(){ return holding; },
       // for the other parts of the game (restaurant.js)
       addInteractables: function(fn){ moreInteractables.push(fn); },

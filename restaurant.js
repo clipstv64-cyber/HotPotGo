@@ -337,6 +337,7 @@
         decor: { walls: {}, floor: {} },              // each wall panel's paint and each floor square's flooring (index.html: ctx.surfaces); none: as it was
         prices: {}, offer: {},                        // the menu: a dish's price when it is not the usual one; offer[dish] false: not on the menu today
         furniture: [],                                // { id, key, x, z, rot, placed } (not placed yet: it is being put somewhere)
+        props: {},                                    // the decor moved somewhere else: key -> { x, y, z, q } (decor.js movables)
         spills: [],                                   // on the tables: { id, x, y, z, kind, size, rot, left (1 fresh .. 0 wiped off) }
         day: newDay(1)
       };
@@ -549,6 +550,7 @@
           g = state.items[arg];
           if (it || !g || (g.at !== 'surface' && g.at !== 'board' && g.at !== 'home' && g.at !== 'dock' && g.at !== 'pass' && !(g.at === 'table' && g.kind === 'dirty'))) return false;
           if (g.at === 'pass') delete g.slot;
+          delete g.tilt;
           if (g.at === 'table') delete g.guest;
           if (g.at === 'board'){
             if (!isCut(g) && cutCount(g) > 0) return false;   // half cut: it stays until it is done
@@ -2295,6 +2297,12 @@
       if (rolling) return [{ pos: rolling.from, reach: 9, key: 'E', label: 'Stop painting', use: stopRolling }];
       if (laying) return [{ pos: laying.from, reach: 9, key: 'E', label: 'Stop laying the floor', use: stopLaying }];
       if (dipping) return out;
+      if (movingProp){   // a big decor thing is being moved: that is all he can do
+        var me4 = ctx.getChef(), mp = movingProp;
+        return [mp.ok ? { pos: me4.position, reach: 9, key: 'E', label: 'Put the ' + propName(mp) + ' here', use: putMoving } : { pos: me4.position, reach: 9, key: 'E', label: 'No room here' },
+                { pos: me4.position, reach: 9, key: 'F', label: 'Turn it', use: function(){ if (movingProp) movingProp.rot = (movingProp.rot + Math.PI / 4) % (Math.PI * 2); } }];
+      }
+      if (heldProp) return [];   // (a decor thing in his hands: let go of it first)
       if (ghost){   // a piece of furniture is being placed: that is all he can do
         var me2 = ctx.getChef(), name = furnitureItem(ghost.key).name.toLowerCase();
         return [ghost.ok ? { pos: me2.position, reach: 9, key: 'E', label: 'Put the ' + name + ' here', use: function(){ if (ghost && ghost.ok && act('place', { id: ghost.id, x: +ghost.x.toFixed(3), z: +ghost.z.toFixed(3), rot: ghost.rot })) saveNow(false); } }
@@ -2328,7 +2336,7 @@
         else if (it) return;
         else if (!free) e.label = 'Hands full';
         else if (state.crates[kind] <= 0) e.label = state.store[kind] > 0 ? 'No ' + K.many + ' left \u2013 fetch some from the storeroom' : 'No ' + K.many + ' left \u2013 order some at the computer in the office';
-        else { e.label = 'Take ' + K.a; e.use = function(){ act('take', kind); }; e.obj = c.model; }
+        else { e.key = 'HOLD'; e.label = 'Take ' + K.a; e.use = function(){ act('take', kind); }; e.obj = c.model; }
         add(e);
       });
       // the storeroom's crates
@@ -2348,7 +2356,7 @@
         else if (it) return;
         else if (!free) e.label = 'Hands full';
         else if (state.store[kind] <= 0) e.label = 'No ' + K.many + ' in the store';
-        else { e.label = 'Take ' + K.a + ' (' + state.store[kind] + ' in the store)'; e.use = function(){ act('takeStore', kind); }; e.obj = c.model; }
+        else { e.key = 'HOLD'; e.label = 'Take ' + K.a + ' (' + state.store[kind] + ' in the store)'; e.use = function(){ act('takeStore', kind); }; e.obj = c.model; }
         add(e);
       });
       // the fridge (once there is a reason to open it: the recipe, or sausages in it)
@@ -2369,7 +2377,7 @@
         } else if (!it){
           if (!free) fe.label = 'Hands full';
           else if (state.fridge <= 0) fe.label = 'No sausages in the fridge \u2013 order some at the computer in the office';
-          else { fe.label = 'Take a sausage (' + state.fridge + ' in the fridge)'; fe.use = function(){ act('takeFridge'); }; }
+          else { fe.key = 'HOLD'; fe.label = 'Take a sausage (' + state.fridge + ' in the fridge)'; fe.use = function(){ act('takeFridge'); }; }
           add(fe);
         }
       }
@@ -2379,14 +2387,14 @@
       else if (!it){
         if (!free) sb.label = 'Hands full';
         else if (state.bowls <= 0) sb.label = 'No clean bowls left \u2013 clear the tables and wash up';
-        else { sb.label = 'Take a bowl'; sb.use = function(){ act('takeBowl'); }; sb.obj = place.stacks.bowls[state.bowls - 1]; }
+        else { sb.key = 'HOLD'; sb.label = 'Take a bowl'; sb.use = function(){ act('takeBowl'); }; sb.obj = place.stacks.bowls[state.bowls - 1]; }
         add(sb);
       }
       // things lying on the work surfaces
       Object.keys(state.items).forEach(function(id){
         var o = state.items[id];
         if (o.at !== 'surface' || !free) return;
-        add({ pos: V(o.x, 0, o.z), reach: RULES.itemReach, key: 'F', label: 'Pick up ' + nameOf(o, 'the'), use: function(){ act('pickUp', o.id); }, obj: objs[o.id] && objs[o.id].obj });
+        add({ pos: V(o.x, 0, o.z), reach: RULES.itemReach, key: 'HOLD', label: 'Pick up ' + nameOf(o, 'the'), use: function(){ act('pickUp', o.id); }, obj: objs[o.id] && objs[o.id].obj });
       });
       // putting down what he carries, where he looks
       // the chopping block and the knife beside it
@@ -2396,33 +2404,33 @@
         add(onBoard ? { pos: B.pos, reach: RULES.reach, key: 'F', label: 'The block is taken' }
                     : { pos: B.pos, reach: RULES.reach, key: 'F', label: 'Put ' + nameOf(it, 'the') + ' on the block', use: function(){ act('toBoard', ctx.getChef().rotation.y + Math.PI); }, obj: B.obj });
       } else if (it && it.kind === 'knife'){
-        add({ pos: place.knifeHome, reach: RULES.reach, key: 'F', label: 'Put the knife down', use: function(){ act('putKnife'); } });
+        add({ pos: place.knifeHome, reach: RULES.reach, key: 'E', label: 'Put the knife down', use: function(){ act('putKnife'); } });
         if (onBoard && cutAxis(onBoard)) add({ pos: B.pos, reach: RULES.cutReach, key: 'LMB', label: 'Cut ' + KINDS[onBoard.kind].the, use: startCutting, obj: see(onBoard) });
         else add({ pos: B.pos, reach: RULES.reach, key: 'LMB', label: onBoard ? 'It is cut up already' : 'Put a vegetable on the block first' });
       } else if (free){
-        if (knife.at === 'home') add({ pos: place.knifeHome, reach: RULES.reach, key: 'F', label: 'Take the knife', use: function(){ act('pickUp', knife.id); }, obj: see(knife) });
+        if (knife.at === 'home') add({ pos: place.knifeHome, reach: RULES.reach, key: 'E', label: 'Take the knife', use: function(){ act('pickUp', knife.id); }, obj: see(knife) });
         if (onBoard){
           add(!isCut(onBoard) && cutCount(onBoard) > 0
             ? { pos: B.pos, reach: RULES.reach, key: 'F', label: 'Finish cutting ' + KINDS[onBoard.kind].the + ' first' }
-            : { pos: B.pos, reach: RULES.reach, key: 'F', label: 'Pick up ' + nameOf(onBoard, 'the'), use: function(){ act('pickUp', onBoard.id); }, obj: see(onBoard) });
+            : { pos: B.pos, reach: RULES.reach, key: 'HOLD', label: 'Pick up ' + nameOf(onBoard, 'the'), use: function(){ act('pickUp', onBoard.id); }, obj: see(onBoard) });
         }
       }
       // the jug of broth and the spice shaker on the range
       ['broth', 'spice'].forEach(function(kind){
         var o = state.items[state.tools[kind]], at = place.home[kind].pos;
         var more = kind === 'broth' && o.left < COOK.jug - 0.05 && state.broth > 0.01;
-        if (it === o) add({ pos: at, reach: RULES.shelfReach, key: 'F', label: 'Put ' + KINDS[kind].the + ' back' + (more ? ' and fill it up' : ''), use: function(){ act('putHome'); } });
-        else if (free && o.at === 'home') add({ pos: at, reach: RULES.shelfReach, key: 'F', label: 'Take ' + KINDS[kind].the, use: function(){ act('pickUp', o.id); }, obj: see(o) });
+        if (it === o) add({ pos: at, reach: RULES.shelfReach, key: 'E', label: 'Put ' + KINDS[kind].the + ' back' + (more ? ' and fill it up' : ''), use: function(){ act('putHome'); } });
+        else if (free && o.at === 'home') add({ pos: at, reach: RULES.shelfReach, key: 'E', label: 'Take ' + KINDS[kind].the, use: function(){ act('pickUp', o.id); }, obj: see(o) });
       });
       // a delivery: the box in the storeroom, its broth at the shelf
       var atDock = parcels().filter(function(p){ return p.at === 'dock'; })[0];
       Object.keys(state.items).forEach(function(id){
         var o = state.items[id];
         if (o.at !== 'dock' || o.kind === 'parcel' || !free) return;
-        add({ pos: dockSpot(o.slot), reach: RULES.itemReach, key: 'F', label: 'Pick up ' + nameOf(o, 'the') + thingNote(o), use: function(){ act('pickUp', o.id); }, obj: see(o) });
+        add({ pos: dockSpot(o.slot), reach: RULES.itemReach, key: 'HOLD', label: 'Pick up ' + nameOf(o, 'the') + thingNote(o), use: function(){ act('pickUp', o.id); }, obj: see(o) });
       });
       if (it && (it.kind === 'paint' || it.kind === 'boards')) add({ pos: DOCK, reach: RULES.itemReach + 0.6, key: 'F', label: 'Put ' + nameOf(it, 'the') + ' down here', use: function(){ act('toDock'); } });
-      if (atDock && free) add({ pos: DOCK, reach: RULES.itemReach, key: 'F', label: 'Pick up the delivery box', use: function(){ act('pickUp', atDock.id); }, obj: see(atDock) });
+      if (atDock && free) add({ pos: DOCK, reach: RULES.itemReach, key: 'HOLD', label: 'Pick up the delivery box', use: function(){ act('pickUp', atDock.id); }, obj: see(atDock) });
       if (it && it.kind === 'parcel'){
         if (!atDock) add({ pos: DOCK, reach: RULES.itemReach, key: 'F', label: 'Put the delivery box down', use: function(){ act('toDock'); } });
         if (it.goods.broth > 0) add({ pos: place.home.broth.pos, reach: RULES.shelfReach, key: 'E', label: 'Unpack the broth', use: function(){ act('unpack', 'broth'); }, obj: see(state.items[state.tools.broth]) });
@@ -2437,27 +2445,26 @@
           else add({ pos: V(WP.pass[1].x, 0, WP.pass[1].z), reach: 1.9, key: 'F', label: 'The bar is full' });
         } else if (free) Object.keys(state.items).forEach(function(id){
           var o = state.items[id];
-          if (o.at === 'pass') add({ pos: V(WP.pass[o.slot].x, 0, WP.pass[o.slot].z), reach: 1.9, key: 'F', label: 'Pick up ' + nameOf(o, 'the'), use: function(){ act('pickUp', o.id); }, obj: see(o) });
+          if (o.at === 'pass') add({ pos: V(WP.pass[o.slot].x, 0, WP.pass[o.slot].z), reach: 1.9, key: 'HOLD', label: 'Pick up ' + nameOf(o, 'the'), use: function(){ act('pickUp', o.id); }, obj: see(o) });
         });
       }
+      // the decor's movable things: small ones held with the mouse button, big ones moved with E
+      if (free && ctx.getMovables) ctx.getMovables().forEach(function(m){
+        if (propFalling[m.key] || !m.holder.parent) return;
+        var mp2 = m.holder.getWorldPosition(V());
+        if (m.big) add({ pos: V(mp2.x, 0, mp2.z), reach: 2.0, key: 'E', label: 'Move the ' + propName(m), use: function(){ startMoving(m); }, obj: m.holder, bias: 0.3 });
+        else add({ pos: V(mp2.x, 0, mp2.z), reach: RULES.itemReach, key: 'HOLD', label: 'Pick up the ' + propName(m), use: function(){ grabProp(m); }, obj: m.holder, bias: 0.2 });
+      });
       // spills on the tables: wiped with the cloth
       if (it && it.kind === 'rag') state.spills.forEach(function(s){
         add({ pos: V(s.x, 0, s.z), reach: 1.75, key: 'LMB', label: 'Wipe the table', use: function(){ startWipe(s.id); }, obj: spillMeshes[s.id] });
       });
       ['roller', 'mallet', 'rag'].forEach(function(kind){
         var o = state.items[state.tools[kind]], at = place.home[kind].pos;
-        if (it === o) add({ pos: at, reach: 1.7, key: 'F', label: 'Put ' + KINDS[kind].the + ' back', use: function(){ act('putHome'); } });
-        else if (free && o.at === 'home') add({ pos: at, reach: 1.7, key: 'F', label: 'Take ' + KINDS[kind].the, use: function(){ act('pickUp', o.id); }, obj: see(o) });
+        if (it === o) add({ pos: at, reach: 1.7, key: 'E', label: 'Put ' + KINDS[kind].the + ' back', use: function(){ act('putHome'); } });
+        else if (free && o.at === 'home') add({ pos: at, reach: 1.7, key: 'E', label: 'Take ' + KINDS[kind].the, use: function(){ act('pickUp', o.id); }, obj: see(o) });
       });
       var me3 = ctx.getChef();
-      // a bucket or a pack: put down on the floor where he looks
-      if (it && (it.kind === 'paint' || it.kind === 'boards')){
-        lookedAt('floor', 3);
-        var fx = hit.x, fz = hit.z, ok3 = rayDir.y < -0.15 && Math.hypot(fx - me3.position.x, fz - me3.position.z) < 2.8 && ctx.floorFree(fx, fz, 0.3) &&
-                  !Object.keys(state.items).some(function(id){ var o = state.items[id]; return o.at === 'surface' && o.y < 0.05 && Math.hypot(o.x - fx, o.z - fz) < 0.6; }) &&
-                  !state.furniture.some(function(fu){ var fp = footprint(fu.key, fu.rot); return Math.abs(fu.x - fx) < fp.hx + 0.3 && Math.abs(fu.z - fz) < fp.hz + 0.3; });
-        if (ok3) add({ pos: V(fx, 0, fz), reach: 3, key: 'F', bias: 0.5, label: 'Put ' + nameOf(it, 'the') + ' down here', use: function(){ act('setDown', { x: +fx.toFixed(3), z: +fz.toFixed(3), rot: +(Math.atan2(fx - me3.position.x, fz - me3.position.z)).toFixed(3) }); } });
-      }
       // the roller: dipped into a bucket, then against the wall
       if (it && it.kind === 'roller'){
         var bucket = nearest('paint', me3.position, function(o){ return o.left > 0; }, 1.6);
@@ -2497,10 +2504,6 @@
       } else if (inOffice && office.desk){   // (as long as the chair cannot be sat on: standing at the desk)
         add({ pos: V(office.desk.x, 0, office.desk.z), reach: 2.2, key: 'E', label: 'Use the computer', use: openPC });
       }
-      if (it && !HOME[it.kind] && it.kind !== 'paint' && it.kind !== 'boards' && aim && !scoop){
-        if (aim.free) add({ pos: V(aim.x, 0, aim.z), reach: 2.4, key: 'F', bias: 0.35, label: 'Put ' + nameOf(it, 'the') + ' down', use: function(){ if (aim && aim.free) act('putDown', aim); } });
-        else add({ pos: V(aim.x, 0, aim.z), reach: 2.4, key: 'F', bias: 0.35, label: 'No room here' });
-      }
       state.pots.forEach(function(p, pi){
         if (!place.pots[pi]) return;
         var n0 = out.length;
@@ -2518,7 +2521,7 @@
       Object.keys(state.items).forEach(function(id){
         var o = state.items[id];
         if (o.kind !== 'dirty' || o.at !== 'table') return;
-        if (free) add({ pos: V(o.x, 0, o.z), reach: RULES.serveReach, key: 'F', label: 'Clear away the dirty bowl', use: function(){ act('pickUp', o.id); }, obj: objs[o.id] && objs[o.id].obj });
+        if (free) add({ pos: V(o.x, 0, o.z), reach: RULES.serveReach, key: 'HOLD', label: 'Clear away the dirty bowl', use: function(){ act('pickUp', o.id); }, obj: objs[o.id] && objs[o.id].obj });
       });
       var k2 = ctx.getKitchen();
       if (it && it.kind === 'dirty' && k2.sinkAt) add({ pos: k2.sinkAt, reach: RULES.reach, key: 'E', label: 'Wash the bowl', use: function(){ if (act('wash')) say('Clean again \u2013 put it back on the stack'); } });
@@ -2597,6 +2600,7 @@
           if (shown.carry !== o.id){ shown.carry = o.id; v.placed = false; v.rot = undefined; play.setCarry(v.obj, toolHold[o.kind] || KINDS[o.kind].carry); }
           return;
         }
+        if (o.at === 'falling'){ if (!v.obj.parent) root.add(v.obj); v.obj.visible = true; v.placed = false; return; }   // (stepFalling moves it)
         if (o.at === 'waiter'){   // (index.html holds it in front of him)
           if (!v.placed){ v.obj.visible = true; root.add(v.obj); v.placed = true; v.at = o.at; v.slot = o.slot; v.px = o.x; v.pz = o.z; if (waiterHere()) ctx.getWaiter().hold(v.obj); }
           return;
@@ -2610,7 +2614,7 @@
           else if (o.at === 'pass'){ var pp = ctx.getWaiter().place; v.obj.position.set(pp.pass[o.slot].x, pp.barTop, pp.pass[o.slot].z); v.obj.rotation.set(0, 0.4 * o.slot, 0); }
           else if (o.at === 'dock'){ v.obj.position.copy(dockSpot(o.slot)); v.obj.rotation.set(0, o.slot ? 0 : 0.35, 0); }
           else if (o.at === 'board'){ v.obj.position.copy(place.board.pos); if (v.rot === undefined) v.rot = o.rot || 0; v.obj.rotation.set(0, v.rot, 0); }
-          else { v.obj.position.set(o.x, o.y, o.z); v.obj.rotation.set(0, o.rot || 0, 0); }
+          else { v.obj.position.set(o.x, o.y, o.z); if (o.tilt) v.obj.quaternion.fromArray(o.tilt); else v.obj.rotation.set(0, o.rot || 0, 0); }
           v.obj.visible = true; root.add(v.obj); v.placed = true; v.at = o.at; v.px = o.x; v.pz = o.z; v.slot = o.slot;
         }
         if (o.at === 'board'){   // it turns to how it is laid
@@ -2618,7 +2622,7 @@
           v.obj.rotation.y = v.rot;
         }
       });
-      if (!it && shown.carry !== null && shown.carry !== 'tool'){ shown.carry = null; play.setCarry(null); }   // ('tool': the ladle while stirring)
+      if (!it && shown.carry !== null && shown.carry !== 'tool' && !heldProp){ shown.carry = null; play.setCarry(null); }   // ('tool': the ladle while stirring)
       // the line above the hint: cutting, a short message, or what he carries
       var label = it ? 'Carrying ' + nameOf(it, 'a') + (it.kind === 'parcel' ? ': ' + goodsText(it.goods) : thingNote(it)) : '', ob = state.board && state.items[state.board];
       if (cutting && ob && cutAxis(ob)){
@@ -2634,7 +2638,228 @@
 
     // ---------- every frame: time passes, then everything shown follows the state -------------
     var clock = 0;
+    // ---------- letting things fall ----------------------------------------------------------
+    // Something held with the mouse button and let go (not over a place for it) falls: a box the
+    // size of its model in a cannon-es world, against the floor and the furniture's boxes. Once it lies
+    // still it is put down there (at 'surface', tilted as it fell); landing in a pot or in front of a
+    // guest waiting for that bowl counts as putting it in / serving it.
+    var phys = null, falling = {};   // falling: id -> { body, off (model origin from the box's middle, in the box's frame), q (model turn in the box's frame), t }
+    var UPRIGHT = { bowl: true, stew: true, dirty: true, paint: true, parcel: true, boards: true };   // (these land the right way up: bowls do not spill)
+    function physics(){
+      if (phys || !window.CANNON) return phys;
+      var C = window.CANNON, w = new C.World({ gravity: new C.Vec3(0, -9.82, 0) });
+      w.broadphase = new C.SAPBroadphase(w);   // (only pairs that are near each other are tested)
+      w.allowSleep = true; w.defaultContactMaterial.friction = 0.45; w.defaultContactMaterial.restitution = 0.12;
+      var ground = new C.Body({ mass: 0, shape: new C.Plane() }); ground.quaternion.setFromEuler(-Math.PI / 2, 0, 0); w.addBody(ground);
+      phys = { C: C, world: w, statics: [], sig: '' };
+      return phys;
+    }
+    function syncStatics(){   // the furniture's boxes, built again whenever they change (furniture moved, the room grown)
+      var obs = ctx.getObstacles ? ctx.getObstacles() : [], sig = obs.length;
+      obs.forEach(function(o){ sig += '|' + [o.minX, o.maxX, o.minZ, o.maxZ, o.top || 0].map(function(n){ return n.toFixed(2); }).join(','); });
+      if (sig === phys.sig) return;
+      phys.sig = sig;
+      phys.statics.forEach(function(b){ phys.world.removeBody(b); }); phys.statics = [];
+      var C = phys.C;
+      obs.forEach(function(o){
+        var top = o.top || 0; if (!(top > 0.02)) return;
+        var b = new C.Body({ mass: 0, shape: new C.Box(new C.Vec3((o.maxX - o.minX) / 2, top / 2, (o.maxZ - o.minZ) / 2)) });
+        b.position.set((o.minX + o.maxX) / 2, top / 2, (o.minZ + o.maxZ) / 2);
+        phys.world.addBody(b); phys.statics.push(b);
+      });
+    }
+    // things saved while falling: let fall from where they were
+    function refall(){
+      if (!physics()) return;
+      Object.keys(state.items).forEach(function(id){
+        var it = state.items[id]; if (!it.refall || it.at !== 'surface') return;
+        var v = objs[id]; if (!v || !v.placed) return;
+        delete it.refall;
+        var had = state.carry; it.at = 'hand'; state.carry = it.id; letFall(it); state.carry = had;
+      });
+    }
+    // let the thing in his hands fall from where it is held
+    function letFall(it){
+      var v = objs[it.id], P = physics();
+      play.setCarry(null); shown.carry = null;
+      if (!v || !P){ state.carry = null; it.at = 'surface'; var c0 = ctx.getChef(); it.x = c0.position.x + Math.sin(c0.rotation.y) * 0.6; it.y = 0; it.z = c0.position.z + Math.cos(c0.rotation.y) * 0.6; it.rot = 0; delete it.tilt; return; }
+      syncStatics();
+      var C = P.C, obj = v.obj;
+      // (a falling item: stepFalling moves it, landed() decides what it became)
+      obj.updateMatrixWorld(true);
+      var wp = obj.getWorldPosition(V()), wq = obj.getWorldQuaternion(new T.Quaternion()), box = new T.Box3().setFromObject(obj), size = box.getSize(V()), mid = box.getCenter(V());
+      if (obj.parent !== root){ root.add(obj); }
+      obj.position.copy(wp); obj.quaternion.copy(wq);   // (root stands at the world's origin)
+      var body = new C.Body({ mass: 1, shape: new C.Box(new C.Vec3(Math.max(0.02, size.x / 2), Math.max(0.02, size.y / 2), Math.max(0.02, size.z / 2))),
+                               linearDamping: 0.05, angularDamping: 0.25, fixedRotation: !!UPRIGHT[it.kind] });
+      // (let go inside a box it cannot be in: a low one, it starts on top of it; a tall one (a wall, a shelf), it starts at his side of it)
+      (ctx.getObstacles ? ctx.getObstacles() : []).forEach(function(o){
+        if (!(mid.x > o.minX && mid.x < o.maxX && mid.z > o.minZ && mid.z < o.maxZ && mid.y - size.y / 2 < (o.top || 0))) return;
+        if ((o.top || 0) < 1.6){ var dy = o.top + size.y / 2 + 0.01 - mid.y; mid.y += dy; wp.y += dy; return; }
+        var c1 = ctx.getChef(), nx = Math.max(o.minX - 0.05 - size.x / 2, Math.min(o.maxX + 0.05 + size.x / 2, c1.position.x)), nz = Math.max(o.minZ - 0.05 - size.z / 2, Math.min(o.maxZ + 0.05 + size.z / 2, c1.position.z));
+        var inX = c1.position.x > o.minX && c1.position.x < o.maxX, sx = inX ? 0 : nx - mid.x, sz = inX ? nz - mid.z : 0;
+        if (!inX && c1.position.z > o.minZ && c1.position.z < o.maxZ) sz = 0;
+        mid.x += sx; mid.z += sz; wp.x += sx; wp.z += sz;
+      });
+      body.position.set(mid.x, mid.y, mid.z); body.sleepSpeedLimit = 0.12; body.sleepTimeLimit = 0.35;
+      var ch = ctx.getChef();   // (a little of his walking goes along)
+      if (ch && ctx.isMoving()){ body.velocity.set(Math.sin(ch.rotation.y) * 0.8, 0, Math.cos(ch.rotation.y) * 0.8); }
+      P.world.addBody(body);
+      state.carry = null; it.at = 'falling'; it.x = wp.x; it.y = wp.y; it.z = wp.z;
+      falling[it.id] = { body: body, off: wp.clone().sub(mid), q: wq.clone(), t: 0 };
+      delete it.tilt;
+    }
+    // a decor thing let fall the same way (props: key -> the same as falling, for the decor)
+    var propFalling = {};
+    function propFall(m, from){
+      var P = physics(), obj = m.holder, home = propHome();
+      obj.updateMatrixWorld(true);
+      var wp = obj.getWorldPosition(V()), wq = obj.getWorldQuaternion(new T.Quaternion());
+      home.add(obj); obj.position.copy(home.worldToLocal(wp.clone())); obj.quaternion.copy(wq);   // (the decor's own group stands at the origin, unturned)
+      if (!P){ putProp(m, V(wp.x, 0, wp.z), new T.Quaternion()); return; }
+      syncStatics();
+      var box = new T.Box3().setFromObject(obj), size = box.getSize(V()), mid = box.getCenter(V()), C = P.C;
+      var body = new C.Body({ mass: 1, shape: new C.Box(new C.Vec3(Math.max(0.02, size.x / 2), Math.max(0.02, size.y / 2), Math.max(0.02, size.z / 2))), linearDamping: 0.05, angularDamping: 0.25 });
+      body.position.set(mid.x, mid.y, mid.z); body.sleepSpeedLimit = 0.12; body.sleepTimeLimit = 0.35;
+      P.world.addBody(body);
+      propFalling[m.key] = { m: m, body: body, off: wp.clone().sub(mid), q: wq.clone(), t: 0 };
+    }
+    function stepPropFalling(dt){
+      var keys = Object.keys(propFalling); if (!keys.length || !phys) return;
+      if (!Object.keys(falling).length) phys.world.step(1 / 60, dt, 4);   // (stepFalling steps it otherwise)
+      keys.forEach(function(k){
+        var f = propFalling[k], b = f.body, iq = b.interpolatedQuaternion, ip = b.interpolatedPosition, bq = new T.Quaternion(iq.x, iq.y, iq.z, iq.w);
+        var p = V(ip.x, ip.y, ip.z).add(f.off.clone().applyQuaternion(bq)), q = bq.clone().multiply(f.q);
+        f.m.holder.position.copy(p); f.m.holder.quaternion.copy(q);
+        f.t += dt;
+        if (b.sleepState === phys.C.Body.SLEEPING || f.t > 5 || p.y < -2){ phys.world.removeBody(b); delete propFalling[k]; putProp(f.m, V(p.x, Math.max(0, p.y), p.z), q); }
+      });
+    }
+    function propHome(){ var ms = ctx.getMovables(); return ms.length && ms[0].holder.parent && ms[0].holder.parent !== play.root ? ms[0].holder.parent : (propHome.g || (propHome.g = ms.length ? ms[0].home : root)); }
+    // a decor thing put somewhere: there, its box (if it has one) moved along, remembered in the game
+    function putProp(m, p, q){
+      var home = m.home || propHome();
+      if (m.holder.parent !== home) home.add(m.holder);
+      m.holder.position.copy(p); m.holder.quaternion.copy(q);
+      state.props[m.key] = { x: +p.x.toFixed(3), y: +p.y.toFixed(3), z: +p.z.toFixed(3), q: [q.x, q.y, q.z, q.w].map(function(n){ return +n.toFixed(4); }) };
+      boxAlong(m);
+    }
+    function boxAlong(m){
+      if (!m.box) return;
+      if (!m.half) m.half = { x: (m.box.maxX - m.box.minX) / 2, z: (m.box.maxZ - m.box.minZ) / 2, yaw: 0 };
+      var yaw = new T.Euler().setFromQuaternion(m.holder.quaternion, 'YXZ').y, o = m.boxOff || { x: 0, z: 0 };
+      var turned = Math.abs(Math.sin(yaw - (m.half.yaw || 0))) > 0.7;   // (about a quarter turn from how it stood: the box turns too)
+      var hx = turned ? m.half.z : m.half.x, hz = turned ? m.half.x : m.half.z, p = m.holder.position;
+      var cx = p.x + o.x * Math.cos(yaw) + o.z * Math.sin(yaw), cz = p.z - o.x * Math.sin(yaw) + o.z * Math.cos(yaw);   // (its box's middle, turned with it)
+      m.box.minX = cx - hx; m.box.maxX = cx + hx; m.box.minZ = cz - hz; m.box.maxZ = cz + hz;
+    }
+    // the saved places, put into effect once (and again after loading)
+    var propsShown = null;
+    function showProps(){
+      var ms = ctx.getMovables ? ctx.getMovables() : [];
+      ms.forEach(function(m){ if (!m.home && m.holder.parent && m.holder.parent !== play.root) m.home = m.holder.parent; });
+      if (propsShown === state.props) return;
+      propsShown = state.props;
+      ms.forEach(function(m){
+        var s = state.props[m.key]; if (!s || m === heldProp || m === movingProp) return;
+        if (m.holder.parent !== m.home && m.home) m.home.add(m.holder);
+        m.holder.position.set(s.x, s.y, s.z); m.holder.quaternion.fromArray(s.q); boxAlong(m);
+      });
+    }
+    var heldProp = null, movingProp = null;
+    var PROP_NAME = { filing_cabinet: 'filing cabinet', office_shelf: 'office shelf', storage_rack: 'storage rack', boxes: 'boxes', sacks: 'sacks', cleaning_shelf: 'cleaning shelf', mop_bucket: 'mop bucket', brooms: 'brooms', umbrellastand: 'umbrella stand', slotmachine: 'slot machine', fridge: 'old fridge', plant: 'plant', coatrack: 'coat rack', wetsign: 'wet floor sign', crates: 'beer crates',
+                      register: 'cash register', trophies: 'trophy', dogfigure: 'china dog', condiments: 'condiments', candlebottle: 'candle' };
+    function propName(m){ return PROP_NAME[m.name] || m.name; }
+    function grabProp(m){
+      if (carried() || heldProp || movingProp) return;
+      if (!m.home) m.home = m.holder.parent;
+      m.holder.updateMatrixWorld(true);
+      var s = new T.Box3().setFromObject(m.holder).getSize(V());
+      heldProp = m;
+      play.setCarry(m.holder, { half: Math.max(0.08, Math.min(0.28, Math.max(s.x, s.z) / 2)), fwd: 0.46, drop: -0.25, grip: 0.08, back: 0, curl: 0.35 });
+      m.holder.visible = true; shown.carry = 'prop';
+    }
+    function dropProp(){
+      var m = heldProp; if (!m) return;
+      heldProp = null;
+      m.holder.updateMatrixWorld(true);
+      var wp = m.holder.getWorldPosition(V()), wq = m.holder.getWorldQuaternion(new T.Quaternion());
+      play.setCarry(null); shown.carry = null;
+      var home = m.home || propHome(); home.add(m.holder); m.holder.position.copy(home.worldToLocal(wp)); m.holder.quaternion.copy(wq); m.holder.visible = true;
+      propFall(m);
+    }
+    // a big thing: picked up with E, it follows the view on the floor; E puts it down where there is room, F turns it
+    function startMoving(m){
+      if (carried() || heldProp || movingProp) return;
+      if (!m.home) m.home = m.holder.parent;
+      movingProp = m; movingProp.rot = new T.Euler().setFromQuaternion(m.holder.quaternion, 'YXZ').y; movingProp.ok = false;
+      if (m.box){ m.boxWas = { minX: m.box.minX, maxX: m.box.maxX, minZ: m.box.minZ, maxZ: m.box.maxZ }; if (!m.half) m.half = { x: (m.box.maxX - m.box.minX) / 2, z: (m.box.maxZ - m.box.minZ) / 2, yaw: 0 }; m.box.minX = m.box.maxX = m.box.minZ = m.box.maxZ = 999; }   // (not in its own way)
+    }
+    function stepMoving(){
+      var m = movingProp; if (!m) return;
+      var me = ctx.getChef(), f = V(Math.sin(me.rotation.y), 0, Math.cos(me.rotation.y));
+      var half = m.half || { x: 0.3, z: 0.3 }, turned = Math.abs(Math.sin(m.rot - (half.yaw || 0))) > 0.7, hx = turned ? half.z : half.x, hz = turned ? half.x : half.z;
+      var dist = 0.6 + Math.max(hx, hz) + 0.35, x = me.position.x + f.x * dist, z = me.position.z + f.z * dist;
+      m.holder.position.set(x, 0, z); m.holder.quaternion.setFromEuler(new T.Euler(0, m.rot, 0));
+      m.ok = ctx.boxFree(x - hx, x + hx, z - hz, z + hz) && Math.hypot(x - me.position.x, z - me.position.z) > 0.4;
+    }
+    function putMoving(){
+      var m = movingProp; if (!m || !m.ok) return;
+      movingProp = null;
+      if (m.box && m.boxWas){ m.box.minX = 0; }   // (boxAlong sets it where it now stands)
+      putProp(m, m.holder.position.clone(), m.holder.quaternion.clone());
+    }
     var spillTex = null, spillMeshes = {};
+    function stepFalling(dt){
+      var ids = Object.keys(falling); if (!ids.length || !phys) return;
+      phys.world.step(1 / 60, dt, 4);
+      ids.forEach(function(id){
+        var f = falling[id], it = state.items[id], v = objs[id];
+        if (!it || it.at !== 'falling'){ phys.world.removeBody(f.body); delete falling[id]; return; }
+        var b = f.body, iq = b.interpolatedQuaternion, ip = b.interpolatedPosition, bq = new T.Quaternion(iq.x, iq.y, iq.z, iq.w);   // (between two physics steps: smooth on any screen)
+        var p = V(ip.x, ip.y, ip.z).add(f.off.clone().applyQuaternion(bq)), q = bq.clone().multiply(f.q);
+        if (v){ v.obj.position.copy(p); v.obj.quaternion.copy(q); }
+        it.x = p.x; it.y = p.y; it.z = p.z;
+        f.t += dt;
+        if (b.sleepState === phys.C.Body.SLEEPING || f.t > 5 || p.y < -2){   // lying still: put down there (or where it is caught)
+          phys.world.removeBody(b); delete falling[id];
+          landed(it, p, q);
+        }
+      });
+    }
+    function landed(it, p, q){
+      it.at = 'surface'; it.x = +p.x.toFixed(3); it.y = Math.max(0, +p.y.toFixed(3)); it.z = +p.z.toFixed(3);
+      it.rot = +Math.atan2(2 * (q.w * q.y + q.x * q.z), 1 - 2 * (q.y * q.y + q.x * q.x)).toFixed(3);
+      it.tilt = [q.x, q.y, q.z, q.w].map(function(n){ return +n.toFixed(4); });
+      if (objs[it.id]) objs[it.id].placed = false;
+      // in a pot: as if put in (cut food); in front of a guest waiting for it: served
+      for (var i = 0; i < state.pots.length && place.pots && place.pots[i]; i++){
+        var PP = place.pots[i];
+        if (Math.hypot(p.x - PP.pos.x, p.z - PP.pos.z) < PP.inner && p.y < PP.pos.y + PP.size.y + 0.1 && isFood(it.kind) && isCut(it)){
+          var had = state.carry, done = withPot(i, function(){ state.carry = it.id; return act('addToPot'); });
+          state.carry = had;   // (what he holds by now stays in his hands)
+          if (done){ usePot(i); return; }
+        }
+      }
+      if (it.kind === 'stew') for (var gi = 0; gi < state.guests.length; gi++){
+        var g = state.guests[gi], gv = views[g.id];
+        if (g.phase === 'waiting' && gv && gv.info.where() === 'seated' && Math.hypot(p.x - gv.bowlAt.x, p.z - gv.bowlAt.z) < 0.45 && Math.abs(p.y - gv.bowlAt.y) < 0.25){
+          var had2 = state.carry; state.carry = it.id; delete it.tilt; if (act('serve', g.id)){ state.carry = had2; return; } state.carry = had2;
+        }
+      }
+    }
+    // the mouse button let go: put there if he looks at a place for it, else let it fall
+    function letGo(){
+      if (hold || pc) return;   // (the pause card, the computer screen: clicks there are not letting go)
+      if (heldProp){ dropProp(); return; }
+      var it = carried();
+      if (!it || HOME[it.kind]) return;
+      var f = play.focusNow ? play.focusNow().F : null;
+      if (f && f.use){ f.use(); if (!carried()) return; }
+      it = carried(); if (it && !HOME[it.kind]) letFall(it);
+    }
+    if (play.onLetGo) play.onLetGo(letGo);
+    if (play.holdInfo) play.holdInfo(function(){ var it = carried(); return (!!it && !HOME[it.kind] && !pc) || !!heldProp; });
     function showSpills(){
       if (!spillTex){ spillTex = new T.TextureLoader().load('textures/stains.png'); spillTex.encoding = T.sRGBEncoding; }
       var live = {};
@@ -2744,6 +2969,9 @@
       clock += dt;
       buildPlaces();
       showSpills();
+      if (!hold){ refall(); stepFalling(dt); stepPropFalling(dt); }
+      showProps(); stepMoving();
+      if (!phys && window.CANNON && place.pot && clock > 3){ physics(); syncStatics(); }   // (ready before anything is first let go)
       if (ctx.getWaiter && ctx.getWaiter().ready()) ctx.getWaiter().freeze(!!hold);
       if (!hold) waiterStep(dt);
       if (wiping && (ctx.isMoving() || !carried() || carried().kind !== 'rag' || !spillOf(wiping.id))) stopWipe();
@@ -3351,6 +3579,21 @@
           o.at = 'pass'; o.slot = k; onBar[k] = true;
         });
       }
+      if (ok) Object.keys(st.items).forEach(function(id){   // (falling when it was saved: lying there; a tilt must be a turn)
+        var o = st.items[id]; if (!o) return;
+        if (o.at === 'falling'){ o.at = 'surface'; o.y = num(o.y) ? Math.max(0, o.y) : 0; delete o.tilt; o.refall = true; }   // (it falls on once the game is loaded)
+        if (o.refall !== undefined && o.refall !== true) delete o.refall;
+        if (o.tilt !== undefined && !(Array.isArray(o.tilt) && o.tilt.length === 4 && o.tilt.every(num) && Math.abs(Math.hypot(o.tilt[0], o.tilt[1], o.tilt[2], o.tilt[3]) - 1) < 0.01)) delete o.tilt;
+      });
+      if (ok){   // where decor things were moved to (an older save has none)
+        var props = {};
+        if (st.props && typeof st.props === 'object') Object.keys(st.props).forEach(function(k){
+          var s = st.props[k];
+          if (/^[a-z_]+[0-9]*$/.test(k) && s && num(s.x) && num(s.y) && num(s.z) && Math.abs(s.x) < 40 && Math.abs(s.z) < 40 && s.y >= 0 && s.y < 5 &&
+              Array.isArray(s.q) && s.q.length === 4 && s.q.every(num) && Math.abs(Math.hypot(s.q[0], s.q[1], s.q[2], s.q[3]) - 1) < 0.01) props[k] = { x: s.x, y: s.y, z: s.z, q: s.q };
+        });
+        st.props = props;
+      }
       if (ok){   // spills on the tables (an older save has none)
         st.spills = (Array.isArray(st.spills) ? st.spills : []).filter(function(s){
           return !!s && num(s.id) && num(s.x) && num(s.y) && num(s.z) && (s.kind === 1 || s.kind === 3) && num(s.size) && s.size > 0 && s.size < 1 && num(s.rot) && num(s.left) && s.left > 0 && s.left <= 1;
@@ -3376,7 +3619,7 @@
       ok = ok && Object.keys(HOME).every(function(k){ var o = st.items[st.tools[k]]; return !!o && o.kind === k; });
       ok = ok && Object.keys(st.items).every(function(id){
         var o = st.items[id];
-        return !!o && o.id === +id && !!KINDS[o.kind] && oneOf(o.at, ['hand', 'surface', 'board', 'home', 'table', 'dock', 'pass', 'waiter']) &&
+        return !!o && o.id === +id && !!KINDS[o.kind] && oneOf(o.at, ['hand', 'surface', 'board', 'home', 'table', 'dock', 'pass', 'waiter', 'falling']) &&
                (o.at !== 'surface' || (num(o.x) && num(o.y) && num(o.z))) && (!o.cut || (isFood(o.kind) && okCut(o.cut))) &&
                (o.kind !== 'parcel' || (!!o.goods && GOODS.every(function(k){ return num(o.goods[k]) && o.goods[k] >= 0; })));
       });
@@ -3442,7 +3685,7 @@
         var t = thingOf(o);
         if (!t || things >= DOCK_SLOTS - 1){ delete st.items[id]; if (st.carry === +id) st.carry = null; return; }
         things++; t.id = o.id; t.at = o.at === 'hand' && st.carry === +id ? 'hand' : o.at === 'surface' && num(o.x) && num(o.z) && Math.abs(o.x) < 40 && Math.abs(o.z) < 40 ? 'surface' : 'dock';
-        if (t.at === 'surface'){ t.x = o.x; t.y = 0; t.z = o.z; t.rot = num(o.rot) ? o.rot : 0; }
+        if (t.at === 'surface'){ t.x = o.x; t.y = num(o.y) ? Math.max(0, Math.min(3, o.y)) : 0; t.z = o.z; t.rot = num(o.rot) ? o.rot : 0; }
         if (t.at === 'dock'){ var sl = o.slot; if (o.at === 'dock' && sl >= 1 && sl < DOCK_SLOTS && sl === Math.floor(sl) && !spots[sl]) spots[sl] = true; else sl = nextSpot(); t.slot = sl; }
         st.items[id] = t;
       });
@@ -3514,6 +3757,11 @@
       Object.keys(objs).forEach(function(id){ if (objs[id].obj.parent) objs[id].obj.parent.remove(objs[id].obj); delete objs[id]; });
       play.setCarry(null);
       cutting = null; pouring = null; stirring = null; shake = null; scoop = null; wiping = null; note.t = 0;
+      Object.keys(falling).forEach(function(id){ if (phys) phys.world.removeBody(falling[id].body); delete falling[id]; });
+      Object.keys(propFalling).forEach(function(k){ if (phys) phys.world.removeBody(propFalling[k].body); delete propFalling[k]; });
+      if (heldProp){ var hp = heldProp; heldProp = null; play.setCarry(null); if (hp.home) hp.home.add(hp.holder); }
+      if (movingProp){ if (movingProp.box && movingProp.boxWas){ var bw = movingProp.boxWas; movingProp.box.minX = bw.minX; movingProp.box.maxX = bw.maxX; movingProp.box.minZ = bw.minZ; movingProp.box.maxZ = bw.maxZ; } movingProp = null; }
+      propsShown = null;   // (the loaded game's places)
       job = null; if (ctx.getWaiter && ctx.getWaiter().ready()){ ctx.getWaiter().hold(null); ctx.getWaiter().show(false); }   // (he starts at the bar again)
       Object.keys(spillMeshes).forEach(function(id){ var m = spillMeshes[id]; root.remove(m); m.geometry.dispose(); m.material.dispose(); delete spillMeshes[id]; });   // (the loaded game's spills are drawn anew)
       closePC(); shown.delivered = undefined; shown.stars = null; shownSurf = { walls: {}, floor: {} };
@@ -3648,6 +3896,8 @@
       debugPhase: function(id, phase){ var g = guest(id); if (g){ g.phase = phase; g.t = 0; } },
       debugGuests: function(){ return state.guests.map(function(g){ return g.id + ':' + g.phase + '/' + views[g.id].info.where(); }).join(' '); },
       debugMoney: function(n){ state.money = n; },
+      debugLetGo: letGo, debugProps: function(){ return { props: state.props, held: heldProp && heldProp.key, moving: movingProp && movingProp.key, movables: (ctx.getMovables ? ctx.getMovables() : []).map(function(m){ return m.key; }) }; },
+      debugGrabProp: function(k){ var m = (ctx.getMovables() || []).filter(function(x){ return x.key === k; })[0]; if (m){ if (m.big) startMoving(m); else grabProp(m); } return !!m; }, debugPutMoving: function(){ putMoving(); return !movingProp; }, debugFalling: function(){ return Object.keys(falling).length; },
       debugAct: act, debugPot: function(){ return state.pot; }, debugPots: function(){ return state.pots.map(function(p){ return p.phase + ' ' + p.dish + ' x' + p.portions + ' has ' + FOOD.map(function(k){ return p.has[k]; }).join('') + ' heat ' + p.heat + ' ' + Math.round(p.temp); }).join(' / ') + ' at ' + state.potAt; }, debugCookRules: COOK,
       debugTools: function(){ return { ids: state.tools, jug: MODELS.broth.tool, home: place.home, left: state.items[state.tools.broth].left }; },
       debugCut: { start: startCutting, stop: stopCutting, limits: function(){ var o = state.items[state.board]; return o && cutAxis(o) ? cutLimits(o, cutAxis(o)) : null; },

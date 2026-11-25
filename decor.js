@@ -40,6 +40,17 @@
     // The returned group is the anchor: by default the model stands on it, centred;
     // anchor 'top' hangs it below, 'center' centres it, back: true puts its back at the anchor
     // (for things against a wall). opts.done(holder, size) runs once it is loaded.
+    // things that can be moved: { key, name, holder, box (or null), big, size }
+    var movables = [];
+    function movable(key, holder, box, big){
+      var m = { key: key, name: key.replace(/[0-9]+$/, ''), holder: holder, box: box || null, big: !!big };
+      if (box){   // where its box's middle is from the holder, in the holder's own turn (a thing against a wall stands on its back edge)
+        var dx = (box.minX + box.maxX) / 2 - holder.position.x, dz = (box.minZ + box.maxZ) / 2 - holder.position.z, a = -holder.rotation.y;
+        m.boxOff = { x: dx * Math.cos(a) + dz * Math.sin(a), z: -dx * Math.sin(a) + dz * Math.cos(a) };
+        m.half = { x: (box.maxX - box.minX) / 2, z: (box.maxZ - box.minZ) / 2, yaw: holder.rotation.y };
+      }
+      movables.push(m); holder.userData.movable = m; return holder;
+    }
     function place(name, size, parent, x, y, z, ry, opts){
       opts = opts || {};
       var holder = new T.Group(); holder.position.set(x || 0, y || 0, z || 0); holder.rotation.y = ry || 0;
@@ -102,8 +113,7 @@
     place('radiator', { w: 1.3 }, onWall('front', X1 + 6.0, 0.06), 0, 0, 0.02, 0, { back: true });
     place('radiator', { w: 1.3 }, onWall('front', X1 - 1.6, 0.06), 0, 0, 0.02, 0, { back: true });
     addBox(-6, 9.85, 1.4, 0.25, 0.85); addBox(1.6, 9.85, 1.4, 0.25, 0.85);
-    place('umbrellastand', { h: 0.85 }, null, -2.55, 0, 9.65, Math.PI, { cast: true });
-    addBox(-2.55, 9.65, 0.35, 0.35, 0.6);
+    movable('umbrellastand', place('umbrellastand', { h: 0.85 }, null, -2.55, 0, 9.65, Math.PI, { cast: true }), addBox(-2.55, 9.65, 0.35, 0.35, 0.6), true);
 
     // ---------- left wall: mounted pike and deer antlers -------------------------
     place('fish', { w: 1.05 }, onWall('left', 10 + 4.66, 2.4), 0, 0, 0, 0, { back: true, anchor: 'center' }).rotation.z = -0.03;
@@ -111,22 +121,16 @@
 
     // ---------- back wall: chalkboard, slot machine, fridge with the TV on top, plant, coat rack ----
     place('chalkboard', { w: 1.9 }, onWall('back', 10 - 3.5, 2.25), 0, 0, 0, 0, { back: true, anchor: 'center' });
-    place('slotmachine', { h: 1.75 }, null, -0.85, 0, -10 + 0.03, 0, { back: true, cast: true });
-    addBox(-0.85, -9.65, 0.75, 0.6, 1.75);
-    place('fridge', { h: 1.95 }, null, 1.65, 0, -10 + 0.03, 0, { back: true, cast: true, done: function(h, s){
-      place('crttv', { w: 0.62 }, h, 0, s.y, s.z / 2, -0.15, { cast: true });   // old TV standing on the fridge
-    } });
-    addBox(1.65, -9.62, 0.85, 0.7, 1.95);
-    place('plant', { h: 1.75 }, null, -5.3, 0, -9.45, 0.4, { cast: true });
-    addBox(-5.3, -9.45, 0.5, 0.5, 0.45);
-    place('coatrack', { h: 1.9 }, null, -9.4, 0, -9.4, Math.PI * 0.25, { cast: true });
-    addBox(-9.4, -9.4, 0.5, 0.5, 1.9);
+    movable('slotmachine', place('slotmachine', { h: 1.75 }, null, -0.85, 0, -10 + 0.03, 0, { back: true, cast: true }), addBox(-0.85, -9.65, 0.75, 0.6, 1.75), true);
+    movable('fridge', place('fridge', { h: 1.95 }, null, 1.65, 0, -10 + 0.03, 0, { back: true, cast: true, done: function(h, s){
+      place('crttv', { w: 0.62 }, h, 0, s.y, s.z / 2, -0.15, { cast: true });   // old TV standing on the fridge (it goes along)
+    } }), addBox(1.65, -9.62, 0.85, 0.7, 1.95), true);
+    movable('plant', place('plant', { h: 1.75 }, null, -5.3, 0, -9.45, 0.4, { cast: true }), addBox(-5.3, -9.45, 0.5, 0.5, 0.45), true);
+    movable('coatrack', place('coatrack', { h: 1.9 }, null, -9.4, 0, -9.4, Math.PI * 0.25, { cast: true }), addBox(-9.4, -9.4, 0.5, 0.5, 1.9), true);
 
     // ---------- floor: wet floor sign, beer crates ---------------------------
-    place('wetsign', { h: 0.65 }, null, 1.05, 0, 7.6, 0.5, { cast: true });
-    addBox(1.05, 7.6, 0.4, 0.35, 0.65);
-    place('crates', { h: 0.95 }, null, 3.1, 0, 9.45, -Math.PI / 2, { cast: true });
-    addBox(3.1, 9.45, 0.5, 0.5, 0.95);
+    movable('wetsign', place('wetsign', { h: 0.65 }, null, 1.05, 0, 7.6, 0.5, { cast: true }), addBox(1.05, 7.6, 0.4, 0.35, 0.65));
+    movable('crates', place('crates', { h: 0.95 }, null, 3.1, 0, 9.45, -Math.PI / 2, { cast: true }), addBox(3.1, 9.45, 0.5, 0.5, 0.95), true);
 
     // ---------- ceiling: lamps over the tables (with their light), ceiling fan ----
     [[-7.5, -7, 'lamp_enamel'], [-7.5, -2.33, 'lamp_tiffany'], [-7.5, 2.33, 'lamp_drum'], [-7.5, 7, 'lamp_enamel']].forEach(function(p, i){
@@ -153,9 +157,9 @@
       var top = new T.Box3().setFromObject(bar).max.y;
       if (!(top > 0.5 && top < 3)) top = 1.47;
       var x = PART.x - 0.3;
-      place('register', { w: 0.45 }, null, x, top, -3.9, -Math.PI / 2 - 0.25, { cast: true });
-      place('trophies', { w: 0.34 }, null, x, top, 1.2, -Math.PI / 2 + 0.2, { cast: true });
-      place('dogfigure', { h: 0.22 }, null, x, top, 3.6, -Math.PI / 2 - 0.5, { cast: true });
+      movable('register', place('register', { w: 0.45 }, null, x, top, -3.9, -Math.PI / 2 - 0.25, { cast: true }));
+      movable('trophies', place('trophies', { w: 0.34 }, null, x, top, 1.2, -Math.PI / 2 + 0.2, { cast: true }));
+      movable('dogfigure', place('dogfigure', { h: 0.22 }, null, x, top, 3.6, -Math.PI / 2 - 0.5, { cast: true }));
     }
 
     var office = { chair: null, screen: null, room: null, desk: null };
@@ -327,37 +331,29 @@
       addBox(chairX, chairZ - 0.12, 0.6, 0.6, 0.5);   // (where the empty chair stands, pushed in: see CHEF_SEAT.tuck in index.html)
       office.room = { x0: x0, x1: xo, z0: z1, z1: zm };   // the office's floor (he sits down only from inside it)
       office.desk = { x: doorO, z: z1 + 1.25 };           // in front of the desk
-      place('filing_cabinet', { h: 1.35 }, null, x0 + 0.03, 0, zm - 0.45, Math.PI / 2, { back: true, cast: true });
-      addBox(x0 + 0.35, zm - 0.45, 0.7, 0.5, 1.35);   // (by the door: the chef walks past it to pull out his chair)
-      place('office_shelf', { h: 1.8 }, null, xo - 0.03, 0, z1 + 1.9, -Math.PI / 2, { back: true, cast: true });
-      addBox(xo - 0.2, z1 + 1.9, 0.4, 1.0, 1.8);
+      movable('filing_cabinet', place('filing_cabinet', { h: 1.35 }, null, x0 + 0.03, 0, zm - 0.45, Math.PI / 2, { back: true, cast: true }), addBox(x0 + 0.35, zm - 0.45, 0.7, 0.5, 1.35), true);   // (by the door: the chef walks past it to pull out his chair)
+      movable('office_shelf', place('office_shelf', { h: 1.8 }, null, xo - 0.03, 0, z1 + 1.9, -Math.PI / 2, { back: true, cast: true }), addBox(xo - 0.2, z1 + 1.9, 0.4, 1.0, 1.8), true);
       // storeroom: big rack at the back, sacks, boxes (and the stock's crates: restaurant.js)
-      place('storage_rack', { w: 1.7 }, null, doorS, 0, z1 + 0.03, 0, { back: true, cast: true });
-      addBox(doorS, z1 + 0.35, 1.7, 0.7, 2.2);
-      place('boxes', { h: 1.2 }, null, xs - 0.03, 0, zm - 1.0, -Math.PI / 2, { back: true, cast: true });
-      addBox(xs - 0.45, zm - 1.0, 0.9, 0.9, 1.2);
+      movable('storage_rack', place('storage_rack', { w: 1.7 }, null, doorS, 0, z1 + 0.03, 0, { back: true, cast: true }), addBox(doorS, z1 + 0.35, 1.7, 0.7, 2.2), true);
+      movable('boxes', place('boxes', { h: 1.2 }, null, xs - 0.03, 0, zm - 1.0, -Math.PI / 2, { back: true, cast: true }), addBox(xs - 0.45, zm - 1.0, 0.9, 0.9, 1.2), true);
       // these appear as soon as their Meshy models exist (models/d_<name>.glb)
       ifModel('sacks', function(){
-        place('sacks', { w: 1.0 }, null, xo + 0.03, 0, z1 + 1.9, Math.PI / 2, { back: true, cast: true });
-        addBox(xo + 0.55, z1 + 1.9, 1.0, 1.0, 0.9);
+        movable('sacks', place('sacks', { w: 1.0 }, null, xo + 0.03, 0, z1 + 1.9, Math.PI / 2, { back: true, cast: true }), addBox(xo + 0.55, z1 + 1.9, 1.0, 1.0, 0.9), true);
       });
       // (in front of the rack stand the three crates of the storeroom's stock: restaurant.js, STORE_X)
       // cleaning closet: shelf with supplies, utility sink, mop bucket, brooms
       ifModel('cleaning_shelf', function(){
-        place('cleaning_shelf', { w: 1.1 }, null, doorC, 0, z1 + 0.03, 0, { back: true, cast: true });
-        addBox(doorC, z1 + 0.25, 1.1, 0.5, 1.8);
+        movable('cleaning_shelf', place('cleaning_shelf', { w: 1.1 }, null, doorC, 0, z1 + 0.03, 0, { back: true, cast: true }), addBox(doorC, z1 + 0.25, 1.1, 0.5, 1.8), true);
       });
       ifModel('utility_sink', function(){
         place('utility_sink', { w: 0.75 }, null, x1 - 0.03, 0, zm - 1.4, -Math.PI / 2, { back: true, cast: true });
         addBox(x1 - 0.3, zm - 1.4, 0.6, 0.8, 0.9);
       });
       ifModel('mop_bucket', function(){
-        place('mop_bucket', { h: 1.2 }, null, xs + 0.45, 0, z1 + 1.2, 0.6, { cast: true });
-        addBox(xs + 0.45, z1 + 1.2, 0.55, 0.55, 0.5);
+        movable('mop_bucket', place('mop_bucket', { h: 1.2 }, null, xs + 0.45, 0, z1 + 1.2, 0.6, { cast: true }), addBox(xs + 0.45, z1 + 1.2, 0.55, 0.55, 0.5), true);
       });
       ifModel('brooms', function(){
-        place('brooms', { h: 1.5 }, null, xs + 0.03, 0, zm - 0.7, Math.PI / 2, { back: true, cast: true });
-        addBox(xs + 0.2, zm - 0.7, 0.35, 0.5, 1.5);
+        movable('brooms', place('brooms', { h: 1.5 }, null, xs + 0.03, 0, zm - 0.7, Math.PI / 2, { back: true, cast: true }), addBox(xs + 0.2, zm - 0.7, 0.35, 0.5, 1.5), true);
       });
     })();
 
@@ -368,8 +364,8 @@
       var y = size.y;
       tables.push({ spot: spot, y: y, i: i });
       if (bought.candles && i !== 0 && i !== 2) place('candlebottle', { h: 0.4 }, bought.candles, spot[0] + 0.28, y, spot[1] + 0.01, 0, {});   // (the candles were bought before this table was there)
-      place('condiments', { w: 0.3 }, null, spot[0] - 0.12, y, spot[1], [0.2, -0.3, 1.4, 3.0][i % 4], { cast: true });
-      if (i === 0 || i === 2) place('candlebottle', { h: 0.4 }, null, spot[0] + 0.28, y, spot[1] + 0.01, 0, {});
+      movable('condiments' + i, place('condiments', { w: 0.3 }, null, spot[0] - 0.12, y, spot[1], [0.2, -0.3, 1.4, 3.0][i % 4], { cast: true }));
+      if (i === 0 || i === 2) movable('candlebottle' + i, place('candlebottle', { h: 0.4 }, null, spot[0] + 0.28, y, spot[1] + 0.01, 0, {}));
     }
 
     function update(dt, time){
@@ -394,7 +390,7 @@
         ctx.addBox(p[0], p[1], 0.55, 0.55, 1.4);
       });
     }
-    return { dressTable: dressTable, showBought: showBought,
+    return { dressTable: dressTable, showBought: showBought, movables: movables,
              // the skirting board along the part of the left wall that opens when the dining room is enlarged
              openLeftWall: function(open){ if (leftSkirt) leftSkirt.visible = !open; }, update: update, root: root, entrance: entrance, office: office };
   }

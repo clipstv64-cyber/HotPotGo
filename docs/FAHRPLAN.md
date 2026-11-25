@@ -92,8 +92,16 @@ Phase 1 ist vollständig (der Kühlschrank hat seit dem 25.11.2026 eine Aufgabe:
 
 - **Nicht vom Konzept abweichen** (Wunsch vom 20.11.2026). Wo das Konzept etwas offen
   lässt, wird die Entscheidung hier festgehalten.
-- **Tasten wie im Konzept:** F nimmt auf und legt ab, E benutzt, linke Maustaste arbeitet
-  mit dem Werkzeug. Anvisierte Gegenstände bekommen eine dünne Umrandung.
+- **Tasten (geändert auf Wunsch vom 25.11.2026):** Kleine Dinge (Gemüse, Schüsseln, Pakete,
+  Eimer, kleine Deko wie Kasse, Kerzen, Gewürzständer) hält man mit gedrückter linker
+  Maustaste vor sich; lässt man los, kommt es an die Stelle, auf die man schaut (Brett,
+  Kiste, Schüsselstapel, Theke, Kühlschrank), sonst fällt es mit echter Physik und bleibt
+  liegen, wo es landet (in den Topf gefallenes geschnittenes Gemüse ist im Topf, eine Schüssel
+  vor dem wartenden Gast ist serviert). Kochen (schneiden, rühren, gießen, würzen) bleibt auf
+  der Maustaste. Werkzeuge (Messer, Krug, Streuer, Rolle, Hammer, Tuch, Besen) nimmt man mit
+  E. Große Dinge (Pflanze, Garderobe, Spielautomat, Kisten, Regale und Möbel in den
+  Hinterzimmern) hebt man mit E an, sie folgen dem Blick, F dreht, E stellt hin. Wo alles
+  steht, bleibt im Spielstand. Anvisierte Gegenstände bekommen eine dünne Umrandung.
 - **Zutaten liegen in der Küche** (Vorratsecke neben dem Herd). Das Konzept erlaubt
   Kühlschrank oder Lager; das Lager wird mit den Lieferungen in Phase 2 gebraucht.
 - **Kochen einfacher als im Konzept** (Wunsch vom 20.11.2026): Der Herd kennt nur an und
