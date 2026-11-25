@@ -1057,6 +1057,7 @@
         var facing = d < 0.8 || (dx * fx + dz * fz) / d > 0.35;
         if (!facing) return;
         if (it.obj && !lookedAt(it.obj)) return;   // (a thing: only when he looks right at it)
+        if (it.aimAt && ctx.camera && aimRay.distanceToPoint(it.aimAt) > (it.aimR || 0.3)) return;   // (a place: only when he looks at it)
         // the nearest thing he is looking at; something to do comes before a mere note
         var cos = d > 1e-4 ? (dx * fx + dz * fz) / d : 1;
         var key = it.key || 'E', r = d + 6 * (1 - cos) + (it.bias || 0) + (it.use ? 0 : 100);

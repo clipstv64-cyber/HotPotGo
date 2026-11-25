@@ -2342,7 +2342,7 @@
         }
         if (it && it.kind === kind && !it.cut){
           if (state.crates[kind] >= kitchenCap()) e.label = 'This crate is full';
-          else { e.label = 'Put ' + K.the + ' back'; e.use = function(){ act('putBack'); }; }
+          else { e.label = 'Put ' + K.the + ' back'; e.use = function(){ act('putBack'); }; e.obj = c.model; }   // (only when he looks at the crate)
         }
         else if (it) return;
         else if (!free) e.label = 'Hands full';
@@ -2362,7 +2362,7 @@
         }
         if (it && it.kind === kind && !it.cut){
           if (state.store[kind] >= storeCap()) e.label = 'This crate is full';
-          else { e.label = 'Put ' + K.the + ' in the store'; e.use = function(){ act('putStore'); }; }
+          else { e.label = 'Put ' + K.the + ' in the store'; e.use = function(){ act('putStore'); }; e.obj = c.grp; }
         }
         else if (it) return;
         else if (!free) e.label = 'Hands full';
@@ -2394,7 +2394,7 @@
       }
       // the stack of clean bowls
       var sb = { pos: place.stacks.pos, reach: RULES.reach, key: 'F' };
-      if (it && (it.kind === 'bowl' || (it.kind === 'dirty' && !ctx.getKitchen().sinkAt))){ sb.label = 'Put the bowl back'; sb.use = function(){ act('returnBowl'); }; add(sb); }
+      if (it && (it.kind === 'bowl' || (it.kind === 'dirty' && !ctx.getKitchen().sinkAt))){ sb.label = 'Put the bowl back'; sb.use = function(){ act('returnBowl'); }; sb.obj = place.stacks.grp; add(sb); }
       else if (!it){
         if (!free) sb.label = 'Hands full';
         else if (state.bowls <= 0) sb.label = 'No clean bowls left \u2013 clear the tables and wash up';
@@ -2440,10 +2440,10 @@
         if (o.at !== 'dock' || o.kind === 'parcel' || !free) return;
         add({ pos: dockSpot(o.slot), reach: RULES.itemReach, key: 'HOLD', label: 'Pick up ' + nameOf(o, 'the') + thingNote(o), use: function(){ act('pickUp', o.id); }, obj: see(o) });
       });
-      if (it && (it.kind === 'paint' || it.kind === 'boards')) add({ pos: DOCK, reach: RULES.itemReach + 0.6, key: 'F', label: 'Put ' + nameOf(it, 'the') + ' down here', use: function(){ act('toDock'); } });
+      if (it && (it.kind === 'paint' || it.kind === 'boards')) add({ aimAt: V(DOCK.x, 0.2, DOCK.z), aimR: 0.7, pos: DOCK, reach: RULES.itemReach + 0.6, key: 'F', label: 'Put ' + nameOf(it, 'the') + ' down here', use: function(){ act('toDock'); } });
       if (atDock && free) add({ pos: DOCK, reach: RULES.itemReach, key: 'HOLD', label: 'Pick up the delivery box', use: function(){ act('pickUp', atDock.id); }, obj: see(atDock) });
       if (it && it.kind === 'parcel'){
-        if (!atDock) add({ pos: DOCK, reach: RULES.itemReach, key: 'F', label: 'Put the delivery box down', use: function(){ act('toDock'); } });
+        if (!atDock) add({ pos: DOCK, reach: RULES.itemReach, key: 'F', aimAt: V(DOCK.x, 0.2, DOCK.z), aimR: 0.6, label: 'Put the delivery box down', use: function(){ act('toDock'); } });
         if (it.goods.broth > 0) add({ pos: place.home.broth.pos, reach: RULES.shelfReach, key: 'E', label: 'Unpack the broth', use: function(){ act('unpack', 'broth'); }, obj: see(state.items[state.tools.broth]) });
       }
       // the tools for walls and floor, in the storeroom
@@ -2452,7 +2452,7 @@
       if (WP && state.owned.waiter){
         if (it && it.kind === 'stew'){
           for (var ps = 0; ps < PASS_SLOTS; ps++) if (!passTaken(ps)) break;
-          if (ps < PASS_SLOTS) add({ pos: V(WP.pass[ps].x, 0, WP.pass[ps].z), reach: 1.9, key: 'F', label: 'Put the bowl on the bar for the waiter', use: (function(k){ return function(){ act('toPass', k); }; })(ps) });
+          if (ps < PASS_SLOTS) add({ pos: V(WP.pass[ps].x, 0, WP.pass[ps].z), reach: 1.9, key: 'F', aimAt: V(WP.pass[ps].x, WP.barTop, WP.pass[ps].z), aimR: 0.5, label: 'Put the bowl on the bar for the waiter', use: (function(k){ return function(){ act('toPass', k); }; })(ps) });
           else add({ pos: V(WP.pass[1].x, 0, WP.pass[1].z), reach: 1.9, key: 'F', label: 'The bar is full' });
         } else if (free) Object.keys(state.items).forEach(function(id){
           var o = state.items[id];
@@ -3019,7 +3019,7 @@
     }
     // the mouse button let go: put there if he looks at a place for it, else let it fall
     window.addEventListener('wheel', function(e){
-      if (hold || pc || !e.deltaY || !ctx.renderer || document.pointerLockElement !== ctx.renderer.domElement) return;
+      if (hold || pc || !e.deltaY) return;
       wheelTurn(e.deltaY > 0 ? 1 : -1);
     }, { passive: true });
     function wheelTurn(s){
