@@ -2656,7 +2656,7 @@
       });
     }
     // ---------- the waiter ----------------------------------------------------------------
-    // job: { kind: 'order' | 'serve', guest, item, step: 'go' | 'there' | 'back', t }
+    // job: { kind: 'order' | 'serve' | 'clear', guest (null when clearing), item, step: 'go' | 'there' | 'back', t, way }
     var job = null;
     function waiterWay(g){   // from the bar to the guest's chair: along the bar to the front wall, then the guest's own way in
       var v = views[g.id], r = v && v.info.route && v.info.route(), W = ctx.getWaiter().place;
@@ -2672,7 +2672,7 @@
         var o = state.items[id]; if (o.at !== 'waiter') return;
         var k = barPlace(o.kind);
         if (k >= 0){ o.at = 'pass'; o.slot = k; }
-        else { o.at = 'surface'; o.x = W.place.pass[1].x; o.y = W.place.barTop; o.z = W.place.pass[2].z + 0.45; o.rot = 0; }   // (on the bar beside the others)
+        else { o.at = 'surface'; o.x = W.place.pass[1].x; o.y = W.place.barTop; o.z = W.place.pass[0].z - 1.1; o.rot = 0; }   // (on the bar, clear of its places)
       });
     }
     function waiterStep(dt){
@@ -2697,6 +2697,7 @@
         if (!best && barPlace('dirty') >= 0) Object.keys(state.items).forEach(function(id){
           var o = state.items[id];
           if (best || o.kind !== 'dirty' || o.at !== 'table' || !num(o.seat) || !num(o.x)) return;
+          if (state.guests.some(function(q){ return q.phase !== 'away' && q.seat === o.seat; })) return;   // (not while the guest is still getting up and going)
           var rt = W.routeTo(o.seat);
           if (rt && rt.length >= 5) best = { kind: 'clear', item: o, way: [V(W.place.lane, 0, rt[1].z), rt[1], rt[2], rt[3], rt[4]] };
         });
@@ -2714,7 +2715,8 @@
         var bv = views[job.guest], at = job.kind === 'clear' && bowl ? bowl : bv && bv.bowlAt;
         if (at) W.face(Math.atan2(at.x - W.pos().x, at.z - W.pos().z));
         job.t += dt;
-        if (job.t < RULES.staff.wait) return;
+        var gone = job.kind === 'clear' && !(bowl && bowl.at === 'table' && bowl.kind === 'dirty');   // (the chef took it meanwhile: nothing to wait for)
+        if (job.t < RULES.staff.wait && !gone) return;
         if (job.kind === 'order' && g && g.phase === 'ready') act('order', g.id);
         if (job.kind === 'serve' && bowl && g && act('serveBy', { guest: g.id, item: bowl.id })) W.hold(null);
         if (job.kind === 'clear' && bowl && bowl.kind === 'dirty' && bowl.at === 'table'){ bowl.at = 'waiter'; delete bowl.guest; delete bowl.seat; }   // (he takes it along)
