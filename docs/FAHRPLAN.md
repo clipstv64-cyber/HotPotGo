@@ -24,7 +24,7 @@ Rest dran kommt. Er wird nach jeder Etappe aktualisiert.
 | 1 | Begehbares Restaurant mit Küche und Gastraum | fertig |
 | 2 | Spielerbewegung und Kamera | fertig |
 | 3 | Gegenstände aufnehmen und ablegen | fertig: F nimmt auf und legt ab (Zutaten, Schüsseln auf den Arbeitsflächen; Besen überall), E benutzt |
-| 4 | Kühlschrank und Zutaten | teilweise: Kartoffeln, Karotten, Zwiebeln als einzelne Gegenstände aus drei Kisten in der Vorratsecke der Küche, mit Vorrat (je 6), der am Computer nachbestellt wird; Kühlschrank noch ohne Funktion |
+| 4 | Kühlschrank und Zutaten | teilweise: Kartoffeln, Karotten, Zwiebeln als einzelne Gegenstände aus drei Kisten in der Vorratsecke der Küche, mit Vorrat (je 6), der am Computer nachbestellt wird; im Kühlschrank liegen Würste (bis zu 8): am Computer bestellt, am Kühlschrank ausgepackt, mit F herausgenommen, auf dem Brett in Scheiben geschnitten; man braucht sie für den Wurst-Eintopf |
 | 5 | Interaktives Schneidebrett | fertig: das Hackbrett auf der Arbeitsinsel; Gemüse mit F darauflegen, das Beil daneben mit F nehmen |
 | 6 | Gemüse schneiden | fertig: linke Maustaste startet, Maus seitwärts setzt das Messer, Maus nach unten schneidet; Karotte in Scheiben (5 Schnitte), Kartoffel in Würfel (3 + 3, wird gedreht), Zwiebel in Stücke (2 + 3); Schnittgeräusch; gleichmäßige Schnitte geben bessere Qualität |
 | 7 | Zutaten in den Topf geben | fertig: nur geschnittenes Gemüse, die Stücke liegen so im Topf, wie sie geschnitten wurden |
@@ -63,7 +63,7 @@ dem der Gastgeber die Aktionen prüft.
    und Laden. Damit ist das Abnahmekriterium von Phase 1 erfüllt: Spiel starten, Eintopf
    kochen, Gäste bedienen, Geld verdienen, den Tag beenden, Fortschritt speichern.
 
-Offen aus Phase 1 (bewusst vereinfacht): Kühlschrank ohne Funktion.
+Phase 1 ist vollständig (der Kühlschrank hat seit dem 25.11.2026 eine Aufgabe: die Würste).
 (Spülen, Pausenmenü, Bestellen am Tisch und freie Platzwahl sind inzwischen da.)
 
 ## Stand von Phase 2 (Restaurant-Management)
@@ -78,7 +78,7 @@ Offen aus Phase 1 (bewusst vereinfacht): Kühlschrank ohne Funktion.
 | 6 | Wände und Böden verändern | fertig: vier Wandfarben (Creme, Salbeigrün, Terrakotta, Blassblau) und drei Böden (alte Fliesen, Holzdielen, Schiefer), gekauft als Farbeimer (reicht für 8 Wandstücke) oder Dielenpaket (6 Bodenfelder); sie werden geliefert, man stellt sie im Gastraum ab und arbeitet mit Werkzeug aus dem Lager: die Farbrolle (langer Stiel) wird in den Eimer getaucht und mit der Maus Bahn für Bahn über die Wand geführt; mit dem Gummihammer kniet der Koch am Bodenfeld und klopft die Dielen Reihe für Reihe fest |
 | 7 | Neue Räume freischalten | auf Wunsch anders gelöst: statt neuer Räume werden die vorhandenen Bereiche erweitert (Abschnitt „Expand“ im Shop): größerer Gastraum (die linke Wand rückt nach hinten, mehr Platz für Möbel, mehr Gäste), größere Küchenkisten (12 statt 6), mehr Lager (zweite Kistenreihe, 24 statt 12) |
 | 8 | Kundenzufriedenheit und Sternebewertungen | fertig in der ersten Fassung: jeder Gast bewertet seinen Besuch (Essen 35 %, Wartezeit 25 %, Sauberkeit 20 %, Preis 10 %, Atmosphäre 10 %), daraus werden 1 bis 5 Sterne und ein passender Satz; die Sterne des Restaurants sind der Schnitt der letzten 30 Bewertungen und bringen mehr oder weniger Gäste. Atmosphäre ist noch ein fester Wert, bis es Möbel zu kaufen gibt; Gästetypen fehlen |
-| 9 | Weitere Rezepte | fertig in der ersten Fassung: neben dem Gemüseeintopf (9 €) gibt es Kartoffelsuppe (2 Kartoffeln, 1 Zwiebel, 8 €) und Karottensuppe (2 Karotten, 1 Zwiebel, 10 €); die Rezepte kauft man am Computer (Abschnitt „Recipes“, 70 € und 120 €); was in den Topf kommt, entscheidet, was daraus wird; das Rezept an der Wand zeigt das Gericht, die Suppe hat ihre eigene Farbe in Topf und Schüssel; Gäste bestellen eines der Gerichte auf der Karte (Farbe in der Sprechblase), bekommen sie etwas anderes, ist das Essen weniger wert |
+| 9 | Weitere Rezepte | fertig in der ersten Fassung: neben dem Gemüseeintopf (9 €) gibt es Kartoffelsuppe (2 Kartoffeln, 1 Zwiebel, 8 €) und Karottensuppe (2 Karotten, 1 Zwiebel, 10 €) und Wurst-Eintopf (1 Kartoffel, 1 Zwiebel, 1 Wurst aus dem Kühlschrank, 12 €, Rezept 160 €); die Rezepte kauft man am Computer (Abschnitt „Recipes“, 70 € und 120 €); was in den Topf kommt, entscheidet, was daraus wird; das Rezept an der Wand zeigt das Gericht, die Suppe hat ihre eigene Farbe in Topf und Schüssel; Gäste bestellen eines der Gerichte auf der Karte (Farbe in der Sprechblase), bekommen sie etwas anderes, ist das Essen weniger wert |
 | 10 | Reinigungssystem | teilweise: Flecken und Besen; Abwasch: die leere Schüssel bleibt mit dem Rest Eintopf auf dem Tisch, man räumt sie ab (F), spült sie an der Spüle (E) und stellt sie zurück auf den Stapel; an einem Platz mit schmutziger Schüssel setzt sich kein Gast, und schmutzige Schüsseln kosten in den Bewertungen Sauberkeit |
 
 Danach folgen Mehrspieler und Mitarbeiter (Phase 3).
