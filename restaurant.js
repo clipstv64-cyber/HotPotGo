@@ -2809,18 +2809,18 @@
       var m = movingTable; if (!m) return;
       var me = ctx.getChef(), f = V(Math.sin(me.rotation.y), 0, Math.cos(me.rotation.y)), dist = 0.8 + m.half.z + 0.2;
       m.x = me.position.x + f.x * dist; m.z = me.position.z + f.z * dist;
-      var wx = m.half.x + 0.7, wz = m.half.z + 0.75;   // (the guests step in beside the chairs and walk behind them)
+      var wx = m.half.x + 0.15, wz = m.half.z + 0.45;   // (the guests step in beside the chairs and walk behind them)
       m.ok = ctx.boxFree(m.x - wx, m.x + wx, m.z - wz, m.z + wz) &&
              !Object.keys(state.items).some(function(id){ var o = state.items[id]; return o.at === 'surface' && o.y < 0.3 && Math.abs(o.x - m.x) < m.half.x && Math.abs(o.z - m.z) < m.half.z; }) && m.x - m.half.x > -10 && m.x + m.half.x < 2.05 && m.z - m.half.z > -9.9 && m.z + m.half.z < 8.1 &&
              (m.x + wx < -5.9 || m.x - wx > -4.75);   // (not on the guests' way along the tables, the front wall, the waiter's along the bar)
-      var tl = ctx.tables.list()[m.i]; if (tl) tl.obj.position.set(m.x, 0, m.z);   // (only the table shows where it goes; the chairs follow when it is put down)
+      var tl = ctx.tables.list()[m.i]; if (tl){ tl.obj.position.set(m.x, 0, m.z); showRoom(tl.obj, m.ok); }   // (only the table shows where it goes; the chairs follow when it is put down)
     }
     function putTable(cancel){
       var m = movingTable; if (!m || (!m.ok && !cancel)) return;
       if (!cancel && job){ cancel = true; say('The waiter is on his way \u2013 the table stays where it was'); }
       movingTable = null;
       m.boxes.forEach(function(w){ w.b.minX = w.minX; w.b.maxX = w.maxX; w.b.minZ = w.minZ; w.b.maxZ = w.maxZ; });   // (back where they were: moveTableSet moves them along)
-      var tl = ctx.tables.list()[m.i]; if (tl) tl.obj.position.set(m.from.x, 0, m.from.z);
+      var tl = ctx.tables.list()[m.i]; if (tl){ tl.obj.position.set(m.from.x, 0, m.from.z); showRoom(tl.obj, true); }
       if (cancel) return;
       if (!tableTo(m.i, m.x, m.z, true)) say('A guest is on the way to it \u2013 the table stays where it was');
     }
@@ -2861,14 +2861,14 @@
       var z0 = m.z - hz + 0.08 + (plus ? 0.2 : 0), z1 = m.z + hz - 0.08 - (plus ? 0 : 0.2);   // (the part under the table does not count: it is pushed in)
       var sameSide = (m.x - t.x) * (m.from.x - t.x) > 0 && Math.abs(m.x - t.x) > 0.15;   // (on its own half: the guests step in from the outer ends)
       m.ok = ctx.boxFree(m.x - hx + 0.08, m.x + hx - 0.08, z0, z1) && sameSide && Math.abs(m.x - t.x) < t.top.x - 0.2 && dz > t.top.z - 0.2 && dz < t.top.z + hz * 2 + 0.05;   // (along its table's long sides)
-      m.obj.position.set(m.x, 0, m.z); m.obj.rotation.y = m.rot;
+      m.obj.position.set(m.x, 0, m.z); m.obj.rotation.y = m.rot; showRoom(m.obj, m.ok);
     }
     function putChair(cancel){
       var m = movingChair; if (!m) return;
       if (!cancel && job){ cancel = true; say('The waiter is on his way \u2013 the chair stays where it was'); }
       movingChair = null;
       m.boxes.forEach(function(w){ w.b.minX = w.minX; w.b.maxX = w.maxX; w.b.minZ = w.minZ; w.b.maxZ = w.maxZ; });
-      m.obj.position.set(m.from.x, 0, m.from.z); m.obj.rotation.y = m.from.rot;
+      m.obj.position.set(m.from.x, 0, m.from.z); m.obj.rotation.y = m.from.rot; showRoom(m.obj, true);
       if (cancel || !m.ok) return;
       if (ctx.tables.moveChair(m.k, m.x, m.z, m.rot)){ state.chairs[m.k] = { x: +m.x.toFixed(3), z: +m.z.toFixed(3), rot: m.rot ? Math.PI : 0 }; tableViews(); }
       else say('A guest is on the way to it \u2013 the chair stays where it was');
@@ -2951,6 +2951,20 @@
       m.homePos = m.holder.position.clone(); m.homeQ = m.holder.quaternion.clone();   // (to go back to if there is no room where it is let go)
       if (m.box){ m.boxWas = { minX: m.box.minX, maxX: m.box.maxX, minZ: m.box.minZ, maxZ: m.box.maxZ }; if (!m.half) m.half = { x: (m.box.maxX - m.box.minX) / 2, z: (m.box.maxZ - m.box.minZ) / 2, yaw: 0 }; m.box.minX = m.box.maxX = m.box.minZ = m.box.maxZ = 999; }   // (not in its own way)
     }
+    // a carried big thing shows red where it cannot stand (its materials copied once, so nothing else turns red)
+    var BAD = new T.Color(0.55, 0.06, 0.03);
+    function showRoom(obj, ok){
+      if (!obj) return;
+      obj.traverse(function(o){
+        if (!o.isMesh || !o.material || o.userData.hull) return;
+        if (!o.userData.ownMat){ o.material = Array.isArray(o.material) ? o.material.map(function(mm){ return mm.clone(); }) : o.material.clone(); o.userData.ownMat = true; }
+        (Array.isArray(o.material) ? o.material : [o.material]).forEach(function(mm){
+          if (!mm.emissive) return;
+          if (!mm.userData.em0) mm.userData.em0 = mm.emissive.clone();
+          mm.emissive.copy(ok ? mm.userData.em0 : BAD);
+        });
+      });
+    }
     function stepMoving(){
       var m = movingProp; if (!m) return;
       var me = ctx.getChef(), f = V(Math.sin(me.rotation.y), 0, Math.cos(me.rotation.y));
@@ -2963,10 +2977,11 @@
         m.ok = m.ok && x - hx > 4.0 && z - hz > -10 && z + hz < 10 &&
                [k.sinkAt, k.fridgeAt, k.potAt, k.potAt2].every(function(p){ return !p || Math.hypot(p.x - x, p.z - z) > 1.4; });
       }
+      showRoom(m.holder, m.ok);
     }
     function cancelMoving(){   // back where it stood
       var m = movingProp; if (!m) return;
-      movingProp = null;
+      movingProp = null; showRoom(m.holder, true);
       var s = state.props[m.key];
       if (m.box && m.boxWas){ m.box.minX = m.boxWas.minX; m.box.maxX = m.boxWas.maxX; m.box.minZ = m.boxWas.minZ; m.box.maxZ = m.boxWas.maxZ; }
       if (s){ m.holder.position.set(s.x, s.y, s.z); m.holder.quaternion.fromArray(s.q); boxAlong(m); }
@@ -2974,7 +2989,7 @@
     }
     function putMoving(){
       var m = movingProp; if (!m || !m.ok) return;
-      movingProp = null;
+      movingProp = null; showRoom(m.holder, true);
       if (m.box && m.boxWas){ m.box.minX = 0; }   // (boxAlong sets it where it now stands)
       putProp(m, m.holder.position.clone(), m.holder.quaternion.clone());
     }
