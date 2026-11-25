@@ -588,8 +588,10 @@
           getObstacles: function(){ return obstacles; },   // (the furniture's boxes: what falling things land on)
           getMovables: function(){ return decor && decor.movables ? decor.movables : []; },   // (decor.js: what can be moved)
           // the tables with their chairs: where each stands, how much room it takes, moving it
-          tables: { list: function(){ return tableSets.map(function(s, i){ return { i: i, x: s.at.x, z: s.at.z, home: s.home, half: s.half, obj: s.obj, boxes: [s.box].concat(s.chairs.reduce(function(a, c){ return a.concat(c.boxes); }, [])) }; }); },
-                    move: moveTableSet },
+          tables: { list: function(){ return tableSets.map(function(s, i){ return { i: i, x: s.at.x, z: s.at.z, home: s.home, half: s.half, obj: s.obj,
+                                                                                    top: { x: (s.box.maxX - s.box.minX) / 2, z: (s.box.maxZ - s.box.minZ) / 2 },   // (the table alone)
+                                                                                    chairs: s.chairs.map(function(c){ var sp = chairSpots[c.k]; return { k: c.k, x: sp.x, z: sp.z, rot: sp.rot, obj: c.obj, boxes: c.boxes, size: sp.size }; }), boxes: [s.box].concat(s.chairs.reduce(function(a, c){ return a.concat(c.boxes); }, [])) }; }); },
+                    move: moveTableSet, moveChair: moveChair },
           showBought: function(key, on){ if (decor && decor.showBought) decor.showBought(key, on); },
           removeBox: removeBox, floorFree: floorFree, boxFree: boxFree,
           // the chef moved a little while he works on his knees (laying the floor); false where he cannot be
@@ -1961,7 +1963,8 @@
     var set = tableSets[ti]; if (!set) return false;
     var dx = x - set.at.x, dz = z - set.at.z;
     if (!dx && !dz) return true;
-    if (characters.some(function(c){ return c.state !== 'away'; })) return false;
+    var ks = set.chairs.map(function(c){ return c.k; });
+    if (characters.some(function(c){ return c.state !== 'away' && ks.indexOf(c.cfg.seat) >= 0; })) return false;   // (somebody at this table, or on the way to it)
     function shift(b){ b.minX += dx; b.maxX += dx; b.minZ += dz; b.maxZ += dz; }
     set.obj.position.x += dx; set.obj.position.z += dz; shift(set.box); set.at = { x: x, z: z };
     if (decor && decor.tableMoved) decor.tableMoved(ti, dx, dz);   // (its lamp, its bought candle)
@@ -1971,7 +1974,26 @@
     });
     characters.forEach(function(ch){
       ch.sits = {};   // (the poses kept for each chair: worked out again)
-      if (set.chairs.some(function(c){ return c.k === ch.cfg.seat; })){ ch.sit = null; prepareSeat(ch); }
+      if (set.chairs.some(function(c){ return c.k === ch.cfg.seat; }) && ch.state === 'away'){ ch.sit = null; prepareSeat(ch); }
+      if (ch.guestInfo && ch.sit) ch.guestInfo.spot = ch.sit.spot;
+    });
+    return true;
+  }
+  // one chair moved to (x, z), facing its table (rot 0: toward +z, PI: toward -z), when nobody sits on it or is on the way
+  function moveChair(k, x, z, rot){
+    if (!isFinite(x) || !isFinite(z)) return false;
+    var c = null; tableSets.forEach(function(s){ s.chairs.forEach(function(e){ if (e.k === k) c = e; }); });
+    var sp = chairSpots[k]; if (!c || !sp) return false;
+    if (characters.some(function(ch){ return ch.state !== 'away' && ch.cfg.seat === k; })) return false;
+    rot = rot ? Math.PI : 0;
+    var cs = sp.size, backDepth = cs.z * CHAIR_BACK, backDir = rot === 0 ? -1 : 1;
+    function boxAt(b, cx, cz, sx, sz){ b.minX = cx - sx / 2; b.maxX = cx + sx / 2; b.minZ = cz - sz / 2; b.maxZ = cz + sz / 2; }
+    c.obj.position.set(x, 0, z); c.obj.rotation.y = rot;
+    boxAt(c.boxes[0], x, z, cs.x, cs.z); boxAt(c.boxes[1], x, z + backDir * (cs.z - backDepth) / 2, cs.x, backDepth);
+    sp.x = x; sp.z = z; sp.rot = rot;
+    characters.forEach(function(ch){
+      ch.sits = {};
+      if (ch.cfg.seat === k && ch.state === 'away'){ ch.sit = null; prepareSeat(ch); }
       if (ch.guestInfo && ch.sit) ch.guestInfo.spot = ch.sit.spot;
     });
     return true;

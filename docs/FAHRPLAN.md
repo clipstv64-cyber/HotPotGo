@@ -100,9 +100,12 @@ Phase 1 ist vollständig (der Kühlschrank hat seit dem 25.11.2026 eine Aufgabe:
   vor dem wartenden Gast ist serviert). Kochen (schneiden, rühren, gießen, würzen) bleibt auf
   der Maustaste. Werkzeuge (Messer, Krug, Streuer, Rolle, Hammer, Tuch, Besen) nimmt man mit
   E. Große Dinge (Pflanze, Garderobe, Spielautomat, Kisten, Regale und Möbel in den
-  Hinterzimmern, die Regale mit Gläsern und Gemüse in der Küche) hebt man mit E an, sie
-  folgen dem Blick, F dreht, E stellt hin. Tische werden mit ihren vier Stühlen verschoben,
-  aber nur, wenn kein Gast im Restaurant ist, und nicht auf die Wege der Gäste und des
+  Hinterzimmern, die Regale mit Gläsern und Gemüse in der Küche, Tische, Stühle, gekaufte
+  Möbel) hebt man an, indem man die linke Maustaste gedrückt hält, bis sich ein kleiner Kreis
+  gefüllt hat; solange man hält, folgen sie dem Blick, F dreht, Loslassen stellt sie hin (oder
+  zurück, wenn dort kein Platz ist). Aufheben und die weiße Umrandung gibt es nur für das, was
+  man direkt anschaut. Tische werden mit ihren vier Stühlen verschoben, einzelne Stühle an
+  ihrem Tisch, aber nur, wenn niemand daran sitzt oder auf dem Weg dahin ist, und nicht auf die Wege der Gäste und des
   Kellners. Was man mit der Maus hält, schwebt vor dem Blick (hoch und runter mit dem Blick)
   und bleibt vor Wänden und Flächen stehen; so lässt man es zum Beispiel in den Topf fallen.
   Wo alles steht, bleibt im Spielstand. Anvisierte Gegenstände bekommen eine dünne Umrandung.

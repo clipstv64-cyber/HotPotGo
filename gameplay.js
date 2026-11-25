@@ -65,10 +65,14 @@
       '.hp-sep{width:1px;height:16px;background:rgba(255,255,255,.28);margin:0 4px}' +
       '.hp-dot{position:fixed;left:50%;top:50%;width:4px;height:4px;margin:-2px 0 0 -2px;border-radius:50%;background:rgba(255,255,255,.55);' +
       'box-shadow:0 0 2px rgba(0,0,0,.6);opacity:0;transition:opacity .15s;pointer-events:none}' +
-      '.hp-dot.on{opacity:1}.hp-dot.hit{background:rgba(255,255,255,.9);width:6px;height:6px;margin:-3px 0 0 -3px}';
+      '.hp-dot.on{opacity:1}.hp-dot.hit{background:rgba(255,255,255,.9);width:6px;height:6px;margin:-3px 0 0 -3px}' +
+      '.hp-ring{position:fixed;left:50%;top:50%;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;pointer-events:none;opacity:0;transition:opacity .12s;' +
+      '-webkit-mask:radial-gradient(circle,transparent 11px,#000 12px);mask:radial-gradient(circle,transparent 11px,#000 12px)}' +
+      '.hp-ring.on{opacity:1}';
     document.head.appendChild(css);
     var hint = document.createElement('div'); hint.className = 'hp-hint'; document.body.appendChild(hint);
     var dot = document.createElement('div'); dot.className = 'hp-dot'; document.body.appendChild(dot);
+    var ring = document.createElement('div'); ring.className = 'hp-ring'; document.body.appendChild(ring);   // (filling while a big thing is being lifted)
     var MOUSE_SVG = '<svg class="hp-mouse" viewBox="0 0 14 20" fill="none" stroke="rgba(255,255,255,.75)" stroke-width="1.3">' +
       '<rect x="1" y="1" width="12" height="18" rx="6"/><line x1="7" y1="1" x2="7" y2="8"/>' +
       '<path d="M7 1.6 A5.4 5.4 0 0 0 1.6 7 L1.6 8 L7 8 Z" fill="rgba(255,255,255,.75)" stroke="none"/></svg>';
@@ -1027,7 +1031,22 @@
     }
     // what each key would act on right now: the nearest thing in front of him
     var focus = { E: null, F: null, LMB: null, HOLD: null };
+    var aimRay = new T.Ray(), aimBox = new T.Box3(), aimFrame = 0;
+    function lookedAt(obj){
+      if (!obj || !ctx.camera) return true;
+      if (obj.userData.aimFrame === aimFrame) return obj.userData.aimOk;
+      aimBox.setFromObject(obj);
+      var s = aimBox.getSize(new T.Vector3()), ok = true;
+      if (!aimBox.isEmpty() && s.x < 20 && s.y < 20 && s.z < 20){   // (a box that makes sense: the view must pass through it)
+        aimBox.expandByScalar(0.04);
+        ok = aimRay.intersectsBox(aimBox);
+      }
+      obj.userData.aimFrame = aimFrame; obj.userData.aimOk = ok;
+      return ok;
+    }
     function findFocus(){
+      aimFrame++;
+      if (ctx.camera){ ctx.camera.getWorldPosition(aimRay.origin); ctx.camera.getWorldDirection(aimRay.direction); }
       var chef = ctx.getChef(), out = { E: null, F: null, LMB: null, HOLD: null }, rank = { E: 1e9, F: 1e9, LMB: 1e9, HOLD: 1e9 };
       out.rank = rank;
       if (!chef) return out;
@@ -1037,6 +1056,7 @@
         if (d > it.reach) return;
         var facing = d < 0.8 || (dx * fx + dz * fz) / d > 0.35;
         if (!facing) return;
+        if (it.obj && !lookedAt(it.obj)) return;   // (a thing: only when he looks right at it)
         // the nearest thing he is looking at; something to do comes before a mere note
         var cos = d > 1e-4 ? (dx * fx + dz * fz) / d : 1;
         var key = it.key || 'E', r = d + 6 * (1 - cos) + (it.bias || 0) + (it.use ? 0 : 100);
@@ -1062,11 +1082,23 @@
       if (busy()) return;
       var f = findFocus(), it = f.LMB && f.LMB.use ? f.LMB : null, h = f.HOLD && f.HOLD.use ? f.HOLD : null;
       if (it && h && f.rank.HOLD < f.rank.LMB) it = h;   // (whichever he is looking at more)
-      (it || h || {}).use && (it || h).use();
+      var pick = it || h;
+      if (pick && pick.charge){ charging = { it: pick, t: 0 }; return; }   // (a big thing: held down until the ring is full)
+      if (pick && pick.use) pick.use();
     }
     // the button let go: whatever is held that way is put where he looks (a place for it), or let fall
-    var releasers = [], holdInfo = function(){ return false; }, pressed = false;
-    function letGo(){ if (!pressed) return; pressed = false; releasers.forEach(function(fn){ fn(); }); }
+    var releasers = [], holdInfo = function(){ return false; }, pressed = false, charging = null;   // charging: { it, t }
+    function letGo(){ charging = null; if (!pressed) return; pressed = false; releasers.forEach(function(fn){ fn(); }); }
+    function stepCharge(dt){
+      if (charging && pressed){
+        var f = findFocus();
+        if (!f.HOLD || f.HOLD.label !== charging.it.label) charging = null;   // (looked away)
+        else if ((charging.t += dt) >= charging.it.charge){ var u = charging.it; charging = null; if (u.use) u.use(); }
+      } else charging = null;
+      var p = charging ? Math.min(1, charging.t / charging.it.charge) : 0;
+      ring.classList.toggle('on', !!charging);
+      if (charging) ring.style.background = 'conic-gradient(rgba(255,241,196,.95) ' + (p * 360).toFixed(1) + 'deg, rgba(255,255,255,.22) 0)';
+    }
     window.addEventListener('mousedown', function(e){ if (e.button === 0 && document.pointerLockElement === canvas) pressed = true; });
     window.addEventListener('mouseup', function(e){ if (e.button === 0) letGo(); });
     window.addEventListener('blur', letGo);   // (the window lost the mouse: as if let go)
@@ -1109,6 +1141,7 @@
 
     // ---------- every frame ---------------------------------------------------------------
     function update(dt, time){
+      stepCharge(dt);
       if (move){   // the broom on its way into the hands / back to its place
         move.t += dt / TAKE_TIME;
         if (move.t >= 1){ setBroom(broomAt === 'taking' ? 'hand' : 'closet'); move = null; }
@@ -1142,6 +1175,11 @@
       var holdingMouse = holdInfo();
       [['F', keyHint('F', '')], ['E', keyHint('E', '')], ['LMB', MOUSE_SVG], ['HOLD', MOUSE_SVG]].forEach(function(k){
         var it = focus[k[0]];
+        if (k[0] === 'F' && holdingMouse && typeof holdingMouse === 'string'){   // (a big thing carried: what letting go does; F still turns it)
+          parts.push(MOUSE_SVG + '<span>Let go: ' + holdingMouse + '</span>');
+          if (it && it.use) parts.push(keyHint('F', it.label));
+          return;
+        }
         if (k[0] === 'F' && holdingMouse){   // (let go: there, or it falls)
           parts.push(MOUSE_SVG + '<span>Let go: ' + (it && it.use ? it.label : 'drop it') + '</span>'); if (it && it.use) glow.push(it.obj); return;
         }
