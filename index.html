@@ -590,8 +590,12 @@
           // the tables with their chairs: where each stands, how much room it takes, moving it
           tables: { list: function(){ return tableSets.map(function(s, i){ return { i: i, x: s.at.x, z: s.at.z, home: s.home, half: s.half, obj: s.obj,
                                                                                     top: { x: (s.box.maxX - s.box.minX) / 2, z: (s.box.maxZ - s.box.minZ) / 2 },   // (the table alone)
-                                                                                    chairs: s.chairs.map(function(c){ var sp = chairSpots[c.k]; return { k: c.k, x: sp.x, z: sp.z, rot: sp.rot, obj: c.obj, boxes: c.boxes, size: sp.size, off: c.off, rot0: c.rot0 }; }), boxes: [s.box].concat(s.chairs.reduce(function(a, c){ return a.concat(c.boxes); }, [])) }; }); },
-                    move: moveTableSet, moveChair: moveChair },
+                                                                                    rot: s.info.rot || 0, info: s.info,
+                                                                                    chairs: s.chairs.map(function(c){ var sp = chairSpots[c.k]; return { k: c.k, x: sp.x, z: sp.z, rot: sp.rot, obj: c.obj, boxes: c.boxes, size: sp.size, off: c.off, rot0: c.rot0, at: sp.table === s.info }; }), boxes: [s.box].concat(s.chairs.reduce(function(a, c){ return a.concat(c.boxes); }, [])) }; }); },
+                    move: moveTableSet, moveChair: moveChair, preview: previewTable, unpreview: unpreviewTable, halfAlong: halfAlong,
+                    usable: function(k){ return !!(chairSpots[k] && chairSpots[k].table); },
+                    // every chair (wherever it stands now), and the table each is at (-1: none)
+                    chairs: function(){ return chairSpots.map(function(sp, k){ var c = chairOf(k), ti = -1; tableSets.forEach(function(s, i){ if (s.info === sp.table) ti = i; }); return { k: k, x: sp.x, z: sp.z, rot: sp.rot, obj: c && c.obj, boxes: c && c.boxes, size: sp.size, table: ti }; }); } },
           showBought: function(key, on){ if (decor && decor.showBought) decor.showBought(key, on); },
           removeBox: removeBox, floorFree: floorFree, boxFree: boxFree,
           // the chef moved a little while he works on his knees (laying the floor); false where he cannot be
@@ -1018,7 +1022,8 @@
         TABLE_SPOTS.forEach(function(spot, ti){
           var t = table.clone(); t.position.set(spot[0], 0, spot[1]); scene.add(t);
           if (decor) decor.dressTable(t, spot, tSize, ti);
-          var set = { obj: t, box: addBox(spot[0], spot[1], tSize.x, tSize.z, tSize.y), at: { x: spot[0], z: spot[1] }, home: { x: spot[0], z: spot[1] }, chairs: [] };
+          var set = { obj: t, box: addBox(spot[0], spot[1], tSize.x, tSize.z, tSize.y), at: { x: spot[0], z: spot[1] }, home: { x: spot[0], z: spot[1] }, chairs: [],
+                      info: { x: spot[0], z: spot[1], halfX: tSize.x / 2, halfZ: tSize.z / 2, top: tSize.y, rot: 0 } };   // (info: what the chairs at it know of it)
           tableSets.push(set);
           // two chairs on each long side, facing the table (chair front is +Z)
           var dz = tSize.z / 2 + cSize.z / 2 - CHAIR_TUCK, dx = tSize.x / 4;
@@ -1028,8 +1033,7 @@
             ch.position.set(cx, 0, cz);
             ch.rotation.y = p[2];
             scene.add(ch);
-            chairSpots.push({ x: cx, z: cz, rot: p[2], size: cSize,
-                              table: { x: spot[0], z: spot[1], halfX: tSize.x / 2, halfZ: tSize.z / 2, top: tSize.y } });
+            chairSpots.push({ x: cx, z: cz, rot: p[2], size: cSize, table: set.info });
             // seat (whole footprint) and the taller backrest strip at the back
             var backDepth = cSize.z * CHAIR_BACK, backDir = p[2] === 0 ? -1 : 1;
             set.chairs.push({ obj: ch, k: chairSpots.length - 1, off: { x: p[0], z: p[1] }, rot0: p[2], boxes: [addBox(cx, cz, cSize.x, cSize.z, cSize.y * CHAIR_SEAT),
@@ -1921,7 +1925,7 @@
   function prepareSeat(ch){
     if (ch.sit || ch.cfg.seat === undefined) return;
     var spot = chairSpots[ch.cfg.seat];
-    if (!spot) return;
+    if (!spot || !spot.table) return;   // (a chair not at a table: nobody sits on it)
     // the walking pose (all bones, also those the walk does not move), to come back to after sitting
     ch.walkBones = [];
     ch.obj.traverse(function(o){ if (o.isBone) ch.walkBones.push({ bone: o, q: o.quaternion.clone(), p: o.position.clone() }); });
@@ -1958,40 +1962,86 @@
   // a guest outside takes another chair: the seated pose is worked out again for it
   // a table with its chairs moved to (x, z) (only while every guest is outside): the chairs' places, the boxes,
   // and the seated poses and ways in, worked out again (below: a guest outside takes another chair)
-  function moveTableSet(ti, x, z){
+  function halfAlong(T, dir){
+    var a = -(T.rot || 0), lx = dir.x * Math.cos(a) + dir.z * Math.sin(a), lz = -dir.x * Math.sin(a) + dir.z * Math.cos(a);
+    return Math.abs(lx) * T.halfX + Math.abs(lz) * T.halfZ;
+  }
+  // a chair's boxes for where it stands and how it is turned (its seat, and its back strip standing higher)
+  function chairBoxes(c, x, z, rot){
+    var cs = chairSpots[c.k].size, backDepth = cs.z * CHAIR_BACK, s = Math.sin(rot), co = Math.cos(rot);
+    function fit(b, z0, z1, top){   // (the turned rectangle's box: local x across, local z from z0 to z1)
+      var xs = [], zs = [];
+      [[-cs.x / 2, z0], [cs.x / 2, z0], [-cs.x / 2, z1], [cs.x / 2, z1]].forEach(function(p){ xs.push(x + p[0] * co + p[1] * s); zs.push(z - p[0] * s + p[1] * co); });
+      b.minX = Math.min.apply(null, xs); b.maxX = Math.max.apply(null, xs); b.minZ = Math.min.apply(null, zs); b.maxZ = Math.max.apply(null, zs); b.top = top;
+    }
+    fit(c.boxes[0], -cs.z / 2, cs.z / 2, cs.y * CHAIR_SEAT);
+    fit(c.boxes[1], -cs.z / 2, -cs.z / 2 + backDepth, cs.y);
+  }
+  // the table a chair standing there would be at: near its edge and facing it (or none: nobody sits on it)
+  function tableFor(x, z, rot){
+    var f = new THREE.Vector3(Math.sin(rot), 0, Math.cos(rot)), best = null, bestD = 1e9;
+    tableSets.forEach(function(s){
+      var T = s.info, to = new THREE.Vector3(T.x - x, 0, T.z - z), along = to.dot(f), edge = along - halfAlong(T, f);
+      var across = to.clone().addScaledVector(f, -along).length(), acrossHalf = halfAlong(T, new THREE.Vector3(f.z, 0, -f.x));
+      if (along > 0 && edge > -0.4 && edge < 0.55 && across < acrossHalf - 0.15 && edge < bestD){ best = T; bestD = edge; }
+    });
+    return best;
+  }
+  function chairOf(k){ var c = null; tableSets.forEach(function(s){ s.chairs.forEach(function(e){ if (e.k === k) c = e; }); }); return c; }
+  // where a table and the chairs at it go when it is put at (x, z) turned by rot (only the looks: for carrying)
+  function tablePlaces(set, x, z, rot){
+    var dr = rot - (set.info.rot || 0), co = Math.cos(dr), s = Math.sin(dr), out = [];
+    chairSpots.forEach(function(sp, k){
+      if (sp.table !== set.info) return;
+      var rx = sp.x - set.at.x, rz = sp.z - set.at.z;
+      out.push({ k: k, x: x + rx * co + rz * s, z: z - rx * s + rz * co, rot: sp.rot + dr });
+    });
+    return out;
+  }
+  function previewTable(ti, x, z, rot){
+    var set = tableSets[ti]; if (!set) return;
+    set.obj.position.set(x, 0, z); set.obj.rotation.y = rot;
+    tablePlaces(set, x, z, rot).forEach(function(p){ var c = chairOf(p.k); if (c){ c.obj.position.set(p.x, 0, p.z); c.obj.rotation.y = p.rot; } });
+  }
+  function unpreviewTable(ti){
+    var set = tableSets[ti]; if (!set) return;
+    set.obj.position.set(set.at.x, 0, set.at.z); set.obj.rotation.y = set.info.rot || 0;
+    chairSpots.forEach(function(sp, k){ if (sp.table !== set.info) return; var c = chairOf(k); if (c){ c.obj.position.set(sp.x, 0, sp.z); c.obj.rotation.y = sp.rot; } });
+  }
+  function moveTableSet(ti, x, z, rot){
     if (!isFinite(x) || !isFinite(z)) return false;
+    if (rot === undefined || !isFinite(rot)) rot = tableSets[ti] ? tableSets[ti].info.rot || 0 : 0;
     var set = tableSets[ti]; if (!set) return false;
     var dx = x - set.at.x, dz = z - set.at.z;
-    if (!dx && !dz) return true;
-    var ks = set.chairs.map(function(c){ return c.k; });
+    if (!dx && !dz && rot === (set.info.rot || 0)) return true;
+    var ks = []; chairSpots.forEach(function(sp, k){ if (sp.table === set.info) ks.push(k); });   // (the chairs at it)
     if (characters.some(function(c){ return c.state !== 'away' && ks.indexOf(c.cfg.seat) >= 0; })) return false;   // (somebody at this table, or on the way to it)
-    function shift(b){ b.minX += dx; b.maxX += dx; b.minZ += dz; b.maxZ += dz; }
-    set.obj.position.x += dx; set.obj.position.z += dz; shift(set.box); set.at = { x: x, z: z };
+    var places = tablePlaces(set, x, z, rot), quarter = Math.abs(Math.round(rot / (Math.PI / 2))) % 2 === 1;
+    var hx = quarter ? set.info.halfZ : set.info.halfX, hz = quarter ? set.info.halfX : set.info.halfZ;
+    set.obj.position.set(x, 0, z); set.obj.rotation.y = rot; set.at = { x: x, z: z };
+    set.box.minX = x - hx; set.box.maxX = x + hx; set.box.minZ = z - hz; set.box.maxZ = z + hz;
+    set.info.x = x; set.info.z = z; set.info.rot = rot;
     if (decor && decor.tableMoved) decor.tableMoved(ti, dx, dz);   // (its lamp, its bought candle)
-    set.chairs.forEach(function(c){
-      c.obj.position.x += dx; c.obj.position.z += dz; c.boxes.forEach(shift);
-      var sp = chairSpots[c.k]; sp.x += dx; sp.z += dz; sp.table.x = x; sp.table.z = z;
+    places.forEach(function(p){
+      var c = chairOf(p.k), sp = chairSpots[p.k]; if (!c) return;
+      sp.x = p.x; sp.z = p.z; sp.rot = p.rot; c.obj.position.set(p.x, 0, p.z); c.obj.rotation.y = p.rot; chairBoxes(c, p.x, p.z, p.rot);
     });
     characters.forEach(function(ch){
       ch.sits = {};   // (the poses kept for each chair: worked out again)
-      if (set.chairs.some(function(c){ return c.k === ch.cfg.seat; }) && ch.state === 'away'){ ch.sit = null; prepareSeat(ch); }
+      if (ks.indexOf(ch.cfg.seat) >= 0 && ch.state === 'away'){ ch.sit = null; prepareSeat(ch); }
       if (ch.guestInfo && ch.sit) ch.guestInfo.spot = ch.sit.spot;
     });
     return true;
   }
   // one chair moved to (x, z), facing its table (rot 0: toward +z, PI: toward -z), when nobody sits on it or is on the way
   function moveChair(k, x, z, rot){
-    if (!isFinite(x) || !isFinite(z)) return false;
-    var c = null; tableSets.forEach(function(s){ s.chairs.forEach(function(e){ if (e.k === k) c = e; }); });
-    var sp = chairSpots[k]; if (!c || !sp) return false;
+    if (!isFinite(x) || !isFinite(z) || !isFinite(rot)) return false;
+    var c = chairOf(k), sp = chairSpots[k]; if (!c || !sp) return false;
     if (characters.some(function(ch){ return ch.state !== 'away' && ch.cfg.seat === k; })) return false;
-    rot = rot ? Math.PI : 0;
-    var cs = sp.size, backDepth = cs.z * CHAIR_BACK, backDir = rot === 0 ? -1 : 1;
-    function boxAt(b, cx, cz, sx, sz){ b.minX = cx - sx / 2; b.maxX = cx + sx / 2; b.minZ = cz - sz / 2; b.maxZ = cz + sz / 2; }
-    c.obj.position.set(x, 0, z); c.obj.rotation.y = rot;
-    boxAt(c.boxes[0], x, z, cs.x, cs.z); boxAt(c.boxes[1], x, z + backDir * (cs.z - backDepth) / 2, cs.x, backDepth);
-    sp.x = x; sp.z = z; sp.rot = rot;
-    var mates = []; tableSets.forEach(function(s){ if (s.chairs.some(function(e){ return e.k === k; })) mates = s.chairs.map(function(e){ return e.k; }); });
+    var was = sp.table;
+    c.obj.position.set(x, 0, z); c.obj.rotation.y = rot; chairBoxes(c, x, z, rot);
+    sp.x = x; sp.z = z; sp.rot = rot; sp.table = tableFor(x, z, rot);
+    var mates = []; chairSpots.forEach(function(s2, k2){ if (k2 === k || (s2.table && (s2.table === sp.table || s2.table === was))) mates.push(k2); });
     characters.forEach(function(ch){
       ch.sits = {};
       if (mates.indexOf(ch.cfg.seat) >= 0 && ch.state === 'away'){ ch.sit = null; prepareSeat(ch); }   // (this table's guests: their ways in, worked out again)
@@ -2039,15 +2089,16 @@
   // the way in: through the entrance, down the room, along the gap behind the
   // chair row and up beside the chair (facing the table, as when seated)
   function entranceRoute(spot){
-    var back = spot.rot === 0 ? -1 : 1;                 // chair back points this way along Z
-    var zBehind = spot.z + back * ENTRANCE_BEHIND;
-    var side = spot.x > spot.table.x ? 1 : -1;          // aisle-side chairs step in from the aisle (the side away from the table's middle)
-    var sideX = spot.x + side * ENTRANCE_SIDE;
+    // behind the chair, then in beside it from the side away from the table's middle (the chair faces f)
+    var f = new THREE.Vector3(Math.sin(spot.rot), 0, Math.cos(spot.rot)), s = new THREE.Vector3(f.z, 0, -f.x), T = spot.table;
+    var side = T && (spot.x - T.x) * s.x + (spot.z - T.z) * s.z < 0 ? -1 : 1;
+    var beside = new THREE.Vector3(spot.x, 0, spot.z).addScaledVector(s, side * ENTRANCE_SIDE);
+    var behind = beside.clone().addScaledVector(f, -ENTRANCE_BEHIND);
     return [new THREE.Vector3(ENTRANCE[0], 0, ENTRANCE[1] - 1.1),
             new THREE.Vector3(ENTRANCE_AISLE_X, 0, ENTRANCE[1] - 1.1),   // (along the front wall: the middle of the room is free for furniture)
-            new THREE.Vector3(ENTRANCE_AISLE_X, 0, zBehind),
-            new THREE.Vector3(sideX, 0, zBehind),
-            new THREE.Vector3(sideX, 0, spot.z)];
+            new THREE.Vector3(ENTRANCE_AISLE_X, 0, behind.z),
+            behind,
+            beside];
   }
   // the way out: the same way back, and out through the door
   function exitRoute(ch){
@@ -2127,7 +2178,7 @@
     var fwd = new THREE.Vector3(Math.sin(spot.rot), 0, Math.cos(spot.rot)), right = new THREE.Vector3(fwd.z, 0, -fwd.x);
     var T = spot.table;
     // distance from the chair to the near table edge along the facing direction
-    var toTable = new THREE.Vector3(T.x - spot.x, 0, T.z - spot.z).dot(fwd) - T.halfZ;
+    var toTable = new THREE.Vector3(T.x - spot.x, 0, T.z - spot.z).dot(fwd) - (T.halfX !== undefined ? halfAlong(T, fwd) : T.halfZ);
     var hips = wp(findBone(root, pre, 'Hips'));
     ch.hands = [];
     ['Left', 'Right'].forEach(function(side){

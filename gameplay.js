@@ -1084,17 +1084,22 @@
       var f = findFocus(), it = f.LMB && f.LMB.use ? f.LMB : null, h = f.HOLD && f.HOLD.use ? f.HOLD : null;
       if (it && h && f.rank.HOLD < f.rank.LMB) it = h;   // (whichever he is looking at more)
       var pick = it || h;
+      hpLog('click', 'LMB:', f.LMB && f.LMB.label, 'HOLD:', f.HOLD && f.HOLD.label, 'F:', f.F && f.F.label, '-> picks', pick && pick.label, pick && pick.charge ? '(ring)' : '');
       if (pick && pick.charge){ charging = { it: pick, t: 0 }; return; }   // (a big thing: held down until the ring is full)
       if (pick && pick.use) pick.use();
     }
     // the button let go: whatever is held that way is put where he looks (a place for it), or let fall
+    function hpLog(){ try { if (window.hotpotLog) window.hotpotLog.log(Array.prototype.join.call(arguments, ' ')); } catch (e){} }
+    window.addEventListener('mousedown', function(e){ hpLog('mousedown', e.button, 'locked', document.pointerLockElement === canvas); }, true);
+    window.addEventListener('mouseup', function(e){ hpLog('mouseup', e.button, 'locked', document.pointerLockElement === canvas, 'pressed', pressed); }, true);
+    window.addEventListener('wheel', function(e){ hpLog('wheel', e.deltaY, e.deltaX, e.deltaMode, 'locked', document.pointerLockElement === canvas); }, true);
     var releasers = [], holdInfo = function(){ return false; }, pressed = false, charging = null;   // charging: { it, t }
     function letGo(){ charging = null; if (!pressed) return; pressed = false; releasers.forEach(function(fn){ fn(); }); }
     function stepCharge(dt){
       if (charging && pressed){
         var f = findFocus();
         if (!f.HOLD || f.HOLD.label !== charging.it.label || f.HOLD.obj !== charging.it.obj) charging = null;   // (looked away, or at another one)
-        else if ((charging.t += dt) >= charging.it.charge){ var u = charging.it; charging = null; if (u.use) u.use(); }
+        else if ((charging.t += dt) >= charging.it.charge){ var u = charging.it; charging = null; hpLog('ring full:', u.label); if (u.use) u.use(); }
       } else charging = null;
       var p = charging ? Math.min(1, charging.t / charging.it.charge) : 0;
       ring.classList.toggle('on', !!charging);

@@ -104,8 +104,10 @@ Phase 1 ist vollständig (der Kühlschrank hat seit dem 25.11.2026 eine Aufgabe:
   Möbel) hebt man an, indem man die linke Maustaste gedrückt hält, bis sich ein kleiner Kreis
   gefüllt hat; solange man hält, folgen sie dem Blick, das Mausrad (oder F) dreht, Loslassen stellt sie hin (oder
   zurück, wenn dort kein Platz ist). Aufheben und die weiße Umrandung gibt es nur für das, was
-  man direkt anschaut. Tische werden mit ihren vier Stühlen verschoben, einzelne Stühle an
-  ihrem Tisch, aber nur, wenn niemand daran sitzt oder auf dem Weg dahin ist, und nicht auf die Wege der Gäste und des
+  man direkt anschaut. Tische werden mit ihren Stühlen getragen und mit dem Mausrad um eine
+  Vierteldrehung gedreht; Stühle kann man überall hinstellen und frei drehen, Gäste setzen
+  sich aber nur auf Stühle, die an einem Tisch stehen und zu ihm schauen. Das geht nur, wenn
+  niemand daran sitzt oder auf dem Weg dahin ist, und nicht auf die Wege der Gäste und des
   Kellners. Was man mit der Maus hält, schwebt vor dem Blick (hoch und runter mit dem Blick)
   und bleibt vor Wänden und Flächen stehen; so lässt man es zum Beispiel in den Topf fallen.
   Wo alles steht, bleibt im Spielstand. Anvisierte Gegenstände bekommen eine dünne Umrandung.

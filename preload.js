@@ -2,6 +2,9 @@
 // the user's own data folder, which only the main process (main.js) may read and write.
 const { contextBridge, ipcRenderer } = require('electron');
 
+// a line for the input log (main.js writes it to input-log.txt in the user's data folder)
+contextBridge.exposeInMainWorld('hotpotLog', { log: (text) => ipcRenderer.send('debug:log', String(text).slice(0, 400)) });
+
 contextBridge.exposeInMainWorld('hotpotSave', {
   // -> { main: text or null, backup: text or null }
   read: () => ipcRenderer.sendSync('save:read'),

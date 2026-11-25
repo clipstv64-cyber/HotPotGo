@@ -34,6 +34,17 @@ function readText(file) {
 function isSave(text) {
   try { return !!JSON.parse(text).state; } catch (e) { return false; }
 }
+// the input log: what the mouse and the keys did and what the game made of it (kept small)
+function serveLog() {
+  ipcMain.on('debug:log', (event, text) => {
+    if (process.env.HOTPOT_SELFTEST) return;
+    try {
+      const file = path.join(app.getPath('userData'), 'input-log.txt');
+      if (fs.existsSync(file) && fs.statSync(file).size > 1000000) fs.renameSync(file, file + '.old');
+      fs.appendFileSync(file, new Date().toISOString().slice(11, 23) + ' ' + String(text).slice(0, 400) + '\n');
+    } catch (e) {}
+  });
+}
 function serveSaves() {
   ipcMain.on('save:read', (event) => {
     const dir = saveDir();
@@ -201,6 +212,7 @@ Menu.setApplicationMenu(null);
 app.whenReady().then(() => {
   serveAppFiles();
   serveSaves();
+  serveLog();
   createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
