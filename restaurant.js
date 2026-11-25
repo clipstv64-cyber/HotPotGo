@@ -1656,7 +1656,7 @@
         pe.key = 'LMB';
         if (!some) pe.label = 'Nothing in the pot to season';
         else { pe.label = 'Season'; pe.use = seasonOnce; pe.obj = place.pot.model; }
-      } else if (free && some){ pe.key = 'LMB'; pe.label = 'Stir'; pe.use = startStir; pe.obj = place.pot.ladle; }
+      } else if (free && some){ pe.key = 'LMB'; pe.label = 'Stir'; pe.use = startStir; pe.obj = place.pot.grp; }
       else if (free) pe = null;
       else pe = null;
       if (pe) add(pe);
@@ -2316,7 +2316,7 @@
       if (heldProp) return [];   // (a decor thing in his hands: let go of it first)
       if (ghost){   // a piece of furniture is being placed: that is all he can do
         var me2 = ctx.getChef(), name = furnitureItem(ghost.key).name.toLowerCase();
-        return [ghost.ok ? { pos: me2.position, reach: 9, key: 'E', label: 'Put the ' + name + ' here', use: function(){ if (ghost && ghost.ok && act('place', { id: ghost.id, x: +ghost.x.toFixed(3), z: +ghost.z.toFixed(3), rot: ghost.rot })) saveNow(false); } }
+        return [ghost.ok ? { pos: me2.position, reach: 9, key: 'E', label: 'Put the ' + name + ' here', use: function(){ if (ghost && ghost.ok && act('place', { id: ghost.id, x: +ghost.x.toFixed(3), z: +ghost.z.toFixed(3), rot: ghost.rot })){ furnWas = null; saveNow(false); } } }
                           : { pos: me2.position, reach: 9, key: 'E', label: 'The ' + name + ' cannot stand here' },
                 { pos: me2.position, reach: 9, key: 'F', label: 'Turn it (or the mouse wheel)', use: function(){ if (ghost) ghost.rot = (ghost.rot + Math.PI / 4) % (Math.PI * 2); } }];
       }
@@ -2367,7 +2367,7 @@
         else if (it) return;
         else if (!free) e.label = 'Hands full';
         else if (state.store[kind] <= 0) e.label = 'No ' + K.many + ' in the store';
-        else { e.key = 'HOLD'; e.label = 'Take ' + K.a + ' (' + state.store[kind] + ' in the store)'; e.use = function(){ act('takeStore', kind); }; e.obj = c.model; }
+        else { e.key = 'HOLD'; e.label = 'Take ' + K.a + ' (' + state.store[kind] + ' in the store)'; e.use = function(){ act('takeStore', kind); }; e.obj = c.grp; }
         add(e);
       });
       // the fridge (once there is a reason to open it: the recipe, or sausages in it)
@@ -2398,7 +2398,7 @@
       else if (!it){
         if (!free) sb.label = 'Hands full';
         else if (state.bowls <= 0) sb.label = 'No clean bowls left \u2013 clear the tables and wash up';
-        else { sb.key = 'HOLD'; sb.label = 'Take a bowl'; sb.use = function(){ act('takeBowl'); }; sb.obj = place.stacks.bowls[state.bowls - 1]; }
+        else { sb.key = 'HOLD'; sb.label = 'Take a bowl'; sb.use = function(){ act('takeBowl'); }; sb.obj = place.stacks.grp; }
         add(sb);
       }
       // things lying on the work surfaces
@@ -2519,7 +2519,7 @@
       var inOffice = !!office && !!office.room && me.position.x > office.room.x0 && me.position.x < office.room.x1 && me.position.z > office.room.z0 && me.position.z < office.room.z1;
       if (inOffice && swivel && ctx.seat && ctx.seat.ready()){   // he sits down on the chair first; the screen comes on once he sits
         var atChair = V(swivel.x, 0, swivel.z);
-        add(free ? { pos: atChair, reach: 2.1, key: 'E', label: 'Sit down at the computer', use: sitAtPC, obj: swivel.holder }
+        add(free ? { pos: atChair, reach: 2.1, key: 'E', label: 'Sit down at the computer', use: sitAtPC }
                  : { pos: atChair, reach: 2.1, key: 'E', label: 'Hands full' });
       } else if (inOffice && office.desk){   // (as long as the chair cannot be sat on: standing at the desk)
         add({ pos: V(office.desk.x, 0, office.desk.z), reach: 2.2, key: 'E', label: 'Use the computer', use: openPC });
@@ -2817,6 +2817,7 @@
     }
     function putTable(cancel){
       var m = movingTable; if (!m || (!m.ok && !cancel)) return;
+      if (!cancel && job){ cancel = true; say('The waiter is on his way \u2013 the table stays where it was'); }
       movingTable = null;
       m.boxes.forEach(function(w){ w.b.minX = w.minX; w.b.maxX = w.maxX; w.b.minZ = w.minZ; w.b.maxZ = w.maxZ; });   // (back where they were: moveTableSet moves them along)
       var tl = ctx.tables.list()[m.i]; if (tl) tl.obj.position.set(m.from.x, 0, m.from.z);
@@ -2829,7 +2830,7 @@
       var dx = x - tl.x, dz = z - tl.z, inside = function(px, pz){ return Math.abs(px - tl.x) < tl.half.x + 0.1 && Math.abs(pz - tl.z) < tl.half.z + 0.1; };
       if (!ctx.tables.move(i, x, z)) return false;
       state.tables[i] = { x: +x.toFixed(3), z: +z.toFixed(3) };
-      tl.chairs.forEach(function(c){ var s = state.chairs[c.k]; if (s){ s.x = +(s.x + dx).toFixed(3); s.z = +(s.z + dz).toFixed(3); } });
+      if (along) tl.chairs.forEach(function(c){ var s = state.chairs[c.k]; if (s){ s.x = +(s.x + dx).toFixed(3); s.z = +(s.z + dz).toFixed(3); } });
       Object.keys(views).forEach(function(id){   // (where a guest's bowl goes: at the table where it is now)
         var v = views[id], sp = v.info.spot, t = sp.table, toTable = sp.z < t.z ? 1 : -1;
         v.bowlAt = V(sp.x, t.top, t.z - toTable * (t.halfZ - 0.34));
@@ -2856,12 +2857,15 @@
       var me = ctx.getChef(), f = V(Math.sin(me.rotation.y), 0, Math.cos(me.rotation.y)), t = m.t;
       m.x = me.position.x + f.x * 1.1; m.z = me.position.z + f.z * 1.1;
       m.rot = m.z < t.z ? 0 : Math.PI;   // (it faces its table)
-      var hx = m.size.x / 2, hz = m.size.z / 2, dz = Math.abs(m.z - t.z);
-      m.ok = ctx.boxFree(m.x - hx + 0.08, m.x + hx - 0.08, m.z - hz + 0.08, m.z + hz - 0.08) && Math.abs(m.x - t.x) < t.top.x + 0.15 && dz > t.top.z + hz * 0.3 && dz < t.top.z + hz * 2 + 0.35;   // (along its table's long sides)
+      var hx = m.size.x / 2, hz = m.size.z / 2, dz = Math.abs(m.z - t.z), plus = m.z > t.z;
+      var z0 = m.z - hz + 0.08 + (plus ? 0.2 : 0), z1 = m.z + hz - 0.08 - (plus ? 0 : 0.2);   // (the part under the table does not count: it is pushed in)
+      var sameSide = (m.x - t.x) * (m.from.x - t.x) > 0 && Math.abs(m.x - t.x) > 0.15;   // (on its own half: the guests step in from the outer ends)
+      m.ok = ctx.boxFree(m.x - hx + 0.08, m.x + hx - 0.08, z0, z1) && sameSide && Math.abs(m.x - t.x) < t.top.x - 0.2 && dz > t.top.z - 0.2 && dz < t.top.z + hz * 2 + 0.05;   // (along its table's long sides)
       m.obj.position.set(m.x, 0, m.z); m.obj.rotation.y = m.rot;
     }
     function putChair(cancel){
       var m = movingChair; if (!m) return;
+      if (!cancel && job){ cancel = true; say('The waiter is on his way \u2013 the chair stays where it was'); }
       movingChair = null;
       m.boxes.forEach(function(w){ w.b.minX = w.minX; w.b.maxX = w.maxX; w.b.minZ = w.minZ; w.b.maxZ = w.maxZ; });
       m.obj.position.set(m.from.x, 0, m.from.z); m.obj.rotation.y = m.from.rot;
@@ -2874,7 +2878,7 @@
     }
     var tablesShown = null;
     function showTables(){
-      if (!ctx.tables || tablesShown === state.tables || !ctx.tables.list().length || movingTable) return;
+      if (!ctx.tables || tablesShown === state.tables || !ctx.tables.list().length || movingTable || movingChair) return;
       if (state.guests.some(function(g){ return g.phase !== 'away'; }) && tablesShown !== null) return;
       var allThere = true;
       Object.keys(state.tables).forEach(function(i){ var s = state.tables[i]; if (!tableTo(+i, s.x, s.z, false)) allThere = false; });
@@ -3020,7 +3024,7 @@
     }, { passive: true });
     function wheelTurn(s){
       var it = carried(), v = it && !HOME[it.kind] && objs[it.id];
-      if (movingProp) movingProp.rot = (movingProp.rot + s * Math.PI / 8) % (Math.PI * 2);
+      if (movingProp) movingProp.rot = (movingProp.rot + s * Math.PI / 8 + Math.PI * 2) % (Math.PI * 2);
       else if (ghost) ghost.rot = (ghost.rot + s * Math.PI / 8 + Math.PI * 2) % (Math.PI * 2);
       else if (heldProp) heldProp.holder.userData.wheelTurn = (heldProp.holder.userData.wheelTurn || 0) + s * Math.PI / 12;
       else if (v) v.obj.userData.wheelTurn = (v.obj.userData.wheelTurn || 0) + s * Math.PI / 12;
@@ -3048,7 +3052,7 @@
       if (movingChair) return movingChair.ok ? 'put the chair here' : 'no room \u2013 it goes back';
       if (movingTable) return movingTable.ok ? 'put the table here' : 'no room \u2013 it goes back';
       if (movingProp) return movingProp.ok ? 'put the ' + propName(movingProp) + ' here' : 'no room \u2013 it goes back';
-      if (furnWas && ghost) return ghost.ok ? 'put it here' : 'no room \u2013 it goes back';
+      if (furnWas && ghost && ghost.id === furnWas.id) return ghost.ok ? 'put it here' : 'no room \u2013 it goes back';
       var it = carried(); return (!!it && !HOME[it.kind] && !pc) || !!heldProp;
     });
     function showSpills(){
@@ -3096,6 +3100,7 @@
       if (!W || !W.ready()) return;
       if (!state.owned.waiter){ if (W.shown()) W.show(false); return; }
       if (!W.shown()){ W.show(true, W.place.home, Math.PI / 2); dropWaiterBowl(); job = null; }
+      if (!job && (movingTable || movingChair)) return;   // (furniture being moved: he waits)
       if (!job){
         // a bowl on the bar for a guest who ordered that dish (the one waiting longest), else an order to take
         var best = null;
@@ -3968,13 +3973,16 @@
       Object.keys(falling).forEach(function(id){ if (phys) phys.world.removeBody(falling[id].body); delete falling[id]; });
       Object.keys(propFalling).forEach(function(k){ if (phys) phys.world.removeBody(propFalling[k].body); delete propFalling[k]; });
       if (heldProp){ var hp = heldProp; heldProp = null; if (hp.home) hp.home.add(hp.holder); if (hp.box && hp.boxWas){ hp.box.minX = hp.boxWas.minX; hp.box.maxX = hp.boxWas.maxX; hp.box.minZ = hp.boxWas.minZ; hp.box.maxZ = hp.boxWas.maxZ; } }
-      if (movingProp){ if (movingProp.box && movingProp.boxWas){ var bw = movingProp.boxWas; movingProp.box.minX = bw.minX; movingProp.box.maxX = bw.maxX; movingProp.box.minZ = bw.minZ; movingProp.box.maxZ = bw.maxZ; } movingProp = null; }
+      if (movingProp) cancelMoving();   // (back where it stood, box and all)
       propsShown = null;   // (the loaded game's places)
       if (movingTable) putTable(true);
       if (movingChair) putChair(true);
       if (movingProp) cancelMoving();
       furnWas = null;
       tablesShown = null;
+      if (ctx.tables) ctx.tables.list().forEach(function(t){   // (chairs the loaded game did not move: at their table as at first)
+        t.chairs.forEach(function(c){ if (!d.state.chairs[c.k] && c.off && (Math.abs(c.x - t.x - c.off.x) > 1e-3 || Math.abs(c.z - t.z - c.off.z) > 1e-3 || c.rot !== c.rot0)) ctx.tables.moveChair(c.k, t.x + c.off.x, t.z + c.off.z, c.rot0); });
+      });
       if (ctx.tables) ctx.tables.list().forEach(function(t, i){ if (!d.state.tables[i] && t.home && (t.x !== t.home.x || t.z !== t.home.z)){ tableTo(i, t.home.x, t.home.z, false); delete state.tables[i]; } });   // (a table the loaded game did not move: where it stood at first)
       job = null; if (ctx.getWaiter && ctx.getWaiter().ready()){ ctx.getWaiter().hold(null); ctx.getWaiter().show(false); }   // (he starts at the bar again)
       Object.keys(spillMeshes).forEach(function(id){ var m = spillMeshes[id]; root.remove(m); m.geometry.dispose(); m.material.dispose(); delete spillMeshes[id]; });   // (the loaded game's spills are drawn anew)

@@ -590,7 +590,7 @@
           // the tables with their chairs: where each stands, how much room it takes, moving it
           tables: { list: function(){ return tableSets.map(function(s, i){ return { i: i, x: s.at.x, z: s.at.z, home: s.home, half: s.half, obj: s.obj,
                                                                                     top: { x: (s.box.maxX - s.box.minX) / 2, z: (s.box.maxZ - s.box.minZ) / 2 },   // (the table alone)
-                                                                                    chairs: s.chairs.map(function(c){ var sp = chairSpots[c.k]; return { k: c.k, x: sp.x, z: sp.z, rot: sp.rot, obj: c.obj, boxes: c.boxes, size: sp.size }; }), boxes: [s.box].concat(s.chairs.reduce(function(a, c){ return a.concat(c.boxes); }, [])) }; }); },
+                                                                                    chairs: s.chairs.map(function(c){ var sp = chairSpots[c.k]; return { k: c.k, x: sp.x, z: sp.z, rot: sp.rot, obj: c.obj, boxes: c.boxes, size: sp.size, off: c.off, rot0: c.rot0 }; }), boxes: [s.box].concat(s.chairs.reduce(function(a, c){ return a.concat(c.boxes); }, [])) }; }); },
                     move: moveTableSet, moveChair: moveChair },
           showBought: function(key, on){ if (decor && decor.showBought) decor.showBought(key, on); },
           removeBox: removeBox, floorFree: floorFree, boxFree: boxFree,
@@ -1032,7 +1032,7 @@
                               table: { x: spot[0], z: spot[1], halfX: tSize.x / 2, halfZ: tSize.z / 2, top: tSize.y } });
             // seat (whole footprint) and the taller backrest strip at the back
             var backDepth = cSize.z * CHAIR_BACK, backDir = p[2] === 0 ? -1 : 1;
-            set.chairs.push({ obj: ch, k: chairSpots.length - 1, boxes: [addBox(cx, cz, cSize.x, cSize.z, cSize.y * CHAIR_SEAT),
+            set.chairs.push({ obj: ch, k: chairSpots.length - 1, off: { x: p[0], z: p[1] }, rot0: p[2], boxes: [addBox(cx, cz, cSize.x, cSize.z, cSize.y * CHAIR_SEAT),
                                                                           addBox(cx, cz + backDir * (cSize.z - backDepth) / 2, cSize.x, backDepth, cSize.y)] });
             set.half = { x: tSize.x / 2 + 0.05, z: dz + cSize.z / 2 + 0.05 };   // (the table with its chairs)
           });
@@ -1991,9 +1991,10 @@
     c.obj.position.set(x, 0, z); c.obj.rotation.y = rot;
     boxAt(c.boxes[0], x, z, cs.x, cs.z); boxAt(c.boxes[1], x, z + backDir * (cs.z - backDepth) / 2, cs.x, backDepth);
     sp.x = x; sp.z = z; sp.rot = rot;
+    var mates = []; tableSets.forEach(function(s){ if (s.chairs.some(function(e){ return e.k === k; })) mates = s.chairs.map(function(e){ return e.k; }); });
     characters.forEach(function(ch){
       ch.sits = {};
-      if (ch.cfg.seat === k && ch.state === 'away'){ ch.sit = null; prepareSeat(ch); }
+      if (mates.indexOf(ch.cfg.seat) >= 0 && ch.state === 'away'){ ch.sit = null; prepareSeat(ch); }   // (this table's guests: their ways in, worked out again)
       if (ch.guestInfo && ch.sit) ch.guestInfo.spot = ch.sit.spot;
     });
     return true;

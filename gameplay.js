@@ -1092,7 +1092,7 @@
     function stepCharge(dt){
       if (charging && pressed){
         var f = findFocus();
-        if (!f.HOLD || f.HOLD.label !== charging.it.label) charging = null;   // (looked away)
+        if (!f.HOLD || f.HOLD.label !== charging.it.label || f.HOLD.obj !== charging.it.obj) charging = null;   // (looked away, or at another one)
         else if ((charging.t += dt) >= charging.it.charge){ var u = charging.it; charging = null; if (u.use) u.use(); }
       } else charging = null;
       var p = charging ? Math.min(1, charging.t / charging.it.charge) : 0;
