@@ -33,7 +33,7 @@ Rest dran kommt. Er wird nach jeder Etappe aktualisiert.
 | 10 | Umrühren und Garzeit überwachen | fertig: linke Maustaste am Topf, Maus im Kreis führt die Kelle; ohne Rühren setzt der Eintopf an und brennt dann an; 40 Sekunden Köcheln; Würzen mit dem Streuer (3 Stöße sind richtig) |
 | 11 | Fertiger Eintopf mit genau 20 Portionen | fertig: genau 20 Portionen (getestet), Füllstand sinkt sichtbar; angebrannter Eintopf muss weggeworfen werden; Qualität aus Schnitt, Brühe, Würze und Anbrennen bestimmt das Trinkgeld |
 | 12 | Schüssel nehmen und Portion einfüllen | fertig: leere Schüssel vom Stapel, Schöpfkelle füllt eine Portion ein; Schüsseln kommen nach dem Essen von selbst zurück (Spülen folgt später) |
-| 13 | Kunden treten ein und setzen sich | fertig: solange geöffnet ist, kommen Gäste einzeln durch die Eingangstür, gehen zu ihrem Platz und setzen sich; jeder der acht Gäste hat noch seinen festen Stuhl |
+| 13 | Kunden treten ein und setzen sich | fertig: solange geöffnet ist, kommen Gäste einzeln durch die Eingangstür, gehen zu ihrem Platz und setzen sich; jeder Gast sucht sich einen freien Stuhl (nicht vor einer schmutzigen Schüssel) |
 | 14 | Bestellung entgegennehmen | fertig: Gäste lesen kurz die Karte (drei Punkte), dann zeigt ein Notizblock über dem Kopf, dass sie bestellen möchten (mit eigener Geduld); der Koch geht an den Tisch und nimmt die Bestellung mit E auf, erst dann wartet der Gast auf das Gericht (Sprechblase in dessen Farbe) |
 | 15 | Essen zum Tisch bringen | fertig |
 | 16 | Kunden bezahlen lassen | fertig: 9 € pro Portion plus Trinkgeld für schnelle Bedienung, Startgeld 250 € |
@@ -57,14 +57,14 @@ dem der Gastgeber die Aktionen prüft.
 3. **Kochen, Teil 3 – Brühe, Hitze, Rühren.** Erledigt (20.11.2026). Das Restaurant wird mit E
    an der Eingangstür geöffnet und geschlossen; Gäste bestellen nur, solange geöffnet ist.
    Brühe gibt es als Vorrat (reicht für etwa sechs Töpfe), der Krug wird daraus nachgefüllt.
-4. **Gäste kommen und gehen.** Erledigt (20.11.2026). Offen: freie Platzwahl (jeder hat noch
-   seinen festen Stuhl), Gäste weichen nur dem Koch aus, nicht einander.
+4. **Gäste kommen und gehen.** Erledigt (20.11.2026). Freie Platzwahl ist inzwischen da. Offen:
+   Gäste weichen nur dem Koch aus, nicht einander.
 5. **Der Tag.** Erledigt (20.11.2026): Uhr, Öffnen und Schließen, Tagesabrechnung, Speichern
    und Laden. Damit ist das Abnahmekriterium von Phase 1 erfüllt: Spiel starten, Eintopf
    kochen, Gäste bedienen, Geld verdienen, den Tag beenden, Fortschritt speichern.
 
-Offen aus Phase 1 (bewusst vereinfacht): Kühlschrank ohne Funktion,
-freie Platzwahl der Gäste. (Spülen, Pausenmenü und Bestellen am Tisch sind inzwischen da.)
+Offen aus Phase 1 (bewusst vereinfacht): Kühlschrank ohne Funktion.
+(Spülen, Pausenmenü, Bestellen am Tisch und freie Platzwahl sind inzwischen da.)
 
 ## Stand von Phase 2 (Restaurant-Management)
 

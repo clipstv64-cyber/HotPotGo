@@ -376,7 +376,15 @@
     function furniturePiece(id){ for (var i = 0; i < state.furniture.length; i++) if (state.furniture[i].id === id) return state.furniture[i]; return null; }
     function dirtyOnTables(){ return Object.keys(state.items).filter(function(id){ var o = state.items[id]; return o.kind === 'dirty' && o.at === 'table'; }).length; }
     // is a dirty bowl still standing at this guest's place? (nobody sits down there until it is cleared away)
-    function dirtyAt(gid){ return Object.keys(state.items).some(function(id){ var o = state.items[id]; return o.kind === 'dirty' && o.at === 'table' && o.guest === gid; }); }
+    var MAX_SEATS = 64;   // (more chairs than the dining room could ever have: what a saved chair number may be)
+    // the chairs nobody sits on (or is on the way to) and with no dirty bowl in front of them
+    function freeSeats(){
+      var info = ctx.getGuests()[0], n = info && info.chairs ? info.chairs() : 0, taken = {};
+      state.guests.forEach(function(g){ if (g.phase !== 'away' && num(g.seat)) taken[g.seat] = true; });
+      Object.keys(state.items).forEach(function(id){ var o = state.items[id]; if (o.kind === 'dirty' && o.at === 'table' && num(o.seat)) taken[o.seat] = true; });
+      var out = []; for (var k = 0; k < n; k++) if (!taken[k]) out.push(k);
+      return out;
+    }
     // A guest's visit is over: what it was like, the stars for it, and (if the guest writes one) the review.
     // served: the guest got the stew (g.q: how good it was, g.patience: the patience that was left when it came).
     function review(g, served){
@@ -657,9 +665,9 @@
         case 'pourBack':
           if (!it || it.kind !== 'stew' || pot.phase !== 'ready' || it.batch !== pot.batch || pot.portions >= dishOf(pot.dish).portions) return false;
           it.kind = 'bowl'; delete it.batch; delete it.dish; pot.portions++; return true;
-        case 'arrive':     // a guest comes in
-          g = guest(arg); if (!g || g.phase !== 'away') return false;
-          g.phase = 'coming'; return true;
+        case 'arrive':     // a guest comes in: arg = { id, seat } (a free chair)
+          g = guest(arg && arg.id); if (!g || g.phase !== 'away' || !num(arg.seat) || freeSeats().indexOf(arg.seat) < 0) return false;
+          g.phase = 'coming'; g.seat = arg.seat; return true;
         case 'seated':     // ... has sat down and reads the menu
           g = guest(arg); if (!g || g.phase !== 'coming') return false;
           g.phase = 'deciding'; g.t = rnd(RULES.decide[0], RULES.decide[1]); return true;
@@ -747,7 +755,7 @@
             var used = state.items[g.item];
             if (used){   // the empty bowl stays on the table, dirty, where it stood
               var gv2 = views[g.id];
-              used.kind = 'dirty'; delete used.batch; delete used.q;
+              used.kind = 'dirty'; delete used.batch; delete used.q; used.seat = g.seat;
               if (gv2){ used.x = gv2.bowlAt.x; used.y = gv2.bowlAt.y; used.z = gv2.bowlAt.z; }
               else { dropItem(used); state.bowls++; }   // (nowhere to show it: back on the stack)
             }
@@ -758,14 +766,15 @@
           if (g.t >= RULES.linger) g.phase = 'leaving';
         } else if (g.phase === 'away'){
           g.rest = Math.max(0, (g.rest || 0) - dt);
-          if (g.rest <= 0 && !dirtyAt(g.id)) away.push(g);   // (not to a table with a dirty bowl on it)
+          if (g.rest <= 0) away.push(g);
         }
       });
       // while the restaurant is open, guests come in one after the other
       if (!state.guests.length || !place.pot || !state.open) return;
       state.nextGuest -= dt;
       if (state.nextGuest <= 0){
-        if (away.length) act('arrive', away[Math.floor(Math.random() * away.length)].id);
+        var seats = freeSeats();
+        if (away.length && seats.length) act('arrive', { id: away[Math.floor(Math.random() * away.length)].id, seat: seats[Math.floor(Math.random() * seats.length)] });
         var stars = reputation(), draw = stars ? RULES.review.draw[0] + (RULES.review.draw[1] - RULES.review.draw[0]) * (stars - 1) / 4 : 1;
         state.nextGuest = rnd(RULES.guestEvery[0], RULES.guestEvery[1]) / draw / (state.owned.bigroom ? SHOP_EFFECT.guests : 1) * Math.max(0.7, 1 + PRICE_GUESTS * dearer());   // (cheaper: a few more come)   // a good name brings more guests
       }
@@ -1512,12 +1521,12 @@
     }
 
     // ---------- the guests' side ------------------------------------------------------------
-    var views = {};   // per guest: { info, sign, toTable, bowlAt, review (the last one whose stars were shown) }
+    var views = {};   // per guest: { info, sign, bowlAt, review (the last one whose stars were shown) }
     function view(info){
       var v = views[info.id];
       if (!v){
         var sp = info.spot, t = sp.table, toTable = sp.z < t.z ? 1 : -1;
-        v = views[info.id] = { info: info, sign: sign(0.62), toTable: toTable, bowlAt: V(sp.x, t.top, t.z - toTable * (t.halfZ - 0.34)) };
+        v = views[info.id] = { info: info, sign: sign(0.62), bowlAt: V(sp.x, t.top, t.z - toTable * (t.halfZ - 0.34)) };
       }
       if (!guest(info.id)){   // (a saved game brings what its guests were doing)
         state.guests.push({ id: info.id, phase: 'away', t: 0, patience: 0, pay: 0, rest: 0, item: null });
@@ -1539,7 +1548,7 @@
       var best = null, p = V();
       for (var d = 0.2; d <= t.halfZ - R + 0.001; d += 0.03){
         for (var side = -0.18; side <= 0.181; side += 0.06){
-          p.set(sp.x + side, 0, t.z - v.toTable * (t.halfZ - d));
+          p.set(sp.x + side, 0, t.z - (sp.z < t.z ? 1 : -1) * (t.halfZ - d));   // (his side of the table: the chair may have changed)
           var clear = 0.3;
           segs.forEach(function(sg){   // distance from the bowl's middle to the hand (wrist to fingertips)
             var ab = V(sg[1].x - sg[0].x, 0, sg[1].z - sg[0].z), ap = V(p.x - sg[0].x, 0, p.z - sg[0].z);
@@ -2553,14 +2562,17 @@
       // what was bought for the dining room (decor.js puts it there)
       SHOP.forEach(function(t){ if (!!state.owned[t.key] !== !!shown['own_' + t.key]){ shown['own_' + t.key] = !!state.owned[t.key]; if (ctx.showBought) ctx.showBought(t.key, !!state.owned[t.key]); } });
 
+      // (an older game: a dirty bowl stands at the chair of the guest who ate from it)
+      Object.keys(state.items).forEach(function(id){ var o = state.items[id]; if (o.kind === 'dirty' && o.at === 'table' && !num(o.seat) && views[o.guest] && views[o.guest].info.seat) o.seat = views[o.guest].info.seat(); });
       // the guests: sent in and out as the rules say, and their signs (menu, order, eating, angry)
       state.guests.forEach(function(g){
         var v = views[g.id];
         if (!v) return;
         var s = v.sign, where = v.info.where();
         // (a loaded game: who sat at the table sits there again)
-        if (where === 'away' && (g.phase === 'deciding' || g.phase === 'ready' || g.phase === 'waiting' || g.phase === 'eating')){ v.info.seatNow(); where = v.info.where(); }
-        if (g.phase === 'coming'){ if (where === 'away') v.info.come(); else if (where === 'seated') act('seated', g.id); }
+        if (where === 'away' && (g.phase === 'deciding' || g.phase === 'ready' || g.phase === 'waiting' || g.phase === 'eating')){ if (v.info.sitAt && !v.info.sitAt(g.seat)) g.seat = v.info.seat(); v.info.seatNow(); where = v.info.where(); }
+        if (g.phase !== 'away' && !num(g.seat) && v.info.seat) g.seat = v.info.seat();   // (an older game: the chair he always had)
+        if (g.phase === 'coming'){ if (where === 'away'){ if (v.info.sitAt && !v.info.sitAt(g.seat)) g.seat = v.info.seat(); v.info.come(); } else if (where === 'seated') act('seated', g.id); }
         if (g.phase === 'leaving'){ if (where === 'seated') v.info.leave(); else if (where === 'away') act('left', g.id); }
         var show = where === 'seated' && (g.phase === 'deciding' || g.phase === 'ready' || g.phase === 'waiting' || g.phase === 'angry' || g.phase === 'eating');
         s.sp.visible = show;
@@ -3038,7 +3050,8 @@
         if (g.got !== undefined && !isDish(g.got)) g.got = 'stew';
         if (g.price !== undefined && !(num(g.price) && g.price >= PRICE_RANGE[0] && g.price <= PRICE_RANGE[1])) g.price = dishOf(g.got).price;
       });
-      Object.keys(st.items).forEach(function(id){ var o = st.items[id]; if (o.kind === 'stew' && !isDish(o.dish)) o.dish = 'stew'; else if (o.kind !== 'stew') delete o.dish; });
+      Object.keys(st.items).forEach(function(id){ var o = st.items[id]; if (o.kind === 'stew' && !isDish(o.dish)) o.dish = 'stew'; else if (o.kind !== 'stew') delete o.dish;
+        if (o.seat !== undefined && !(num(o.seat) && o.seat === Math.floor(o.seat) && o.seat >= 0 && o.seat < MAX_SEATS)) delete o.seat; });
       if (st.owned && st.owned.lounge === true && !st.owned.bigroom) st.owned.bigroom = true;   // (an older game had a lounge there instead)
       var owned = {};   // (only things the shop has)
       if (st.owned && typeof st.owned === 'object') SHOP.forEach(function(t){ if (st.owned[t.key] === true) owned[t.key] = true; });
@@ -3114,6 +3127,7 @@
         if (!num(g.patience)) g.patience = 1;
         if (!num(g.pay)) g.pay = RECIPES.stew.price;
         if (!num(g.rest)) g.rest = 0;
+        if (g.seat !== undefined && !(num(g.seat) && g.seat === Math.floor(g.seat) && g.seat >= 0 && g.seat < MAX_SEATS)) delete g.seat;
         if (!num(g.q)) delete g.q;
         if (!num(g.review) || !num(g.stars)){ delete g.review; delete g.stars; }
         delete g.waited;

@@ -572,7 +572,9 @@
               if (!c.guestInfo) c.guestInfo = { id: c.cfg.name, group: c.group, spot: c.sit.spot, head: findBone(c.obj, c.cfg.prefix, 'Head'),
                 hands: [findBone(c.obj, c.cfg.prefix, 'LeftHand'), findBone(c.obj, c.cfg.prefix, 'RightHand')],
                 where: function(){ return c.state === 'away' ? 'away' : c.state === 'seated' ? 'seated' : c.goal === 'leave' ? 'leaving' : 'coming'; },
-                come: function(){ guestCome(c); }, leave: function(){ guestLeave(c); }, seatNow: function(){ guestSeatNow(c); } };
+                come: function(){ guestCome(c); }, leave: function(){ guestLeave(c); }, seatNow: function(){ guestSeatNow(c); },
+                // the chairs: how many there are, which one is this guest's, another one (only while outside)
+                chairs: function(){ return chairSpots.length; }, seat: function(){ return c.cfg.seat; }, sitAt: function(k){ return guestSitAt(c, k); } };
               return c.guestInfo;
             });
           },
@@ -1910,6 +1912,7 @@
     var bones = [];
     ch.obj.traverse(function(o){ if (o.isBone) bones.push({ bone: o, q: o.quaternion.clone(), p: o.position.clone() }); });
     ch.sit = { spot: spot, bones: bones, pos: ch.group.position.clone(), rot: ch.group.rotation.y, route: entranceRoute(spot) };
+    (ch.sits = ch.sits || {})[ch.cfg.seat] = ch.sit;   // (kept for when this guest takes this chair again)
     // nobody is in the restaurant at the start: the guests come in when it is open
     startWalking(ch);
     ch.group.visible = false; ch.state = 'away';
@@ -1922,6 +1925,17 @@
     ch.mixer.update(0);
   }
   // A guest comes in through the entrance door and walks to their chair ...
+  // a guest outside takes another chair: the seated pose is worked out again for it
+  function guestSitAt(ch, k){
+    if (k === ch.cfg.seat) return true;
+    if (ch.state !== 'away' || !chairSpots[k]) return false;
+    var was = ch.cfg.seat;
+    if (ch.sits && ch.sits[k]){ ch.cfg.seat = k; ch.sit = ch.sits[k]; if (ch.guestInfo) ch.guestInfo.spot = ch.sit.spot; return true; }   // (worked out before)
+    ch.cfg.seat = k; ch.sit = null; prepareSeat(ch);
+    if (!ch.sit){ ch.cfg.seat = was; prepareSeat(ch); return false; }
+    if (ch.guestInfo) ch.guestInfo.spot = ch.sit.spot;
+    return true;
+  }
   function guestCome(ch){
     if (ch.state !== 'away' || !ch.sit) return;
     startWalking(ch);
