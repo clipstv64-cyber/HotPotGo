@@ -841,8 +841,11 @@
           // the cooking pot (restaurant.js) stands on a burner of the range
           var px = rg.h.position.x, pz = rg.h.position.z - rg.s.x * 0.22;
           kitchen.potAt = new THREE.Vector3(px, surfaceY(rg.h, px, pz), pz);
+          var pzB = rg.h.position.z + rg.s.x * 0.22;   // (the burner at the other end: where a second pot goes)
+          kitchen.potAt2 = new THREE.Vector3(px, surfaceY(rg.h, px, pzB), pzB);
         }
         wall(fr, 0.05); wall(sj, 0.1);
+        if (fr) kitchen.fridge = fr.h;
         if (fr) kitchen.fridgeAt = new THREE.Vector3(fr.h.position.x - fr.s.z / 2 - 0.1, 0, fr.h.position.z);   // the sausages are kept in it (restaurant.js)
         if (wall(sk, 0.15) && ws){ ws.h.position.set(e - ws.s.z / 2, 1.95, sk.h.position.z); ws.h.rotation.y = -Math.PI / 2; scene.add(ws.h); }
         if (sk) kitchen.sinkAt = new THREE.Vector3(sk.h.position.x, 0, sk.h.position.z);   // the washing up is done here (restaurant.js)

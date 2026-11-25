@@ -78,9 +78,12 @@
               keep: 30,              // the restaurant's stars: the average of this many latest reviews
               dirt: 0.25,            // each stain on the floor takes this much off "clean"
               dishes: 0.15,          // ... and each dirty bowl left on a table
+              spills: 0.1,           // ... and each spill on a table
               mood: 0.45,            // the room as it is: shabby (better furniture will raise it)
               draw: [0.8, 1.25] },   // guests come this much less / more often at 1 star and at 5 stars
     autosave: 20,             // seconds between two automatic saves
+    spill: { chance: 0.5,     // how often a guest leaves a spill on the table
+             wipe: 2.2 },     // metres the cloth has to go over it to wipe it off
     reach: 2.1,               // how close the chef has to be to a crate, the pot, the bowls
     cutReach: 1.75,           // ... to the chopping block to cut on it
     shelfReach: 1.75,         // ... to the shelf with jug and shaker
@@ -105,7 +108,7 @@
     pour: 0.5,                                 // broth per second from the fully tipped jug
     spice: 3, spiceMax: 8                      // shakes of seasoning: just right, and at most
   };
-  var HOME = { knife: true, broth: true, spice: true, roller: true, mallet: true };   // tools with a place of their own
+  var HOME = { knife: true, broth: true, spice: true, roller: true, mallet: true, rag: true };   // tools with a place of their own
   var VEG = ['potato', 'carrot', 'onion'];        // in crates
   var FOOD = VEG.concat(['sausage']);              // what is cut and goes into the pot (the sausage lives in the fridge)
   // what can be ordered at the computer (broth: one unit is what one pot needs)
@@ -127,6 +130,7 @@
   var SHOP = [
     { key: 'bowls',   cat: 'kitchen', name: 'More bowls',    price: 45,  pic: 'bowl',   text: 'Ten more bowls on the stack, so you run out less often.' },
     { key: 'stove',   cat: 'kitchen', name: 'Strong burner', price: 220, pic: 'pot',    text: 'A stronger flame under the pot: every dish is done in less time.' },
+    { key: 'pot2',    cat: 'kitchen', name: 'Second pot',    price: 180, pic: 'pot',    text: 'A second pot on the other burner: cook two dishes at once.' },
     { key: 'candles', cat: 'room',    name: 'Table candles', price: 60,  pic: 'candle', text: 'A candle on every table. Guests like the room better.' },
     { key: 'plants',  cat: 'room',    name: 'Potted plants', price: 110, pic: 'plant',  text: 'Three big plants for the dining room. Guests like the room better.' },
     { key: 'bigroom',    cat: 'expand', name: 'Bigger dining room', price: 450, pic: 'table',  text: 'The left wall moves back: more room for furniture, and more guests come.' },
@@ -199,7 +203,7 @@
     carrot: { a: 5, b: 0, from: 0.04, to: 0.68, dropEnd: true, cap: ['#f9b25a', '#ee8f2e'] },
     potato: { a: 3, b: 3, from: 0.05, to: 0.95, cap: ['#f6e9b4', '#ecd98f'] },
     onion:  { a: 2, b: 3, from: 0.12, to: 0.9, cap: ['#fbf6e6', '#e6d9bd'] },
-    sausage: { a: 5, b: 0, from: 0.08, to: 0.92, cap: ['#d98a78', '#c0644f'] }
+    sausage: { a: 5, b: 0, from: 0.08, to: 0.92, cap: ['#a8604a', '#7e3f30'] }
   };
   // what can be carried; carry: how the chef holds it (see gameplay.js)
   var KINDS = {
@@ -215,6 +219,7 @@
     spice:  { a: 'the spice shaker', the: 'the spice shaker' },
     roller: { a: 'the paint roller', the: 'the paint roller' },   // in the storeroom, held in both hands; item.color, item.load (0 .. 1: paint for a panel)
     mallet: { a: 'the rubber mallet', the: 'the rubber mallet' }, // in the storeroom, for laying the floor
+    rag:    { a: 'the cleaning cloth', the: 'the cleaning cloth' }, // on the second prep table, for spills on the tables
     paint:  { a: 'a bucket of paint', the: 'the bucket of paint', carry: { half: 0.23, fwd: 0.46, drop: -0.26, grip: 0.12, back: 0, curl: 0.35 } },   // item.color, item.left (panels)
     boards: { a: 'a pack of flooring', the: 'the pack of flooring', carry: { half: 0.14, fwd: 0.5, drop: -0.26, grip: 0.14, back: 0, curl: 0.3, yaw: Math.PI / 2 } },   // item.floor, item.left (squares)
     parcel: { a: 'a delivery box', the: 'the delivery box', carry: { half: 0.215, fwd: 0.46, drop: -0.4, grip: 0.12, back: 0, curl: 0.3 } }   // item.goods = what is in it
@@ -240,7 +245,8 @@
     paint:  { file: 'models/d_paintbucket.glb', height: 0.42 },          // an open bucket of paint
     roller: { file: 'models/d_roller.glb', width: 2.05, align: true },   // a paint roller on a long pole (its roller at +X)
     mallet: { file: 'models/d_mallet.glb', width: 0.4, align: true },    // a rubber mallet (its head at +X)
-    boards: { file: 'models/d_floorboards.glb', width: 0.9 },                 // a bundle of planks tied with rope
+    boards: { file: 'models/d_floorboards.glb', width: 0.9 },
+    rag:    { file: 'models/d_rag.glb', width: 0.26 },                   // a folded cleaning cloth                 // a bundle of planks tied with rope
     candle: { file: 'models/d_candlebottle.glb', height: 0.4 },           // (the shop's pictures)
     plant:  { file: 'models/d_plant.glb', height: 1.75 },
     table:  { file: 'models/table.glb', width: 1.4 },
@@ -293,6 +299,11 @@
     // (spent: euros for supplies ordered that day)
     // (reviewed, stars: how many reviews were written that day, and their stars added up)
     function newDay(n){ return { n: n, phase: 'prep', time: RULES.day.opens, served: 0, lost: 0, sales: 0, tips: 0, spent: 0, reviewed: 0, stars: 0, report: null }; }
+    // a pot: 'empty' | 'filling' (things are put in, it cooks) | 'ready' | 'burnt'; dish: what it is becoming (once it has all of a recipe)
+    function newPot(){
+      return { phase: 'empty', has: { potato: 0, carrot: 0, onion: 0, sausage: 0 }, cut: {}, qs: [], broth: 0, spice: 0,
+               heat: 0, temp: 20, cooked: 0, stick: 0, burn: 0, quality: 1, portions: 0, batch: 0, dish: null };
+    }
     function newState(){
       var st = {
         money: RULES.startMoney, served: 0, lost: 0, nextId: 1,
@@ -306,8 +317,7 @@
         fridge: 0,                                    // sausages in the kitchen's fridge
         bowls: RULES.bowls,                           // clean bowls on the stack
         // the pot: 'empty' | 'filling' (things are put in, it cooks) | 'ready' | 'burnt'
-        pot: { phase: 'empty', has: { potato: 0, carrot: 0, onion: 0, sausage: 0 }, cut: {}, qs: [], broth: 0, spice: 0,
-               heat: 0, temp: 20, cooked: 0, stick: 0, burn: 0, quality: 1, portions: 0, batch: 0, dish: null },   // dish: what it is becoming (once it has all of a recipe)
+        pot: newPot(),                                // the pot the chef works at: one of pots (pots[potAt])
         // { id, phase, t, patience, pay, item, rest }; phase: 'away' -> 'coming' -> 'deciding' -> 'ready' (wants to order) -> 'waiting' -> 'eating' -> 'paid' -> 'leaving' -> 'away'
         // (from 'waiting' also -> 'angry' -> 'leaving' when the patience runs out)
         guests: [],
@@ -322,17 +332,26 @@
         decor: { walls: {}, floor: {} },              // each wall panel's paint and each floor square's flooring (index.html: ctx.surfaces); none: as it was
         prices: {}, offer: {},                        // the menu: a dish's price when it is not the usual one; offer[dish] false: not on the menu today
         furniture: [],                                // { id, key, x, z, rot, placed } (not placed yet: it is being put somewhere)
+        spills: [],                                   // on the tables: { id, x, y, z, kind, size, rot, left (1 fresh .. 0 wiped off) }
         day: newDay(1)
       };
-      ['knife', 'broth', 'spice', 'roller', 'mallet'].forEach(function(kind){
+      ['knife', 'broth', 'spice', 'roller', 'mallet', 'rag'].forEach(function(kind){
         var o = { id: st.nextId++, kind: kind, at: 'home' };
         if (kind === 'broth'){ o.left = COOK.jug; st.broth = COOK.stock - COOK.jug; }
         st.items[o.id] = o; st.tools[kind] = o.id;
       });
       st.knife = st.tools.knife;
+      st.pots = [st.pot]; st.potAt = 0;   // (a second pot comes from the shop)
       return st;
     }
     var state = newState();
+    // the pot the chef works at, and doing something with another pot for a moment (all the pot code uses state.pot / place.pot)
+    function usePot(i){ if (!state.pots[i]) return; state.pot = state.pots[i]; state.potAt = i; if (place.pots && place.pots[i]) place.pot = place.pots[i]; }
+    function withPot(i, fn){
+      var a = state.pot, ai = state.potAt, b = place.pot;
+      state.pot = state.pots[i]; state.potAt = i; if (place.pots && place.pots[i]) place.pot = place.pots[i];
+      try { return fn(); } finally { state.pot = a; state.potAt = ai; place.pot = b; }
+    }
     function inside(){ return state.guests.some(function(g){ return g.phase !== 'away'; }); }   // is a guest still in the restaurant?
     // supplies: what is in the kitchen, what the kitchen holds, and how much more may be ordered
     function emptyGoods(){ return { potato: 0, carrot: 0, onion: 0, broth: 0, sausage: 0 }; }
@@ -401,7 +420,7 @@
     function review(g, served){
       var W = RULES.review, stains = play.getStains ? play.getStains().length : 0;   // (the floor is gameplay.js's)
       var f = { food: served ? clamp(num(g.q) ? g.q : 1) : 0, wait: served ? clamp((num(g.patience) ? g.patience : 1) * 1.15) : 0,
-                clean: clamp(1 - W.dirt * stains - W.dishes * dirtyOnTables()), value: 0, mood: mood() };
+                clean: clamp(1 - W.dirt * stains - W.dishes * dirtyOnTables() - W.spills * state.spills.length), value: 0, mood: mood() };
       f.value = served ? clamp(0.5 + 0.5 * f.food - PRICE_VALUE * ((num(g.price) ? g.price : dishOf(g.got).price) - dishOf(g.got).price)) : 0;   // a fair price for good food (dearer: worth less)
       var score = 0;
       Object.keys(W.weights).forEach(function(k){ score += W.weights[k] * f[k]; });
@@ -446,6 +465,7 @@
     function carried(){ return state.carry ? state.items[state.carry] : null; }
     function isVeg(kind){ return VEG.indexOf(kind) >= 0; }     // (kept in a crate)
     function isFood(kind){ return FOOD.indexOf(kind) >= 0; }   // (cut on the block, put into the pot)
+    function hasFridge(){ var k = ctx.getKitchen && ctx.getKitchen(); return !!(k && k.fridgeAt) && !MODELS.sausage.failed; }
     function known(k){ return k === 'stew' || !!state.owned['recipe_' + k]; }   // (a recipe he has)
     function menu(){ var m = Object.keys(RECIPES).filter(function(k){ return known(k) && state.offer[k] !== false; }); return m.length ? m : ['stew']; }
     var PRICE_RANGE = [5, 16];
@@ -461,7 +481,7 @@
     }
     function lacking(k, has){ var n = 0; FOOD.forEach(function(v){ n += Math.max(0, RECIPES[k].needs[v] - has[v]); }); return n; }
     function potDish(){ var pot = state.pot; if (pot.dish) return pot.dish; var f = fits(pot.has); return f[0] || null; }
-    function missing(){ var k = potDish(); return k ? FOOD.filter(function(v){ return state.pot.has[v] < RECIPES[k].needs[v]; }) : VEG.slice(); }
+    function missing(){ var k = potDish(); return k ? FOOD.filter(function(v){ return state.pot.has[v] < RECIPES[k].needs[v]; }) : FOOD.slice(); }
     function newItem(kind){ var it = { id: state.nextId++, kind: kind, at: 'hand' }; state.items[it.id] = it; state.carry = it.id; return it; }
     function dropItem(it){ delete state.items[it.id]; if (state.carry === it.id) state.carry = null; }
     function cutCount(o){ return o.cut ? o.cut.a.length + o.cut.b.length : 0; }
@@ -502,6 +522,12 @@
         case 'putFridge':  // ... and back into it
           if (!it || it.kind !== 'sausage' || it.cut || state.fridge >= RULES.fridgeStock) return false;
           state.fridge++; dropItem(it); return true;
+        case 'wipe':       // the cloth over a spill: arg = { id, amount } (share of it wiped off)
+          var sp = null, si = -1;
+          state.spills.forEach(function(s, i){ if (arg && s.id === arg.id){ sp = s; si = i; } });
+          if (!it || it.kind !== 'rag' || !sp || !(arg.amount > 0)) return false;
+          sp.left -= arg.amount; if (sp.left <= 0) state.spills.splice(si, 1);
+          return true;
         case 'wash':       // the dirty bowl in his hands, at the sink: clean again
           if (!it || it.kind !== 'dirty') return false;
           it.kind = 'bowl'; return true;
@@ -531,7 +557,7 @@
             it.left += fillUp; state.broth -= fillUp;
           }
           return true;
-        case 'toBoard':    // a vegetable onto the chopping block: arg = which way it lies
+        case 'toBoard':    // a vegetable (or a sausage) onto the chopping block: arg = which way it lies
           if (!it || !isFood(it.kind) || state.board) return false;
           it.at = 'board'; it.rot = +arg || 0; state.board = it.id; state.carry = null; return true;
         case 'turnBoard':  // turn what lies on the block
@@ -578,9 +604,12 @@
           day.phase = 'closed'; state.open = false; return true;
         case 'purchase':   // something from the shop: arg = its key
           var thing = shopItem(arg);
+          if (arg === 'recipe_sausage' && !hasFridge()) return false;
+          if (arg === 'pot2' && !(ctx.getKitchen && ctx.getKitchen() && ctx.getKitchen().potAt2)) return false;
           if (!thing || state.owned[arg] || state.money < thing.price) return false;
           state.money -= thing.price; day.spent += thing.price; state.owned[arg] = true;
           if (arg === 'bowls') state.bowls += SHOP_EFFECT.bowls;
+          if (arg === 'pot2' && state.pots.length < 2) state.pots.push(newPot());
           return true;
         case 'buyFurniture':   // a piece of furniture: it waits to be placed (arg = its key)
           var fi = furnitureItem(arg);
@@ -629,7 +658,7 @@
           var pk = arg && state.items[arg.pack], sq = arg && surfaceOf('squares', arg.id);
           if (!it || it.kind !== 'mallet' || !pk || pk.kind !== 'boards' || pk.at === 'hand' || !(pk.left > 0) || !sq || !ctx.squareShown(sq) || (state.decor.floor[arg.id] || 'tiles') === pk.floor) return false;
           state.decor.floor[arg.id] = pk.floor; if (--pk.left <= 0) dropItem(pk); return true;
-        case 'buy':        // an order at the computer: arg = { potato, carrot, onion, broth } (how many of each)
+        case 'buy':        // an order at the computer: arg = { potato, carrot, onion, broth, sausage } (how many of each)
           if (!arg) return false;
           var goods = emptyGoods(), any = false, inRoom = true;   // (not "fits": that is the function for the pot)
           GOODS.forEach(function(k){
@@ -695,7 +724,8 @@
           g.phase = 'ready'; g.patience = 1; return true;
         case 'order':      // the chef takes the order at the table
           g = guest(arg); if (!g || g.phase !== 'ready') return false;
-          var m = menu(), cooking = state.pot.dish && m.indexOf(state.pot.dish) >= 0 && state.pot.phase !== 'burnt' ? state.pot.dish : null;
+          var m = menu(), smelt = state.pots.filter(function(p){ return p.dish && m.indexOf(p.dish) >= 0 && p.phase !== 'burnt'; }),
+              cooking = smelt.length ? smelt[Math.floor(Math.random() * smelt.length)].dish : null;
           g.want = cooking && Math.random() < 0.7 ? cooking : m[Math.floor(Math.random() * m.length)] || 'stew';   // (most like what they can smell)
           g.phase = 'waiting'; g.patience = Math.min(1, g.patience + 0.25); return true;   // (glad somebody came)
         case 'left':       // ... has gone out of the door
@@ -712,28 +742,9 @@
       }
       return false;
     }
-    // what happens by itself as time passes
-    function tick(dt){
-      var pot = state.pot, C = COOK, target = C.target[pot.heat], day = state.day;
-      // the clock runs during the opening hours; at closing time the restaurant closes by itself
-      if (day.phase === 'open'){
-        day.time += dt * (RULES.day.closes - RULES.day.opens) / RULES.day.length;
-        if (day.time >= RULES.day.closes){ day.time = RULES.day.closes; act('close'); }
-      }
-      // orders arrive in the storeroom: a box (what comes while a box still stands there goes into that one)
-      for (var oi = state.orders.length - 1; oi >= 0; oi--){
-        var od = state.orders[oi];
-        od.left -= dt;
-        if (od.left > 0) continue;
-        if (od.thing){   // a bucket or a pack: put down where deliveries arrive, beside what is there
-          var th = od.thing; th.id = state.nextId++; th.at = 'dock'; th.slot = freeSlot(); state.items[th.id] = th;
-          state.orders.splice(oi, 1); state.delivered++; continue;
-        }
-        var box = parcels().filter(function(p){ return p.at === 'dock'; })[0];
-        if (!box){ box = { id: state.nextId++, kind: 'parcel', at: 'dock', slot: 0, goods: emptyGoods() }; state.items[box.id] = box; }
-        for (var gi = 0; gi < GOODS.length; gi++) box.goods[GOODS[gi]] += od.goods[GOODS[gi]] || 0;
-        state.orders.splice(oi, 1); state.delivered++;
-      }
+    // a pot on the range as time passes (state.pot)
+    function cookPot(dt){
+      var pot = state.pot, C = COOK, target = C.target[pot.heat];
       // the temperature follows the heat
       pot.temp += (target - pot.temp) * Math.min(1, (target > pot.temp ? C.warm : C.cool) * dt);
       if (pot.phase === 'filling' || pot.phase === 'ready'){
@@ -753,6 +764,30 @@
         }
       }
       pot.quality = potQuality();
+    }
+    // what happens by itself as time passes
+    function tick(dt){
+      var day = state.day;
+      // the clock runs during the opening hours; at closing time the restaurant closes by itself
+      if (day.phase === 'open'){
+        day.time += dt * (RULES.day.closes - RULES.day.opens) / RULES.day.length;
+        if (day.time >= RULES.day.closes){ day.time = RULES.day.closes; act('close'); }
+      }
+      // orders arrive in the storeroom: a box (what comes while a box still stands there goes into that one)
+      for (var oi = state.orders.length - 1; oi >= 0; oi--){
+        var od = state.orders[oi];
+        od.left -= dt;
+        if (od.left > 0) continue;
+        if (od.thing){   // a bucket or a pack: put down where deliveries arrive, beside what is there
+          var th = od.thing; th.id = state.nextId++; th.at = 'dock'; th.slot = freeSlot(); state.items[th.id] = th;
+          state.orders.splice(oi, 1); state.delivered++; continue;
+        }
+        var box = parcels().filter(function(p){ return p.at === 'dock'; })[0];
+        if (!box){ box = { id: state.nextId++, kind: 'parcel', at: 'dock', slot: 0, goods: emptyGoods() }; state.items[box.id] = box; }
+        for (var gi = 0; gi < GOODS.length; gi++) box.goods[GOODS[gi]] += od.goods[GOODS[gi]] || 0;
+        state.orders.splice(oi, 1); state.delivered++;
+      }
+      state.pots.forEach(function(p, i){ withPot(i, function(){ cookPot(dt); }); });   // (each pot on its own)
       var away = [];
       state.guests.forEach(function(g){
         if (g.phase === 'deciding'){
@@ -776,6 +811,11 @@
               var gv2 = views[g.id];
               used.kind = 'dirty'; delete used.batch; delete used.q; used.seat = g.seat;
               if (gv2){ used.x = gv2.bowlAt.x; used.y = gv2.bowlAt.y; used.z = gv2.bowlAt.z; }
+              if (gv2 && Math.random() < RULES.spill.chance){   // (beside the bowl, so it shows)
+                var sa = Math.random() * Math.PI * 2;
+                state.spills.push({ id: state.nextId++, x: gv2.bowlAt.x + Math.cos(sa) * 0.17, y: gv2.bowlAt.y, z: gv2.bowlAt.z + Math.sin(sa) * 0.12,
+                                    kind: Math.random() < 0.5 ? 1 : 3, size: 0.42 + Math.random() * 0.1, rot: Math.random() * 6.28, left: 1 });
+              }
               else { dropItem(used); state.bowls++; }   // (nowhere to show it: back on the stack)
             }
             g.item = null;
@@ -989,6 +1029,7 @@
           }
           if (key === 'knife') md.tool = measureKnife(md);
           if (key === 'broth') md.tool = measureJug(md);
+          if (key === 'rag') md.tool = { grip: V(0, md.size.y, 0), dir: V(0, -1, 0), up: V(1, 0, 0) };   // (held from above, lying flat)
           if (key === 'spice') md.tool = { grip: V(0, md.size.y * 0.45, 0), dir: V(0, 1, 0), up: V(1, 0, 0) };
           if (key === 'roller' || key === 'mallet') md.tool = measureLong(md, key === 'roller' ? 0.2 : 0.15, key === 'roller');
           if (key === 'ladle') md.tool = { grip: V(0, md.size.y * 0.88, 0), dir: V(0, -1, 0), up: V(1, 0, 0) };   // held near the top, the bowl down
@@ -1290,13 +1331,17 @@
         ['Stove on, stir now and then', cooking || pot.phase === 'ready']
       ]);
       var done = pot.phase === 'ready' || pot.phase === 'burnt';
-      var key = dk + others.join() + lines.map(function(l){ return (l[1] ? 1 : 0) + (l[2] ? 'x' : '') + l[0].length; }).join('') + pot.phase;
+      var key = (state.pots.length > 1 ? state.potAt : '') + dk + others.join() + lines.map(function(l){ return (l[1] ? 1 : 0) + (l[2] ? 'x' : '') + l[0].length; }).join('') + pot.phase;
       if (rc.drawn === key) return; rc.drawn = key;
       var g = rc.g, W = 512, H = 640;
       g.fillStyle = '#f4ead2'; g.fillRect(0, 0, W, H);
       g.fillStyle = 'rgba(120,90,40,.10)'; for (var i = 0; i < 40; i++) g.fillRect(Math.random() * W, Math.random() * H, 30 + Math.random() * 90, 1.5);   // a little worn
       g.strokeStyle = 'rgba(90,60,30,.35)'; g.lineWidth = 6; g.strokeRect(3, 3, W - 6, H - 6);
       g.fillStyle = '#9a2f22'; g.beginPath(); g.arc(W / 2, 30, 13, 0, Math.PI * 2); g.fill();   // the pin
+      if (state.pots.length > 1){   // which pot: the one he stands at
+        g.font = 'italic 700 24px Georgia,"Times New Roman",serif'; g.fillStyle = '#9a2f22'; g.textAlign = 'right'; g.textBaseline = 'middle';
+        g.fillText(state.potAt ? 'right pot' : 'left pot', W - 34, 34);
+      }
       g.fillStyle = '#3b2a1c'; g.textAlign = 'center'; g.textBaseline = 'middle';
       g.font = 'italic 700 50px Georgia,"Times New Roman",serif'; g.fillText(D.name, W / 2, 96);
       g.font = 'italic 400 25px Georgia,"Times New Roman",serif'; g.fillStyle = '#6b513a';
@@ -1362,10 +1407,13 @@
       g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
       return new T.CanvasTexture(cv);
     })();
-    var puffs = [];
-    for (var i = 0; i < 8; i++){
-      var p = new T.Sprite(new T.SpriteMaterial({ map: puffTex, transparent: true, depthWrite: false, opacity: 0 }));
-      p.visible = false; root.add(p); puffs.push({ sp: p, t: i / 8, dx: rnd(-1, 1), dz: rnd(-1, 1) });
+    function makePuffs(){
+      var puffs = [];
+      for (var i = 0; i < 8; i++){
+        var p = new T.Sprite(new T.SpriteMaterial({ map: puffTex, transparent: true, depthWrite: false, opacity: 0 }));
+        p.visible = false; root.add(p); puffs.push({ sp: p, t: i / 8, dx: rnd(-1, 1), dz: rnd(-1, 1) });
+      }
+      return puffs;
     }
     // flames under the pot
     var flameTex = (function(){
@@ -1414,12 +1462,12 @@
       place.knifeHome = V(k.board.pos.x, k.board.pos.y, k.board.pos.z - place.board.r - 0.17);
       // the wall behind the range (x = WALL): a shelf to the right of the pot for jug and
       // shaker, and the recipe above the pot
-      var WALL = 9.97, SHELF_Y = 1.6, ss = MODELS.shelf.size, shelfX = WALL - ss.z / 2, shelfZ = k.potAt.z + 0.93;
+      var WALL = 9.97, SHELF_Y = 1.6, ss = MODELS.shelf.size, shelfX = WALL - ss.z / 2, shelfZ = k.potAt.z - 0.93;   // (left of the pots: the camera of a chef at the second pot would be in it on the right)
       var sh = instance('shelf'); sh.position.set(shelfX, SHELF_Y - ss.y, shelfZ); sh.rotation.y = -Math.PI / 2; root.add(sh);
       var rcv = document.createElement('canvas'); rcv.width = 512; rcv.height = 640;
       var rtex = new T.CanvasTexture(rcv); rtex.encoding = T.sRGBEncoding; rtex.anisotropy = 4;
       var sheet = new T.Mesh(new T.PlaneGeometry(0.52, 0.65), new T.MeshStandardMaterial({ map: rtex, roughness: 1, metalness: 0 }));
-      sheet.position.set(WALL - 0.012, 1.95, k.potAt.z - 0.54);   // at eye level, left of the ladle's handle
+      sheet.position.set(WALL - 0.012, 1.95, k.potAt2 ? (k.potAt.z + k.potAt2.z) / 2 : k.potAt.z + 0.54);   // at eye level, between the two burners
       sheet.rotation.set(0, -Math.PI / 2, 0.02); sheet.receiveShadow = true; root.add(sheet);
       place.recipe = { mesh: sheet, g: rcv.getContext('2d'), tex: rtex, drawn: '' };
       // where the tools lie: the knife beside the block, jug and shaker on that shelf
@@ -1428,6 +1476,7 @@
                      broth: { pos: V(shelfX, SHELF_Y, shelfZ - 0.17), rot: Math.atan2(jt.up.z, jt.up.x) },   // its handle toward the aisle
                      spice: { pos: V(shelfX, SHELF_Y, shelfZ + 0.24), rot: 0.4 },
                      // in the storeroom, by its door: the roller leaning against the wall, the mallet on the floor below it
+                     rag: { pos: V(6.72, k.bowlsAt.y, 4.22), rot: 0.3 },   // (between the block and the stock pot on the second prep table)
                      roller: leaning('roller', V(9.02, 0.01, -12.62), V(0.12, 1, 0), V(0, 0, 1)), mallet: { pos: V(8.72, 0, -12.45), rot: 0.15 } };
       function leaning(kind, foot, dir, axis){   // a long tool standing on its end
         var t = MODELS[kind].tool; if (!t) return { pos: foot, rot: 0 };
@@ -1444,7 +1493,8 @@
       knifeHold = holdOf('knife', knifePose, { lean: 0.34 });
       toolHold = { knife: knifeHold, broth: holdOf('broth', jugPose, { upright: true }), spice: holdOf('spice', spicePose, { upright: true }), ladle: holdOf('ladle', ladlePose),
                    roller: MODELS.roller.tool && holdOf('roller', rollerPose, { grip2: MODELS.roller.tool && MODELS.roller.tool.grip2, pole: true, lean: 0.12 }),
-                   mallet: MODELS.mallet.tool && holdOf('mallet', malletPose, { lean: 0.3, kneel: function(){ return !!laying; } }) };
+                   mallet: MODELS.mallet.tool && holdOf('mallet', malletPose, { lean: 0.3, kneel: function(){ return !!laying; } }),
+                   rag: MODELS.rag.tool && holdOf('rag', ragPose, { lean: 0.3 }) };
       // the pantry corner: three crates side by side at the kitchen's back wall, between
       // the door to the back rooms and the side counter, right beside the range
       var cs = MODELS.crate.size, wallZ = -10;
@@ -1497,9 +1547,17 @@
         b.position.set(back ? 0.44 : 0, Math.floor(m / 2) * 0.062, (m % 2 ? 0.23 : -0.23)); b.rotation.y = rnd(0, 6.28);
         st.add(b); place.stacks.bowls.push(b);
       }
-      // the pot on the range, the stew in it, the vegetables lying in it before it cooks, the ladle
+      // the pots on the range (the second one shows once it is bought)
+      place.pots = [makePot(k.potAt)].concat(k.potAt2 ? [makePot(k.potAt2)] : []);
+      if (!place.pots[state.potAt]) usePot(0);
+      place.pot = place.pots[state.potAt];
+    }
+
+    // a pot on a burner: the stew in it, the vegetables lying in it before it cooks, the ladle, its steam
+    var flameMat = null;
+    function makePot(at){
       var pg = new T.Group(), pm = instance('pot'), size = MODELS.pot.size;
-      pg.position.copy(k.potAt); pg.add(pm); root.add(pg);
+      pg.position.copy(at); pg.add(pm); root.add(pg);
       var inner = size.x * 0.37;    // the pot's inside radius (measured on the model; its width includes the handles)
       var stew = new T.Mesh(new T.CircleGeometry(inner, 40), new T.MeshStandardMaterial({ map: stewTex, color: 0x9a938c, roughness: 0.62, metalness: 0 }));
       stew.rotation.x = -Math.PI / 2; stew.visible = false; stew.receiveShadow = true; stew.material.transparent = true; pg.add(stew);
@@ -1514,7 +1572,7 @@
       specks.rotation.x = -Math.PI / 2; specks.visible = false; pg.add(specks);
       var flames = [];
       for (var fi = 0; fi < 10; fi++){
-        var fs2 = new T.Sprite(new T.SpriteMaterial({ map: flameTex, transparent: true, depthWrite: false }));
+        var fs2 = new T.Sprite(flameMat || (flameMat = new T.SpriteMaterial({ map: flameTex, transparent: true, depthWrite: false })));   // (one material for all the flames)
         var fa = fi / 10 * Math.PI * 2;
         fs2.position.set(Math.cos(fa) * size.x * 0.415, 0, Math.sin(fa) * size.x * 0.415); fs2.visible = false;   // just outside the pot's wall
         pg.add(fs2); flames.push(fs2);
@@ -1526,11 +1584,11 @@
         pg.add(v); veg[kind] = v;
       });
       var ladle = instance('ladle'); pg.add(ladle);
-      place.pot = { grp: pg, model: pm, pos: pg.position, size: size, inner: inner, stew: stew, veg: veg, ladle: ladle,
+      return { grp: pg, puffs: makePuffs(), model: pm, pos: pg.position, size: size, inner: inner, stew: stew, veg: veg, ladle: ladle,
                     liquid: liquid, line: line, specks: { mesh: specks, g: scv.getContext('2d'), tex: stex, drawn: -1 }, flames: flames,
                     floor: size.y * 0.24, level: size.y * 0.24, spin: 0,
                     ladleTool: instance('ladle'),                                    // the same ladle in the chef's hand while he stirs
-                    knob: V(k.potAt.x - 0.6, 0, k.potAt.z),                          // the range's knobs are at its front
+                    knob: V(at.x - 0.6, 0, at.z),                          // the range's knobs are at its front
                     stream: (function(){   // the broth running from the jug
                       var geo = new T.CylinderGeometry(0.011, 0.016, 1, 8); geo.translate(0, -0.5, 0);
                       var m = new T.Mesh(geo, new T.MeshStandardMaterial({ color: new T.Color(0xc79a3a).convertSRGBToLinear(), roughness: 0.4, transparent: true, opacity: 0.92 }));
@@ -1538,6 +1596,49 @@
                     })(),
                     low: size.y * 0.27, high: size.y * 0.8,                         // the stew's level: nearly empty .. full (the inside floor is at 0.22)
                     rest: { x: inner * 0.3, y: size.y * 0.24, z: -inner * 0.35, tilt: 0.42 } };   // the ladle leaning in the pot
+    }
+
+    // what the chef can do at the pot (state.pot); out: the list the choices are added to (see interactables)
+    function potChoices(it, free, out){
+      var pot = state.pot;
+      function add(e){ out.push(e); }
+      // the pot: E puts things in and ladles, the left button works with the tool in hand
+      // (jug, shaker) or, with free hands, stirs with the ladle
+      var pe = { pos: place.pot.pos, reach: RULES.reach, key: 'E' }, ready = pot.phase === 'ready', burnt = pot.phase === 'burnt', some = inPot();
+      if (scoop) pe = null;
+      else if (burnt){
+        if (free){ pe.label = 'Throw the burnt ' + dishOf(potDish()).short + ' away'; pe.use = function(){ act('dumpPot'); }; pe.obj = place.pot.model; }
+        else pe.label = 'The ' + dishOf(potDish()).short + ' is burnt';
+      } else if (it && isFood(it.kind)){
+        if (!isCut(it)) pe.label = 'Cut ' + KINDS[it.kind].the + ' up first';
+        else if (ready) pe.label = 'The pot is done already';
+        else if (pot.dish) pe.label = 'Everything for the ' + dishOf(pot.dish).short + ' is in';
+        else if (!fits((function(){ var m = {}; FOOD.forEach(function(v){ m[v] = pot.has[v] + (v === it.kind ? 1 : 0); }); return m; })()).length) pe.label = 'No dish you can cook needs more ' + KINDS[it.kind].many;
+        else { pe.label = 'Put ' + nameOf(it, 'the') + ' in the pot'; pe.use = function(){ act('addToPot'); }; pe.obj = place.pot.model; }
+      } else if (it && it.kind === 'bowl'){
+        if (ready){ pe.label = 'Ladle a portion'; pe.use = function(){ if (act('ladle')) scoop = { t: 0, item: it.id }; }; pe.obj = place.pot.model; }
+        else pe.label = some ? 'It is not ready yet' : 'The pot is empty';
+      } else if (it && it.kind === 'stew'){
+        if (ready && it.batch === pot.batch && pot.portions < dishOf(pot.dish).portions){ pe.label = 'Pour it back'; pe.use = function(){ act('pourBack'); }; }
+        else pe = null;
+      } else if (it && it.kind === 'broth'){
+        pe.key = 'LMB';
+        if (ready) pe.label = 'The pot is done already';
+        else if (it.left <= 0.01) pe.label = state.broth > 0.01 ? 'The jug is empty \u2013 fill it up at its place' : 'There is no broth left';
+        else if (pot.broth >= COOK.brothMax - 0.01) pe.label = 'The pot is full';
+        else { pe.label = 'Pour broth'; pe.use = startPour; pe.obj = place.pot.model; }
+      } else if (it && it.kind === 'spice'){
+        pe.key = 'LMB';
+        if (!some) pe.label = 'Nothing in the pot to season';
+        else { pe.label = 'Season'; pe.use = seasonOnce; pe.obj = place.pot.model; }
+      } else if (free && some){ pe.key = 'LMB'; pe.label = 'Stir'; pe.use = startStir; pe.obj = place.pot.ladle; }
+      else if (free) pe = null;
+      else pe = null;
+      if (pe) add(pe);
+      // the heat (with free hands, or with jug or shaker in hand)
+      if (!burnt && !scoop && (free || (it && (it.kind === 'broth' || it.kind === 'spice')))){
+        add({ pos: place.pot.knob, reach: RULES.reach, key: 'E', label: pot.heat ? 'Turn the stove off' : 'Turn the stove on', use: function(){ act('heat'); } });
+      }
     }
 
     // ---------- the guests' side ------------------------------------------------------------
@@ -1658,6 +1759,15 @@
     function mouse(dx, dy){
       if (toolMouse(dx, dy)) return true;
       if (pouring){ pouring.tilt = clamp(pouring.tilt + dy * 0.0045); return true; }   // pulled down it tips further
+      if (wiping){   // the cloth goes where the mouse moves it, over the spill and round it
+        var W = wiping, x0 = W.x, z0 = W.z, wl = 0.2;
+        W.x += (W.r.x * dx - W.f.x * dy) * 0.0011; W.z += (W.r.z * dx - W.f.z * dy) * 0.0011;
+        var wr = Math.hypot(W.x, W.z); if (wr > wl){ W.x *= wl / wr; W.z *= wl / wr; }
+        var went = Math.hypot(W.x - x0, W.z - z0);
+        if (went > 0) act('wipe', { id: W.id, amount: went / RULES.spill.wipe });
+        if (!spillOf(W.id)){ stopWipe(); note.text = 'Clean again'; note.t = 1.6; }
+        return true;
+      }
       if (stirring){
         var S = stirring, P = place.pot, k = 0.0011, lim = P.inner * 0.7;
         var r0 = Math.hypot(S.x, S.z), a0 = Math.atan2(S.z, S.x);
@@ -1680,7 +1790,7 @@
       if (cutting.h <= 0.03 && cutting.armed){ cutting.armed = false; chop(); }
       return true;
     }
-    window.addEventListener('mousedown', function(e){ if (e.button === 2){ if (cutting) stopCutting(); if (pouring) stopPour(); if (stirring) stopStir(); stopRolling(); stopLaying(); dipping = null; } });
+    window.addEventListener('mousedown', function(e){ if (e.button === 2){ if (cutting) stopCutting(); if (pouring) stopPour(); if (stirring) stopStir(); if (wiping) stopWipe(); stopRolling(); stopLaying(); dipping = null; } });
     // where the knife is while it is led (see knifeHold): its blade above the cut, the handle toward the chef
     function knifePose(out){
       if (!cutting || !place.board) return false;
@@ -1703,6 +1813,20 @@
     }
     function startPour(){ if (!pouring){ pouring = facePot(); pouring.tilt = 0; pouring.flow = 0; } }
     function stopPour(){ pouring = null; }
+    var wiping = null;   // { id, at (the spill), look, f, r, x, z (the cloth, from the spill's middle) }
+    function spillOf(id){ for (var i = 0; i < state.spills.length; i++) if (state.spills[i].id === id) return state.spills[i]; return null; }
+    function startWipe(id){
+      var s = spillOf(id), chef = ctx.getChef(); if (!s || wiping || !chef) return;
+      var f = V(s.x - chef.position.x, 0, s.z - chef.position.z).normalize(), th = Math.atan2(f.x, f.z);
+      wiping = { id: id, at: V(s.x, s.y, s.z), look: th, f: f, r: V(-Math.cos(th), 0, Math.sin(th)), x: -f.x * 0.08, z: -f.z * 0.08 };
+    }
+    function stopWipe(){ wiping = null; }
+    function ragPose(out){
+      if (!wiping) return false;
+      out.pos.set(wiping.at.x + wiping.x, wiping.at.y + MODELS.rag.size.y + 0.004, wiping.at.z + wiping.z);
+      out.dir.set(0, -1, 0); out.up.copy(wiping.r);
+      return true;
+    }
     function startStir(){
       if (stirring || carried()) return;
       stirring = facePot(); stirring.x = -stirring.f.x * place.pot.inner * 0.45; stirring.z = -stirring.f.z * place.pot.inner * 0.45;
@@ -2092,9 +2216,12 @@
     var soupGeo = null, soupMats = {};
     function soupTop(v, o){
       var k = o.dish || 'stew', s = MODELS.stew.size; if (!s) return;
-      if (dishOf(k).chunky){ if (v.soup) v.soup.visible = false; return; }   // (a stew with pieces in it: the bowl as it is)
+      if (k === 'stew'){ if (v.soup) v.soup.visible = false; return; }
       if (!soupGeo) soupGeo = new T.CircleGeometry(s.x * 0.385, 24);
-      if (!soupMats[k]) soupMats[k] = new T.MeshStandardMaterial({ color: new T.Color(dishOf(k).color).convertSRGBToLinear(), roughness: 0.35, metalness: 0 });
+      if (!soupMats[k]){
+        var chunky = !!dishOf(k).chunky, col = new T.Color(dishOf(k).color);   // (chunky: the stew's pieces, coloured as in the pot)
+        soupMats[k] = new T.MeshStandardMaterial({ map: chunky ? stewTex : null, color: chunky ? col : col.convertSRGBToLinear(), roughness: chunky ? 0.6 : 0.35, metalness: 0 });
+      }
       if (!v.soup){ v.soup = new T.Mesh(soupGeo, soupMats[k]); v.soup.rotation.x = -Math.PI / 2; v.soup.position.y = s.y * 0.9; v.obj.add(v.soup); }
       v.soup.material = soupMats[k]; v.soup.visible = true;
     }
@@ -2160,6 +2287,7 @@
       if (cutting) return [{ pos: place.board.pos, reach: 9, key: 'E', label: 'Stop cutting', use: stopCutting }];
       if (pouring) return [{ pos: place.pot.pos, reach: 9, key: 'E', label: 'Stop pouring', use: stopPour }];
       if (stirring) return [{ pos: place.pot.pos, reach: 9, key: 'E', label: 'Stop stirring', use: stopStir }];
+      if (wiping) return [{ pos: V(wiping.at.x, 0, wiping.at.z), reach: 9, key: 'E', label: 'Stop wiping', use: stopWipe }];
       function add(e){ out.push(e); }
       var free = !it && hands.handsFree;
       // the crates
@@ -2205,7 +2333,7 @@
       // the fridge (once there is a reason to open it: the recipe, or sausages in it)
       var fAt = ctx.getKitchen().fridgeAt;
       if (fAt && (known('sausage') || state.fridge > 0 || (it && it.kind === 'sausage'))){
-        var fe = { pos: fAt, reach: RULES.reach, key: 'F' };
+        var fe = { pos: fAt, reach: RULES.reach, key: 'F', obj: ctx.getKitchen().fridge };
         if (it && it.kind === 'parcel'){
           if (it.goods.sausage > 0){
             fe.key = 'E';
@@ -2279,7 +2407,11 @@
         if (it.goods.broth > 0) add({ pos: place.home.broth.pos, reach: RULES.shelfReach, key: 'E', label: 'Unpack the broth', use: function(){ act('unpack', 'broth'); }, obj: see(state.items[state.tools.broth]) });
       }
       // the tools for walls and floor, in the storeroom
-      ['roller', 'mallet'].forEach(function(kind){
+      // spills on the tables: wiped with the cloth
+      if (it && it.kind === 'rag') state.spills.forEach(function(s){
+        add({ pos: V(s.x, 0, s.z), reach: 1.75, key: 'LMB', label: 'Wipe the table', use: function(){ startWipe(s.id); }, obj: spillMeshes[s.id] });
+      });
+      ['roller', 'mallet', 'rag'].forEach(function(kind){
         var o = state.items[state.tools[kind]], at = place.home[kind].pos;
         if (it === o) add({ pos: at, reach: 1.7, key: 'F', label: 'Put ' + KINDS[kind].the + ' back', use: function(){ act('putHome'); } });
         else if (free && o.at === 'home') add({ pos: at, reach: 1.7, key: 'F', label: 'Take ' + KINDS[kind].the, use: function(){ act('pickUp', o.id); }, obj: see(o) });
@@ -2336,43 +2468,12 @@
         if (aim.free) add({ pos: V(aim.x, 0, aim.z), reach: 2.4, key: 'F', bias: 0.35, label: 'Put ' + nameOf(it, 'the') + ' down', use: function(){ if (aim && aim.free) act('putDown', aim); } });
         else add({ pos: V(aim.x, 0, aim.z), reach: 2.4, key: 'F', bias: 0.35, label: 'No room here' });
       }
-      // the pot: E puts things in and ladles, the left button works with the tool in hand
-      // (jug, shaker) or, with free hands, stirs with the ladle
-      var pe = { pos: place.pot.pos, reach: RULES.reach, key: 'E' }, ready = pot.phase === 'ready', burnt = pot.phase === 'burnt', some = inPot();
-      if (scoop) pe = null;
-      else if (burnt){
-        if (free){ pe.label = 'Throw the burnt ' + dishOf(potDish()).short + ' away'; pe.use = function(){ act('dumpPot'); }; pe.obj = place.pot.model; }
-        else pe.label = 'The ' + dishOf(potDish()).short + ' is burnt';
-      } else if (it && isFood(it.kind)){
-        if (!isCut(it)) pe.label = 'Cut ' + KINDS[it.kind].the + ' up first';
-        else if (ready) pe.label = 'The pot is done already';
-        else if (pot.dish) pe.label = 'Everything for the ' + dishOf(pot.dish).short + ' is in';
-        else if (!fits((function(){ var m = {}; FOOD.forEach(function(v){ m[v] = pot.has[v] + (v === it.kind ? 1 : 0); }); return m; })()).length) pe.label = 'No dish you can cook needs more ' + KINDS[it.kind].many;
-        else { pe.label = 'Put ' + nameOf(it, 'the') + ' in the pot'; pe.use = function(){ act('addToPot'); }; pe.obj = place.pot.model; }
-      } else if (it && it.kind === 'bowl'){
-        if (ready){ pe.label = 'Ladle a portion'; pe.use = function(){ if (act('ladle')) scoop = { t: 0, item: it.id }; }; pe.obj = place.pot.model; }
-        else pe.label = some ? 'It is not ready yet' : 'The pot is empty';
-      } else if (it && it.kind === 'stew'){
-        if (ready && it.batch === pot.batch && pot.portions < dishOf(pot.dish).portions){ pe.label = 'Pour it back'; pe.use = function(){ act('pourBack'); }; }
-        else pe = null;
-      } else if (it && it.kind === 'broth'){
-        pe.key = 'LMB';
-        if (ready) pe.label = 'The pot is done already';
-        else if (it.left <= 0.01) pe.label = state.broth > 0.01 ? 'The jug is empty \u2013 fill it up at its place' : 'There is no broth left';
-        else if (pot.broth >= COOK.brothMax - 0.01) pe.label = 'The pot is full';
-        else { pe.label = 'Pour broth'; pe.use = startPour; pe.obj = place.pot.model; }
-      } else if (it && it.kind === 'spice'){
-        pe.key = 'LMB';
-        if (!some) pe.label = 'Nothing in the pot to season';
-        else { pe.label = 'Season'; pe.use = seasonOnce; pe.obj = place.pot.model; }
-      } else if (free && some){ pe.key = 'LMB'; pe.label = 'Stir'; pe.use = startStir; pe.obj = place.pot.ladle; }
-      else if (free) pe = null;
-      else pe = null;
-      if (pe) add(pe);
-      // the heat (with free hands, or with jug or shaker in hand)
-      if (!burnt && !scoop && (free || (it && (it.kind === 'broth' || it.kind === 'spice')))){
-        add({ pos: place.pot.knob, reach: RULES.reach, key: 'E', label: pot.heat ? 'Turn the stove off' : 'Turn the stove on', use: function(){ act('heat'); } });
-      }
+      state.pots.forEach(function(p, pi){
+        if (!place.pots[pi]) return;
+        var n0 = out.length;
+        withPot(pi, function(){ potChoices(it, free, out); });
+        out.slice(n0).forEach(function(e){ if (e.use){ var u = e.use; e.use = function(){ usePot(pi); return u.apply(this, arguments); }; } });
+      });
       // the front door: opening and closing the restaurant
       var phase = state.day.phase, de = { pos: DOOR, reach: 2.4, key: 'E' };
       if (phase === 'prep'){ de.label = 'Open the restaurant'; de.use = function(){ act('open'); }; }
@@ -2495,9 +2596,32 @@
 
     // ---------- every frame: time passes, then everything shown follows the state -------------
     var clock = 0;
+    var spillTex = null, spillMeshes = {};
+    function showSpills(){
+      if (!spillTex){ spillTex = new T.TextureLoader().load('textures/stains.png'); spillTex.encoding = T.sRGBEncoding; }
+      var live = {};
+      state.spills.forEach(function(s){
+        live[s.id] = true;
+        var m = spillMeshes[s.id];
+        if (!m){
+          var geo = new T.PlaneGeometry(1, 1), uv = geo.attributes.uv, u0 = (s.kind % 2) * 0.5, v0 = s.kind < 2 ? 0.5 : 0;
+          for (var i = 0; i < uv.count; i++) uv.setXY(i, u0 + uv.getX(i) * 0.5, v0 + uv.getY(i) * 0.5);
+          m = spillMeshes[s.id] = new T.Mesh(geo, new T.MeshStandardMaterial({ map: spillTex, color: new T.Color(0x9a7258).convertSRGBToLinear(), transparent: true, depthWrite: false, roughness: 0.25, metalness: 0, polygonOffset: true, polygonOffsetFactor: -2 }));
+          m.rotation.set(-Math.PI / 2, 0, s.rot); m.position.set(s.x, s.y + 0.003, s.z); m.scale.setScalar(s.size); m.receiveShadow = true;
+          root.add(m);
+        }
+        m.material.opacity = 0.25 + 0.75 * s.left; m.scale.setScalar(s.size * (0.7 + 0.3 * s.left));
+      });
+      Object.keys(spillMeshes).forEach(function(id){
+        if (live[id]) return;
+        var m = spillMeshes[id]; root.remove(m); m.geometry.dispose(); m.material.dispose(); delete spillMeshes[id];
+      });
+    }
     function update(dt){
       clock += dt;
       buildPlaces();
+      showSpills();
+      if (wiping && (ctx.isMoving() || !carried() || carried().kind !== 'rag' || !spillOf(wiping.id))) stopWipe();
       ctx.getGuests().forEach(view);
       if (!hold){
         tick(dt);
@@ -2544,7 +2668,7 @@
 
       if (!!state.owned.bigroom !== !!shown.bigroom && ctx.openExtension){ shown.bigroom = !!state.owned.bigroom; ctx.openExtension(shown.bigroom); }
       // while a tool is led the view goes to where it works
-      var work = cutting ? { yaw: cutting.look, at: place.board.pos } : pouring ? { yaw: pouring.look, at: place.pot.pos } : stirring ? { yaw: stirring.look, at: place.pot.pos } : null;
+      var work = cutting ? { yaw: cutting.look, at: place.board.pos } : pouring ? { yaw: pouring.look, at: place.pot.pos } : stirring ? { yaw: stirring.look, at: place.pot.pos } : wiping ? { yaw: wiping.look, at: wiping.at } : null;
       var job = rolling ? wallPoint(rolling.p, rolling.c, rolling.y) : laying ? rowSpot(laying) : dipping && state.items[dipping.bucket] ? whereOf(state.items[dipping.bucket]) : null;
       if (job){   // painting / laying / dipping: he looks at where the roller / mallet is
         var cam2 = camera.position, dxj = job.x - cam2.x, dzj = job.z - cam2.z, yawJ = Math.atan2(dxj, dzj) + Math.PI, L2 = ctx.look.get();
@@ -2552,7 +2676,7 @@
         ctx.look.set(L2.yaw + angle(yawJ - L2.yaw) * e2, L2.pitch + (pitchJ - L2.pitch) * e2);
       }
       if (work){
-        var L = ctx.look.get(), cam = camera.position, wy = work.at.y + (cutting ? 0 : place.pot.size.y * 0.6);
+        var L = ctx.look.get(), cam = camera.position, wy = work.at.y + (cutting || wiping ? 0 : place.pot.size.y * 0.6);
         var ahead = (work.at.x - cam.x) * Math.sin(work.yaw) + (work.at.z - cam.z) * Math.cos(work.yaw);
         var pitch = clamp(-Math.atan2(cam.y - wy, Math.max(0.12, ahead)), -1.3, -0.5), e = 1 - Math.exp(-7 * dt);
         ctx.look.set(L.yaw + angle(work.yaw - Math.PI - L.yaw) * e, L.pitch + (pitch - L.pitch) * e);
@@ -2566,8 +2690,9 @@
           if (day.phase === 'open') say('The restaurant is open');
           else if (day.phase === 'closed' && inside()) say((day.time >= RULES.day.closes ? 'Closing time' : 'Closed for today') + ' \u2013 the last guests finish their meal', 5);
           else if (day.phase === 'prep'){
-            shown.told = state.pot.phase === 'ready';
-            say('Day ' + day.n + ' \u2013 ' + (shown.told ? 'there is ' + dishOf(state.pot.dish).short + ' left: open the restaurant when you are ready' : 'cook a pot of something, then open the restaurant'), 6);
+            var left = state.pots.filter(function(p){ return p.phase === 'ready'; })[0];
+            shown.told = !!left;
+            say('Day ' + day.n + ' \u2013 ' + (shown.told ? 'there is ' + dishOf(left.dish).short + ' left: open the restaurant when you are ready' : 'cook a pot of something, then open the restaurant'), 6);
           }
           saveNow(day.phase === 'prep');   // a new day: the save from before is kept as the backup
         }
@@ -2582,7 +2707,8 @@
         openEl.classList.toggle('on', day.phase === 'open'); openEl.classList.toggle('late', day.phase === 'closed' || day.phase === 'done');
       }
       // the first pot is ready and nobody can come in yet: say what to do
-      if (state.pot.phase === 'ready' && day.phase === 'prep' && !shown.told){ shown.told = true; say(dishOf(state.pot.dish).name + ' is ready \u2013 open the restaurant at the front door'); }
+      var readyPot = state.pots.filter(function(p){ return p.phase === 'ready'; })[0];
+      if (readyPot && day.phase === 'prep' && !shown.told){ shown.told = true; say(dishOf(readyPot.dish).name + ' is ready \u2013 open the restaurant at the front door'); }
       if (state.money !== shown.money){
         var first = shown.money === null;
         shown.money = state.money; amountEl.textContent = euro(state.money);
@@ -2654,7 +2780,23 @@
         if (p.t >= 1){ root.remove(p.s.sp); p.s.tex.dispose(); p.s.sp.material.dispose(); pops.splice(i, 1); }
       }
 
-      // the pot: what is in it, the heat under it, its panel and the steam
+      // the pots: the one he works at is the one he stands nearest to (not while he is busy at one)
+      var chefNow = ctx.getChef();
+      if (chefNow && place.pots.length > 1 && state.pots.length > 1 && !stirring && !pouring && !scoop && !shake){
+        var near = state.potAt, dNear = Math.hypot(place.pots[near].pos.x - chefNow.position.x, place.pots[near].pos.z - chefNow.position.z) - 0.15;   // (it changes only once the other one is clearly nearer)
+        place.pots.forEach(function(PP, i){ var d = Math.hypot(PP.pos.x - chefNow.position.x, PP.pos.z - chefNow.position.z); if (state.pots[i] && d < dNear){ near = i; dNear = d; } });
+        if (near !== state.potAt) usePot(near);
+      }
+      var working = state.potAt;
+      place.pots.forEach(function(PP, i){
+        PP.grp.visible = !!state.pots[i];
+        if (!state.pots[i]){ PP.puffs.forEach(function(pf){ pf.sp.visible = false; }); PP.stream.visible = false; return; }
+        withPot(i, function(){ potView(dt, i === working); });
+      });
+    }
+
+    // a pot as it looks (state.pot, place.pot); active: the one the chef works at (the jug, the ladling, the recipe)
+    function potView(dt, active){
       var P = place.pot, pot = state.pot, ready = pot.phase === 'ready', burnt = pot.phase === 'burnt', filling = pot.phase === 'filling';
       var fill = ready ? Math.min(1, pot.broth) * pot.portions / dishOf(pot.dish).portions : burnt ? Math.min(0.5, pot.broth) : pot.broth;
       P.level += (P.floor + (P.high - P.floor) * clamp(fill, 0, 1.18) - P.level) * Math.min(1, dt * 5);
@@ -2672,14 +2814,14 @@
       P.liquid.visible = wet; P.liquid.position.y = P.level;
       P.stew.visible = (wet || burnt) && done > 0.02; P.stew.position.y = P.level + 0.002; P.stew.material.opacity = done;
       if (P.stewMap === undefined) P.stewMap = P.stew.material.map;
-      var soupy = !dishOf(potDish() || 'stew').chunky, wantMap = soupy ? null : P.stewMap;   // (a soup is smooth: no chunks of carrot in it)
+      var dk = potDish() || 'stew', soupy = !dishOf(dk).chunky, wantMap = soupy ? null : P.stewMap;   // (a soup is smooth: no chunks of carrot in it)
       if (P.stew.material.map !== wantMap){ P.stew.material.map = wantMap; P.stew.material.needsUpdate = true; }
-      P.stew.material.color.setHex(dishOf(potDish()).color); if (soupy) P.stew.material.color.convertSRGBToLinear();
+      P.stew.material.color.setHex(dishOf(dk).color); if (soupy) P.stew.material.color.convertSRGBToLinear();
       P.stew.material.color.lerp(BURNT_COL, burnt ? 1 : pot.burn * 0.8);
       P.spin *= Math.exp(-2.2 * dt);
       var turn = ((wet && pot.temp >= COOK.simmer ? 0.22 : 0) + P.spin) * dt;   // it simmers, and it goes round with the ladle
       P.stew.rotation.z += turn; P.liquid.rotation.z += turn; P.specks.mesh.rotation.z += turn;
-      var jugInHand = carried() && carried().kind === 'broth';
+      var jugInHand = active && carried() && carried().kind === 'broth';
       P.line.visible = !ready && !burnt && pot.broth < COOK.brothOk[1] && (jugInHand || (wet && pot.broth < COOK.brothOk[0]));   // how far the broth should come up
       P.line.position.y = P.floor + (P.high - P.floor) * 1;
       var sk = P.specks;
@@ -2699,7 +2841,7 @@
       });
       // the broth running from the jug
       var jugObj = jugInHand && objs[carried().id] && objs[carried().id].obj;
-      P.stream.visible = !!(pouring && pouring.flow > 0 && jugObj);
+      P.stream.visible = !!(active && pouring && pouring.flow > 0 && jugObj);
       if (P.stream.visible){
         jugObj.updateMatrixWorld(true);
         var sp = jugObj.localToWorld(MODELS.broth.tool.spout.clone());
@@ -2707,9 +2849,9 @@
       }
       // the ladle: leaning in the pot; when ladling it lifts, swings over the bowl, pours and comes back
       var L = P.ladle, R = P.rest;
-      L.visible = !stirring;
+      L.visible = !(stirring && active);
       L.position.set(R.x, R.y, R.z); L.rotation.set(0, 0.6, -R.tilt);
-      if (scoop){
+      if (scoop && active){
         var t = scoop.t, bowl = objs[scoop.item] && objs[scoop.item].obj, up = P.size.y + 0.1;
         var over = bowl ? P.grp.worldToLocal(bowl.position.clone()) : V(0, 0, -0.5);
         over.y = Math.max(over.y + 0.2, up - 0.05);
@@ -2719,9 +2861,9 @@
         L.rotation.z = -R.tilt * (1 - a) - 1.25 * c * (1 - d) - R.tilt * d;
       }
       var top = P.pos.y + P.size.y;
-      if (place.recipe) drawRecipe(place.recipe);
+      if (place.recipe && active) drawRecipe(place.recipe);
       var smoke = burnt || pot.stick >= 1, strength = burnt ? 0.8 : wet ? clamp((pot.temp - 62) / 35) * (ready ? 0.7 : 1) : 0;
-      puffs.forEach(function(pf){
+      P.puffs.forEach(function(pf){
         pf.t += dt * 0.55; if (pf.t >= 1){ pf.t -= 1; pf.dx = rnd(-1, 1); pf.dz = rnd(-1, 1); }
         pf.sp.visible = strength > 0;
         if (!strength) return;
@@ -2833,7 +2975,7 @@
       if (pc.page === 'supplies'){
         title = 'Supplies'; sub = 'Order what the kitchen needs';
         var cards = '';
-        var shownG = GOODS.filter(function(k){ return k !== 'sausage' || known('sausage') || stockOf(k) + coming(k) > 0; });
+        var shownG = GOODS.filter(function(k){ return k !== 'sausage' || (hasFridge() && known('sausage')) || stockOf(k) + coming(k) > 0; });
         shownG.forEach(function(k){
           var pic = thumb(k), have = stockOf(k), cap = holds(k), on = coming(k), n = pc.cart[k];
           cards += '<div class="card good"><div class="pic">' + (pic ? '<img src="' + pic + '" alt="">' : '') + '</div>' +
@@ -2845,7 +2987,7 @@
         });
         var poor = total > state.money, lines = '';
         GOODS.forEach(function(k){ if (pc.cart[k] > 0) lines += '<div class="row"><span>' + pc.cart[k] + ' \u00d7 ' + GOOD[k].name + '</span><span>' + euro(pc.cart[k] * RULES.cost[k]) + '</span></div>'; });
-        var full = GOODS.every(function(k){ return room(k) === 0; });
+        var full = shownG.every(function(k){ return room(k) === 0; });
         var order = '<div class="card"><h4>Your order</h4>' + (lines || '<p class="muted">' + (full ? 'The kitchen is full \u2013 there is no room for more right now.' : 'Choose what you need with + and \u2212.') + '</p>') +
           '<div class="row total"><span>Total</span><b>' + euro(total) + '</b></div>' +
           '<div class="row after"><span>Till afterwards</span><span>' + signed(state.money - total) + '</span></div>' +
@@ -2896,7 +3038,7 @@
         function img(k){ var p = thumb(k); return p ? '<img src="' + p + '" alt="">' : ''; }
         function buyBtn(cmd, price, label){ return '<button class="primary small-btn" data-do="' + cmd + '"' + (state.money < price ? ' disabled' : '') + '>' + (label || 'Buy') + '</button>'; }
         if (cat === 'kitchen' || cat === 'room' || cat === 'expand' || cat === 'recipes') SHOP.forEach(function(t){
-          if (t.cat !== cat) return;
+          if (t.cat !== cat || (t.key === 'recipe_sausage' && !hasFridge()) || (t.key === 'pot2' && !ctx.getKitchen().potAt2)) return;
           items += card(img(t.pic), t.name, t.price, t.text, state.owned[t.key] ? '<span class="tag here">Bought</span>' : buyBtn('purchase:' + t.key, t.price));
         });
         else if (cat === 'furniture') FURNITURE.forEach(function(t){
@@ -3048,6 +3190,36 @@
         oneOf(st.day.phase, ['prep', 'open', 'closed', 'done']) && oneOf(st.pot.phase, ['empty', 'filling', 'ready', 'burnt']);
       ok = ok && VEG.every(function(k){ return num(st.crates[k]) && num(st.pot.has[k]); });
       if (ok) VEG.forEach(function(k){ st.crates[k] = Math.max(0, Math.min(RULES.crateStock * (st.owned && st.owned.bigkitchen === true ? 2 : 1), Math.floor(st.crates[k]))); });
+      if (ok){   // the other pot (one bought in the shop): looked over roughly, emptied if it is not right
+        var okPot = function(p){
+          return !!p && typeof p === 'object' && oneOf(p.phase, ['empty', 'filling', 'ready', 'burnt']) && !!p.has && FOOD.every(function(k){ return num(p.has[k]) || (k === 'sausage' && p.has[k] === undefined); }) &&
+            ['broth', 'spice', 'heat', 'temp', 'cooked', 'stick', 'burn', 'quality', 'portions', 'batch'].every(function(k){ return num(p[k]); }) && Array.isArray(p.qs) && p.qs.every(num) &&
+            !!p.cut && typeof p.cut === 'object' && (p.dish === null || p.dish === undefined || isDish(p.dish)) && (p.phase !== 'ready' || isDish(p.dish));
+        };
+        var pots = Array.isArray(st.pots) ? st.pots.slice(0, 2) : [], at = st.potAt === 1 && pots.length === 2 ? 1 : 0;
+        if (!(st.owned && st.owned.pot2 === true)){ pots = []; at = 0; }
+        pots = pots.map(function(p, i){
+          if (i === at) return st.pot;
+          if (!okPot(p)) return newPot();
+          FOOD.forEach(function(k){ p.has[k] = num(p.has[k]) ? Math.max(0, Math.floor(p.has[k])) : 0; });
+          p.heat = p.heat ? 1 : 0; p.dish = p.dish || null; p.qs = p.qs.slice(0, 20);
+          var cut = {}; FOOD.forEach(function(k){ if (p.cut[k] && okCut(p.cut[k])) cut[k] = p.cut[k]; }); p.cut = cut;
+          if (p.phase === 'empty') p.dish = null;
+          else if (p.phase === 'ready' || p.phase === 'burnt' || p.cooked > 0){ if (!p.dish) p.dish = 'stew'; }
+          else if (p.dish && !FOOD.every(function(v){ return p.has[v] === RECIPES[p.dish].needs[v]; })) p.dish = null;
+          p.portions = Math.max(0, Math.min(p.phase === 'ready' ? dishOf(p.dish).portions : 0, Math.floor(p.portions)));
+          if (p.phase === 'ready' && p.portions <= 0) return newPot();
+          return p;
+        });
+        if (!pots.length) pots = [st.pot];
+        if (st.owned && st.owned.pot2 === true && pots.length < 2) pots.push(newPot());
+        st.pots = pots; st.potAt = at;
+      }
+      if (ok){   // spills on the tables (an older save has none)
+        st.spills = (Array.isArray(st.spills) ? st.spills : []).filter(function(s){
+          return !!s && num(s.id) && num(s.x) && num(s.y) && num(s.z) && (s.kind === 1 || s.kind === 3) && num(s.size) && s.size > 0 && s.size < 1 && num(s.rot) && num(s.left) && s.left > 0 && s.left <= 1;
+        }).slice(0, 64);
+      }
       if (ok){   // (an older save has no fridge and no sausage in the pot)
         st.fridge = num(st.fridge) ? Math.max(0, Math.min(RULES.fridgeStock, Math.floor(st.fridge))) : 0;
         if (!num(st.pot.has.sausage)) st.pot.has.sausage = 0;
@@ -3056,11 +3228,11 @@
         });
       }
       if (ok){   // (an older save has no store)
-        var store = { potato: 0, carrot: 0, onion: 0 };
-        VEG.forEach(function(k){ if (st.store && num(st.store[k])) store[k] = Math.max(0, Math.min(RULES.storeStock * (st.owned && st.owned.bigstore === true ? 2 : 1), Math.floor(st.store[k]))); });
-        st.store = store;
+        var kept = { potato: 0, carrot: 0, onion: 0 };   // (not "store": that is where the game is saved)
+        VEG.forEach(function(k){ if (st.store && num(st.store[k])) kept[k] = Math.max(0, Math.min(RULES.storeStock * (st.owned && st.owned.bigstore === true ? 2 : 1), Math.floor(st.store[k]))); });
+        st.store = kept;
       }
-      if (ok && st.tools && typeof st.tools === 'object' && num(st.nextId)) ['roller', 'mallet'].forEach(function(k){   // (an older game had no tools for walls and floor)
+      if (ok && st.tools && typeof st.tools === 'object' && num(st.nextId)) ['roller', 'mallet', 'rag'].forEach(function(k){   // (an older game had no tools for walls and floor, or no cloth)
         if (st.tools[k] !== undefined) return;
         var t = { id: st.nextId++, kind: k, at: 'home' }; st.items[t.id] = t; st.tools[k] = t.id;
       });
@@ -3201,9 +3373,10 @@
     // the game goes on from a saved one: everything shown is built again from its state
     function applySave(d){
       state = d.state;
+      if (place.pots){ if (!place.pots[state.potAt]) usePot(0); place.pot = place.pots[state.potAt]; }
       Object.keys(objs).forEach(function(id){ if (objs[id].obj.parent) objs[id].obj.parent.remove(objs[id].obj); delete objs[id]; });
       play.setCarry(null);
-      cutting = null; pouring = null; stirring = null; shake = null; scoop = null; note.t = 0;
+      cutting = null; pouring = null; stirring = null; shake = null; scoop = null; wiping = null; note.t = 0;
       closePC(); shown.delivered = undefined; shown.stars = null; shownSurf = { walls: {}, floor: {} };
       rolling = null; dipping = null; if (laying) stopLaying(); Object.keys(partial).forEach(function(id){ ctx.surfaces.strokes(id, null, []); }); partial = {};
       Object.keys(views).forEach(function(id){ views[id].review = undefined; });   // (their reviews are the loaded game's)
@@ -3336,7 +3509,7 @@
       debugPhase: function(id, phase){ var g = guest(id); if (g){ g.phase = phase; g.t = 0; } },
       debugGuests: function(){ return state.guests.map(function(g){ return g.id + ':' + g.phase + '/' + views[g.id].info.where(); }).join(' '); },
       debugMoney: function(n){ state.money = n; },
-      debugAct: act, debugPot: function(){ return state.pot; }, debugCookRules: COOK,
+      debugAct: act, debugPot: function(){ return state.pot; }, debugPots: function(){ return state.pots.map(function(p){ return p.phase + ' ' + p.dish + ' x' + p.portions + ' has ' + FOOD.map(function(k){ return p.has[k]; }).join('') + ' heat ' + p.heat + ' ' + Math.round(p.temp); }).join(' / ') + ' at ' + state.potAt; }, debugCookRules: COOK,
       debugTools: function(){ return { ids: state.tools, jug: MODELS.broth.tool, home: place.home, left: state.items[state.tools.broth].left }; },
       debugCut: { start: startCutting, stop: stopCutting, limits: function(){ var o = state.items[state.board]; return o && cutAxis(o) ? cutLimits(o, cutAxis(o)) : null; },
                   ranges: function(kind){ return MODELS[kind].range; }, knife: function(){ return MODELS.knife.tool; }, sizes: function(){ var o = {}; Object.keys(MODELS).forEach(function(k){ if (MODELS[k].size) o[k] = MODELS[k].size.toArray().map(function(x){ return +x.toFixed(3); }); }); return o; } },
