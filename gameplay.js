@@ -345,13 +345,18 @@
       var b = { root: chef, spine02: g('Spine02'), spine01: g('Spine01'), spine: g('Spine'), neck: g('neck'),
                 lS: g('LeftShoulder'), rS: g('RightShoulder'),
                 rA: g('RightArm'), rF: g('RightForeArm'), rH: g('RightHand'),
-                lA: g('LeftArm'), lF: g('LeftForeArm'), lH: g('LeftHand') };
+                lA: g('LeftArm'), lF: g('LeftForeArm'), lH: g('LeftHand'),
+                hips: g('Hips'), lUL: g('LeftUpLeg'), lL: g('LeftLeg'), lFt: g('LeftFoot'), rUL: g('RightUpLeg'), rL: g('RightLeg'), rFt: g('RightFoot'),
+                lToe: g('LeftToeBase'), rToe: g('RightToeBase') };
       if (!b.rA || !b.rF || !b.rH || !b.lA || !b.lF || !b.lH || !b.spine) return null;
       b.lGrip = makeGrip(chef, 'Left'); b.rGrip = makeGrip(chef, 'Right');
       // the bones the holding pose changes, parents first; `anim` is what the animation
       // gave them this frame, `set` what the pose made of it
       b.rig = [b.spine02, b.spine01, b.spine, b.neck, b.lS, b.rS, b.lA, b.lF, b.lH, b.rA, b.rF, b.rH].filter(Boolean)
         .map(function(bone){ return { bone: bone, anim: new T.Quaternion(), set: new T.Quaternion(), own: false }; });
+      // the legs, for kneeling (see kneelPose); the hips also move down
+      b.legs = b.hips && b.lUL && b.lL && b.lFt && b.rUL && b.rL && b.rFt && b.lToe && b.rToe ? [b.lUL, b.lL, b.lFt, b.rUL, b.rL, b.rFt].map(function(bone){ return { bone: bone, anim: new T.Quaternion(), set: new T.Quaternion(), own: false }; }) : null;
+      b.hipsAt = { anim: V(), set: V(), own: false };
       bones = b;
       return b;
     }
@@ -580,6 +585,10 @@
       held.visible = broomAt !== 'closet';
       if (!b) return;
       // start from the animation's pose (also for bones the animation leaves alone)
+      if (b.legs){
+        b.legs.forEach(function(e){ if (e.own && e.bone.quaternion.equals(e.set)) e.bone.quaternion.copy(e.anim); e.anim.copy(e.bone.quaternion); e.own = false; });
+        var H = b.hipsAt; if (H.own && b.hips.position.equals(H.set)) b.hips.position.copy(H.anim); H.anim.copy(b.hips.position); H.own = false;
+      }
       b.rig.forEach(function(e){
         if (e.own && e.bone.quaternion.equals(e.set)) e.bone.quaternion.copy(e.anim);
         e.anim.copy(e.bone.quaternion); e.own = false;
@@ -590,8 +599,9 @@
       var want = broomAt === 'hand' || broomAt === 'taking' || (broomAt === 'storing' && move.t < 0.6);
       hold.arms = clamp(hold.arms + (want ? 5 : -3.5) * dt);
       var closed = broomAt === 'hand' || (inHands && k > 0.8) ? 1 : carry && !inHands ? (carryOpts.curl || 0.25) : 0;
-      var oneHand = carry && carryOpts.tool && !inHands;   // a tool is held in the right hand only
-      closeFingers(b.lGrip, oneHand ? 0 : closed, dt); closeFingers(b.rGrip, oneHand ? 1 : closed, dt);
+      var oneHand = carry && carryOpts.tool && !carryOpts.grip2 && !inHands;   // a tool is held in the right hand only (a long one in both)
+      if (carry && carryOpts.grip2 && !inHands) closed = 1;
+      closeFingers(b.lGrip, oneHand ? 0.25 : closed, dt); closeFingers(b.rGrip, oneHand ? 1 : closed, dt);
       var th = chef.rotation.y;
       hold.headShift.set(0, 0, 0);
       if (hold.arms <= 0 && !inHands){
@@ -737,16 +747,22 @@
     var carry = null, carryW = 0, carryOpts = { half: 0.17, fwd: 0.42, drop: -0.16, grip: 0.04, back: 0 };
     function setCarry(obj, opts){
       if (carry) root.remove(carry.obj);
+      if (!carry || carry.obj !== obj){ hadLed = false; toolLead = 0; }
       carry = obj ? { obj: obj } : null;
       if (obj){ carryOpts = opts || carryOpts; obj.visible = false; root.add(obj); }
     }
     function handsFree(){ return !carry && hold.arms <= 0 && (broomAt === 'closet' || broomAt === 'floor'); }
     function poseCarry(b, chef, dt, th){
-      carryW = clamp(carryW + (carry ? 5 : -4) * dt);
-      if (carryW <= 0) return;
+      carryW = clamp(carryW + (carry ? 5 : -4) * dt); poseDt = Math.min(0.1, dt);
+      var kneeling = !!(carry && carryOpts.kneel && carryOpts.kneel());
+      kneelW = clamp(kneelW + (kneeling ? 2.6 : -3.2) * poseDt);
+      if (carryW <= 0 && kneelW <= 0) return;
       chef.updateMatrixWorld(true);
       var o = carryOpts, f = V(Math.sin(th), 0, Math.cos(th)), r = V(-Math.cos(th), 0, Math.sin(th));
-      var headQ = b.neck ? wquat(b.neck) : null, head0 = b.neck ? wpos(b.neck) : null;
+      var head0 = b.neck ? wpos(b.neck) : null;
+      kneelPose(b, chef, f, r, smooth(kneelW));   // (the head goes down with him: see finishCarry)
+      if (carryW <= 0){ if (head0) hold.headShift.copy(wpos(b.neck)).sub(head0); return; }
+      var headQ = b.neck ? wquat(b.neck) : null;
       if (o.tool){ poseTool(b, chef, o, f, r, headQ); finishCarry(b, chef, head0); return; }
       // a little forward lean and the shoulders pushed forward, so the short arms get there
       [b.spine02, b.spine01].forEach(function(sp){ if (sp) turn(sp, r, -0.07); });
@@ -782,23 +798,61 @@
       chef.updateMatrixWorld(true);
       if (head0) hold.headShift.copy(wpos(b.neck)).sub(head0);
     }
-    var toolOut = { pos: V(), dir: V(), up: V() }, toolLead = 0;
+    var toolOut = { pos: V(), dir: V(), up: V() }, ledOut = { pos: V(), dir: V(), up: V(), slide: 0 }, hadLed = false, toolLead = 0, kneelW = 0, poseDt = 1 / 60;
+    // Kneeling on the left knee, the right foot flat in front (to work on the floor): the hips go
+    // down, the left thigh points down and its shin back along the floor, the right thigh forward
+    // and its shin down. w: 0 .. 1 how far he is down.
+    function aimBone(bone, child, want, w){
+      var have = wpos(child).sub(wpos(bone)).normalize();
+      var d = new T.Quaternion().setFromUnitVectors(have, want.clone().normalize());
+      if (w < 1) d = IDENT.clone().slerp(d, w);
+      setWorldQuat(bone, d.multiply(wquat(bone)));
+    }
+    function kneelPose(b, chef, f, r, w){
+      if (!b.legs || w <= 0) return;
+      chef.updateMatrixWorld(true);
+      var thigh = wpos(b.lL).distanceTo(wpos(b.lUL)), hp = wpos(b.hips), floorY = chef.position.y - chefLift();
+      var downTo = floorY + thigh + 0.08;   // the left knee on the floor under the hip
+      if (hp.y > downTo){
+        hp.y -= (hp.y - downTo) * w; hp.addScaledVector(f, -0.06 * w);
+        b.hips.position.copy(b.hips.parent.worldToLocal(hp)); b.hips.updateMatrixWorld(true);
+      }
+      aimBone(b.lUL, b.lL, V().addScaledVector(UP, -1).addScaledVector(f, 0.1).addScaledVector(r, -0.06), w);
+      aimBone(b.lL, b.lFt, V().addScaledVector(f, -1).addScaledVector(UP, 0.1), w);        // the shin back along the floor, the ankle a little up
+      aimBone(b.lFt, b.lToe, V().addScaledVector(f, -1).addScaledVector(UP, -0.3), w);     // ... its foot stretched out behind, toes on the floor
+      aimBone(b.rUL, b.rL, V().addScaledVector(f, 1).addScaledVector(UP, -0.08).addScaledVector(r, 0.18), w);
+      aimBone(b.rL, b.rFt, V().addScaledVector(UP, -1).addScaledVector(f, 0.06), w);
+      aimBone(b.rFt, b.rToe, V().addScaledVector(f, 1).addScaledVector(UP, -0.22), w);     // the right foot flat in front
+      b.legs.forEach(function(e){ e.set.copy(e.bone.quaternion); e.own = true; });
+      b.hipsAt.set.copy(b.hips.position); b.hipsAt.own = true;
+      chef.updateMatrixWorld(true);
+    }
     function poseTool(b, chef, o, f, r, headQ){
-      var led = !!(carry && o.pose && o.pose(toolOut));
-      toolLead += ((led ? 1 : 0) - toolLead) * 0.25;
+      ledOut.slide = 0;
+      var led = !!(carry && o.pose && o.pose(ledOut));
+      if (led) hadLed = true;
+      toolLead += ((led ? 1 : 0) - toolLead) * (1 - Math.exp(-11 * poseDt));
+      if (toolLead < 0.002) toolLead = 0;
       // leaning over the work when the tool is led there
       var lean = 0.05 + (o.lean || 0.3) * toolLead;
       [b.spine02, b.spine01].forEach(function(sp){ if (sp) turn(sp, r, -lean / 2); });
       if (b.rS) turn(b.rS, UP, 0.35);
       if (headQ) setWorldQuat(b.neck, headQ);
       var M = wpos(b.lA).add(wpos(b.rA)).multiplyScalar(0.5);
-      if (!led && o.upright){   // carried upright (a jug, a shaker): in front of the right side of the chest
+      if (o.pole){   // a long pole (the paint roller): low at his right side, leaning forward and out, the other hand higher up it
+        toolOut.pos.copy(M).addScaledVector(r, 0.32).addScaledVector(f, 0.2).addScaledVector(UP, -0.5);
+        toolOut.dir.copy(UP).addScaledVector(f, 0.45).addScaledVector(r, 0.14).normalize(); toolOut.up.copy(r);
+      } else if (o.upright){   // carried upright (a jug, a shaker): in front of the right side of the chest
         toolOut.pos.copy(M).addScaledVector(r, 0.2).addScaledVector(f, 0.4).addScaledVector(UP, -0.26);
         toolOut.dir.copy(UP); toolOut.up.copy(f);
-      } else if (!led){   // carried: in front of the right hip, its working end forward and a little up
+      } else {   // carried: in front of the right hip, its working end forward and a little up
         toolOut.pos.copy(M).addScaledVector(r, 0.24).addScaledVector(f, 0.36).addScaledVector(UP, -0.34);
         toolOut.dir.copy(f).addScaledVector(UP, 0.35).addScaledVector(r, -0.1).normalize();
         toolOut.up.copy(UP);
+      }
+      var slide = 0, lw = hadLed ? smooth(toolLead) : 0;
+      if (lw > 0){   // led (or just let go): toward where it is led
+        toolOut.pos.lerp(ledOut.pos, lw); toolOut.dir.lerp(ledOut.dir, lw).normalize(); toolOut.up.lerp(ledOut.up, lw).normalize(); slide = ledOut.slide * lw;
       }
       var dir = toolOut.dir.clone().normalize();
       var up = toolOut.up.clone().addScaledVector(dir, -toolOut.up.dot(dir)).normalize();
@@ -809,13 +863,19 @@
       } else reach(b.rA, b.rF, b.rH, toolOut.pos, pole, PALM);
       if (!carry) return;
       // the tool: led, it is where it is led; carried, it sits in the fist
-      var at = led || !b.rGrip ? toolOut.pos : gripPoint(b.rGrip);
+      var at = lw > 0.02 || !b.rGrip ? toolOut.pos : gripPoint(b.rGrip);
+      var grip = o.grip.clone().addScaledVector(o.dir, slide);   // (a long handle: the hands slide along it)
       basisA.makeBasis(dir, up, V().crossVectors(dir, up));
       basisB.makeBasis(o.dir, o.up, V().crossVectors(o.dir, o.up));
       var q = new T.Quaternion().setFromRotationMatrix(basisA.multiply(basisB.transpose()));
       carry.obj.visible = true;
       carry.obj.quaternion.copy(q);
-      carry.obj.position.copy(at).sub(o.grip.clone().applyQuaternion(q));
+      carry.obj.position.copy(at).sub(grip.applyQuaternion(q));
+      if (o.grip2 && b.lGrip){   // the other hand further along the handle
+        var at2 = o.grip2.clone().addScaledVector(o.dir, slide).applyQuaternion(q).add(carry.obj.position);
+        gripAt(b.lA, b.lF, b.lGrip, b.lH, at2, dir, r.clone().multiplyScalar(-0.8).addScaledVector(UP, -0.6));
+        twistForearm(b.lF, b.lGrip);
+      }
     }
 
     // ---------- stains -----------------------------------------------------------
@@ -1104,6 +1164,8 @@
       debugDrop: function(){ if (holding) dropBroom(); },
       debugClick: function(){ click(); return !!sweep; },   // a left click without the mouse
       debugHint: function(){ return hint.classList.contains('on') ? hint.textContent : ''; },
+      debugFocus: function(){ var f = findFocus(), c = ctx.getChef(); return { E: f.E && f.E.label, F: f.F && f.F.label, LMB: f.LMB && f.LMB.label, at: [c.position.x, c.position.z, c.rotation.y] }; },
+      debugList: function(){ try { return interactables().map(function(e){ return (e.key || 'E') + ':' + e.label + '@' + [e.pos.x, e.pos.z, e.reach].map(function(v){ return +(+v).toFixed(2); }).join(','); }); } catch (err){ return ['ERROR ' + err.stack]; } },
       debugTake: function(){ if (broomAt === 'closet' || broomAt === 'floor') takeBroom(); },
       debugStore: function(){ if (holding) storeBroom(); },
       debugPose: function(o){ Object.keys(o).forEach(function(key){ POSE[key] = o[key]; }); },

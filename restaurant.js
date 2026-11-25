@@ -94,7 +94,7 @@
     pour: 0.5,                                 // broth per second from the fully tipped jug
     spice: 3, spiceMax: 8                      // shakes of seasoning: just right, and at most
   };
-  var HOME = { knife: true, broth: true, spice: true };   // tools with a place of their own
+  var HOME = { knife: true, broth: true, spice: true, roller: true, mallet: true };   // tools with a place of their own
   var VEG = ['potato', 'carrot', 'onion'];
   // what can be ordered at the computer (broth: one unit is what one pot needs)
   var GOODS = ['potato', 'carrot', 'onion', 'broth'];
@@ -129,14 +129,21 @@
     { key: 'coatrack', name: 'Coat rack',     price: 35,  mood: 0.02, text: 'A wooden coat rack for the guests\u2019 coats.' }
   ];
   var FURNITURE_MAX = 4;   // pieces of one kind at most
-  // the dining room's look (index.html shows it); free: what it has to start with
+  // The dining room's walls and floor are done by hand: a bucket of paint is enough for PAINT_COVERS wall
+  // panels, a pack of floor for FLOOR_COVERS squares. They are delivered to the storeroom like supplies,
+  // carried to the dining room and put on panel by panel (E), square by square.
   var LOOK = {
-    wall:  [{ key: 'cream', name: 'Cream plaster', price: 0, swatch: '#e9dcc0' }, { key: 'sage', name: 'Sage green', price: 80, swatch: '#a9bf96' },
-            { key: 'terracotta', name: 'Terracotta', price: 80, swatch: '#d79a72' }, { key: 'blue', name: 'Faded blue', price: 80, swatch: '#a7b9d6' }],
-    floor: [{ key: 'tiles', name: 'Old tiles', price: 0, img: 'textures/floor_color.jpg' }, { key: 'planks', name: 'Wooden planks', price: 150, img: 'textures/k_wood.webp' },
-            { key: 'slate', name: 'Slate', price: 150, img: 'textures/k_floor.webp' }]
+    wall:  [{ key: 'cream', name: 'Cream plaster', price: 25, swatch: '#e9dcc0' }, { key: 'sage', name: 'Sage green', price: 30, swatch: '#a9bf96' },
+            { key: 'terracotta', name: 'Terracotta', price: 30, swatch: '#d79a72' }, { key: 'blue', name: 'Faded blue', price: 30, swatch: '#a7b9d6' }],
+    floor: [{ key: 'tiles', name: 'Old tiles', price: 30, img: 'textures/floor_color.jpg' }, { key: 'planks', name: 'Wooden planks', price: 50, img: 'textures/k_wood.webp' },
+            { key: 'slate', name: 'Slate', price: 50, img: 'textures/k_floor.webp' }]
   };
-  var LOOK_MOOD = 0.04;   // a new paint or floor (not the one it had)
+  var PAINT_COVERS = 8, FLOOR_COVERS = 6;   // a bucket: paint for 8 wall panels (a dip of the roller each), a pack: boards for 6 floor squares
+  // the roller: how wide its stroke is, how far it goes for a pixel of mouse movement (sideways, up), how
+  // far from the wall he may stand; dipping takes this long; a square of floor is laid in this many rows
+  var ROLL = { width: 0.27, side: 0.0032, up: 0.0055, near: 0.6, far: 2.7 }, DIP_TIME = 1.25, FLOOR_ROWS = 5;
+  var DOCK_SLOTS = 3;   // places for deliveries in the storeroom: 0 the delivery box, 1 .. 2 buckets and packs
+  var LOOK_MOOD = 0.08;   // a room done over completely, walls and floor (not with what it had), is this much nicer
   function shopItem(key){ for (var i = 0; i < SHOP.length; i++) if (SHOP[i].key === key) return SHOP[i]; return null; }
   function furnitureItem(key){ for (var i = 0; i < FURNITURE.length; i++) if (FURNITURE[i].key === key) return FURNITURE[i]; return null; }
   function lookItem(part, key){ var l = LOOK[part] || []; for (var i = 0; i < l.length; i++) if (l[i].key === key) return l[i]; return null; }
@@ -187,6 +194,10 @@
     knife:  { a: 'the knife', the: 'the knife' },   // these three are held in one hand (see toolHold)
     broth:  { a: 'the jug of broth', the: 'the jug of broth' },
     spice:  { a: 'the spice shaker', the: 'the spice shaker' },
+    roller: { a: 'the paint roller', the: 'the paint roller' },   // in the storeroom, held in both hands; item.color, item.load (0 .. 1: paint for a panel)
+    mallet: { a: 'the rubber mallet', the: 'the rubber mallet' }, // in the storeroom, for laying the floor
+    paint:  { a: 'a bucket of paint', the: 'the bucket of paint', carry: { half: 0.23, fwd: 0.46, drop: -0.26, grip: 0.12, back: 0, curl: 0.35 } },   // item.color, item.left (panels)
+    boards: { a: 'a pack of flooring', the: 'the pack of flooring', carry: { half: 0.14, fwd: 0.5, drop: -0.26, grip: 0.14, back: 0, curl: 0.3, yaw: Math.PI / 2 } },   // item.floor, item.left (squares)
     parcel: { a: 'a delivery box', the: 'the delivery box', carry: { half: 0.215, fwd: 0.46, drop: -0.4, grip: 0.12, back: 0, curl: 0.3 } }   // item.goods = what is in it
   };
   // Meshy models and parts cut out of the kitchen's own models; width (or height): size in the game
@@ -205,7 +216,11 @@
     crate:  { file: 'models/d_crate.glb', width: 0.66 },
     pot:    { file: 'models/d_cookpot.glb', width: 0.86 },
     ladle:  { file: 'models/d_ladle.glb', height: 0.56 },
-    parcel: { file: 'models/d_parcel.glb', width: 0.44 },                 // one box out of the storeroom's stack of boxes
+    parcel: { file: 'models/d_parcel.glb', width: 0.44 },
+    paint:  { file: 'models/d_paintbucket.glb', height: 0.42 },          // an open bucket of paint
+    roller: { file: 'models/d_roller.glb', width: 2.05, align: true },   // a paint roller on a long pole (its roller at +X)
+    mallet: { file: 'models/d_mallet.glb', width: 0.4, align: true },    // a rubber mallet (its head at +X)
+    boards: { file: 'models/d_floorboards.glb', width: 0.9 },                 // a bundle of planks tied with rope
     candle: { file: 'models/d_candlebottle.glb', height: 0.4 },           // (the shop's pictures)
     plant:  { file: 'models/d_plant.glb', height: 1.75 },
     table:  { file: 'models/table.glb', width: 1.4 },
@@ -282,11 +297,11 @@
         history: [],                                  // the accounts of the days that are over (see 'endDay')
         reviews: [],                                  // what guests wrote: { id, day, who, stars, text, food, wait, clean }
         owned: {},                                    // what was bought in the shop: { bowls: true, ... }
-        look: { wall: 'cream', floor: 'tiles', have: ['wall:cream', 'floor:tiles'] },   // the dining room's paint and floor, and what was bought
+        decor: { walls: {}, floor: {} },              // each wall panel's paint and each floor square's flooring (index.html: ctx.surfaces); none: as it was
         furniture: [],                                // { id, key, x, z, rot, placed } (not placed yet: it is being put somewhere)
         day: newDay(1)
       };
-      ['knife', 'broth', 'spice'].forEach(function(kind){
+      ['knife', 'broth', 'spice', 'roller', 'mallet'].forEach(function(kind){
         var o = { id: st.nextId++, kind: kind, at: 'home' };
         if (kind === 'broth'){ o.left = COOK.jug; st.broth = COOK.stock - COOK.jug; }
         st.items[o.id] = o; st.tools[kind] = o.id;
@@ -316,8 +331,7 @@
     function mood(){
       var m = RULES.review.mood + (state.owned.candles ? SHOP_EFFECT.candles : 0) + (state.owned.plants ? SHOP_EFFECT.plants : 0) + (state.owned.bigroom ? SHOP_EFFECT.bigroom : 0);
       state.furniture.forEach(function(f){ var it = furnitureItem(f.key); if (it && f.placed && !MODELS[f.key].failed) m += it.mood; });
-      if (state.look.wall !== 'cream') m += LOOK_MOOD;
-      if (state.look.floor !== 'tiles') m += LOOK_MOOD;
+      m += LOOK_MOOD * (doneShare('walls', 'cream') + doneShare('floor', 'tiles')) / 2;
       return clamp(m);
     }
     // The restaurant's stars: the average of the latest reviews (0 = nobody has written one yet).
@@ -326,6 +340,27 @@
       list.forEach(function(r){ sum += r.stars; });
       return list.length ? sum / list.length : 0;
     }
+    // how much of the walls / the floor was done over (0 .. 1)
+    function doneShare(part, plain){
+      var S2 = ctx.surfaces, list = !S2 ? [] : part === 'walls' ? S2.panels : S2.squares, n = 0, all = 0;
+      list.forEach(function(p){ if (p.area === (state.owned.bigroom ? 'left' : 'ext')) return; all++;   // (only what can be seen: see index.html panelShown)
+        var v = state.decor[part][p.id]; if (v && v !== plain) n++; });
+      return all ? n / all : 0;
+    }
+    // where a delivered thing is put down: the first free place in a row along the storeroom's wall
+    // (there are at most DOCK_SLOTS - 1 buckets and packs at a time, bought or on their way: see buyLook)
+    function freeSlot(){
+      var taken = {};
+      Object.keys(state.items).forEach(function(id){ var o = state.items[id]; if (o.at === 'dock') taken[o.slot || 0] = true; });
+      taken[0] = true;   // (slot 0 is the delivery box's)
+      for (var i = 1; i < DOCK_SLOTS; i++) if (!taken[i]) return i;
+      return DOCK_SLOTS - 1;
+    }
+    function thingsAround(){
+      return Object.keys(state.items).filter(function(id){ var k = state.items[id].kind; return k === 'paint' || k === 'boards'; }).length +
+             state.orders.filter(function(o){ return !!o.thing; }).length;
+    }
+    function surfaceOf(list, id){ var S2 = ctx.surfaces; return S2 && S2[list].filter(function(p){ return p.id === id; })[0]; }
     function furniturePiece(id){ for (var i = 0; i < state.furniture.length; i++) if (state.furniture[i].id === id) return state.furniture[i]; return null; }
     function dirtyOnTables(){ return Object.keys(state.items).filter(function(id){ var o = state.items[id]; return o.kind === 'dirty' && o.at === 'table'; }).length; }
     // is a dirty bowl still standing at this guest's place? (nobody sits down there until it is cleared away)
@@ -421,7 +456,7 @@
           if (!it || (it.kind !== 'bowl' && !(it.kind === 'dirty' && !(ctx.getKitchen() || {}).sinkAt))) return false;
           state.bowls++; dropItem(it); return true;
         case 'putDown':    // onto a work surface: arg = { x, y, z }
-          if (!it || !arg || HOME[it.kind]) return false;
+          if (!it || !arg || HOME[it.kind] || it.kind === 'paint' || it.kind === 'boards') return false;   // (those go back to the storeroom)
           it.at = 'surface'; it.x = arg.x; it.y = arg.y; it.z = arg.z; it.rot = arg.rot || 0; state.carry = null; return true;
         case 'pickUp':     // arg = item id
           g = state.items[arg];
@@ -503,14 +538,32 @@
           var uf = furniturePiece(arg);
           if (!uf || !uf.placed || state.furniture.some(function(f){ return !f.placed; })) return false;
           uf.placed = false; return true;
-        case 'buyLook':    // a paint or a floor: arg = 'wall:sage' / 'floor:planks' (bought once, then used)
+        case 'buyLook':    // a bucket of paint or a pack of flooring: arg = 'wall:sage' / 'floor:planks'; it is delivered
           var lp = String(arg).split(':'), li = lookItem(lp[0], lp[1]);
-          if (!li || state.look.have.indexOf(arg) >= 0 || state.money < li.price) return false;
-          state.money -= li.price; day.spent += li.price; state.look.have.push(arg); state.look[lp[0]] = lp[1]; return true;
-        case 'useLook':
-          var up = String(arg).split(':');
-          if (!lookItem(up[0], up[1]) || state.look.have.indexOf(arg) < 0) return false;
-          state.look[up[0]] = up[1]; return true;
+          if (!li || state.money < li.price || thingsAround() >= DOCK_SLOTS - 1) return false;
+          state.money -= li.price; day.spent += li.price;
+          state.orders.push({ id: state.nextId++, goods: emptyGoods(), cost: li.price, left: RULES.delivery,
+                              thing: lp[0] === 'wall' ? { kind: 'paint', color: lp[1], left: PAINT_COVERS } : { kind: 'boards', floor: lp[1], left: FLOOR_COVERS } });
+          return true;
+        case 'setDown':    // a bucket or a pack onto the floor where he works: arg = { x, z, rot }
+          if (!it || (it.kind !== 'paint' && it.kind !== 'boards') || !arg || !num(arg.x) || !num(arg.z)) return false;
+          it.at = 'surface'; it.x = arg.x; it.y = 0; it.z = arg.z; it.rot = num(arg.rot) ? arg.rot : 0; state.carry = null; return true;
+        case 'dip':        // the roller into a bucket of paint that stands somewhere: arg = the bucket's id
+          g = state.items[arg];
+          if (!it || it.kind !== 'roller' || !g || g.kind !== 'paint' || g.at === 'hand' || !(g.left > 0) || (it.color === g.color && it.load >= 0.999)) return false;
+          it.color = g.color; it.load = 1;
+          if (--g.left <= 0) dropItem(g);   // (the empty bucket is thrown away)
+          return true;
+        case 'roll':       // paint goes from the roller onto the wall: arg = how much (1 = a whole panel)
+          if (!it || it.kind !== 'roller' || !it.color || !(arg > 0)) return false;
+          it.load = Math.max(0, (it.load || 0) - arg); return true;
+        case 'paint':      // a panel the roller has covered all over: arg = the panel's id
+          if (!it || it.kind !== 'roller' || !it.color || !surfaceOf('panels', arg) || !ctx.panelShown(surfaceOf('panels', arg)) || (state.decor.walls[arg] || 'cream') === it.color) return false;
+          state.decor.walls[arg] = it.color; return true;
+        case 'lay':        // a floor square laid with the mallet, the boards from a pack nearby: arg = { id, pack }
+          var pk = arg && state.items[arg.pack], sq = arg && surfaceOf('squares', arg.id);
+          if (!it || it.kind !== 'mallet' || !pk || pk.kind !== 'boards' || pk.at === 'hand' || !(pk.left > 0) || !sq || !ctx.squareShown(sq) || (state.decor.floor[arg.id] || 'tiles') === pk.floor) return false;
+          state.decor.floor[arg.id] = pk.floor; if (--pk.left <= 0) dropItem(pk); return true;
         case 'buy':        // an order at the computer: arg = { potato, carrot, onion, broth } (how many of each)
           if (!arg) return false;
           var goods = emptyGoods(), any = false, fits = true;
@@ -536,9 +589,10 @@
           it.goods[arg] -= put;
           if (!GOODS.some(function(k){ return it.goods[k] > 0; })) dropItem(it);   // the empty box is thrown away
           return true;
-        case 'toDock':     // the delivery box back to where it was delivered
-          if (!it || it.kind !== 'parcel' || parcels().some(function(p){ return p.at === 'dock'; })) return false;
-          it.at = 'dock'; state.carry = null; return true;
+        case 'toDock':     // a delivery back to where it was delivered
+          if (!it || (it.kind !== 'parcel' && it.kind !== 'paint' && it.kind !== 'boards')) return false;
+          if (it.kind === 'parcel' && parcels().some(function(p){ return p.at === 'dock'; })) return false;
+          it.at = 'dock'; it.slot = it.kind === 'parcel' ? 0 : freeSlot(); state.carry = null; return true;
         case 'endDay':     // everybody has gone: the day's accounts
           if (day.phase !== 'closed' || inside()) return false;
           day.report = { n: day.n, served: day.served, lost: day.lost, sales: day.sales, tips: day.tips, cost: day.spent,
@@ -598,8 +652,12 @@
         var od = state.orders[oi];
         od.left -= dt;
         if (od.left > 0) continue;
+        if (od.thing){   // a bucket or a pack: put down where deliveries arrive, beside what is there
+          var th = od.thing; th.id = state.nextId++; th.at = 'dock'; th.slot = freeSlot(); state.items[th.id] = th;
+          state.orders.splice(oi, 1); state.delivered++; continue;
+        }
         var box = parcels().filter(function(p){ return p.at === 'dock'; })[0];
-        if (!box){ box = { id: state.nextId++, kind: 'parcel', at: 'dock', goods: emptyGoods() }; state.items[box.id] = box; }
+        if (!box){ box = { id: state.nextId++, kind: 'parcel', at: 'dock', slot: 0, goods: emptyGoods() }; state.items[box.id] = box; }
         for (var gi = 0; gi < GOODS.length; gi++) box.goods[GOODS[gi]] += od.goods[GOODS[gi]] || 0;
         state.orders.splice(oi, 1); state.delivered++;
       }
@@ -852,12 +910,48 @@
           if (key === 'knife') md.tool = measureKnife(md);
           if (key === 'broth') md.tool = measureJug(md);
           if (key === 'spice') md.tool = { grip: V(0, md.size.y * 0.45, 0), dir: V(0, 1, 0), up: V(1, 0, 0) };
+          if (key === 'roller' || key === 'mallet') md.tool = measureLong(md, key === 'roller' ? 0.2 : 0.15, key === 'roller');
           if (key === 'ladle') md.tool = { grip: V(0, md.size.y * 0.88, 0), dir: V(0, -1, 0), up: V(1, 0, 0) };   // held near the top, the bowl down
           md.obj = holder;
         }, function(e){ md.failed = true; console.error('Could not load ' + md.file + ':', e); }); })
         .catch(function(e){ md.failed = true; console.error('Could not load ' + md.file + ':', e); });
     });
-    function instance(key){ return MODELS[key].obj.clone(true); }
+    // a long tool lying along X, its working end at +X: where the hands hold it (grip near the other end,
+    // grip2 further along for the second hand), the middle of its head, which way the head runs (axis)
+    // and how thick it is
+    function measureLong(md, head, twoHands){
+      var p = md.pts, n = p.length / 3, hx = md.size.x / 2, i;
+      function mid(x0, x1){
+        var s = V(), k = 0;
+        for (i = 0; i < n; i++) if (p[i * 3] >= x0 && p[i * 3] <= x1){ s.x += p[i * 3]; s.y += p[i * 3 + 1]; s.z += p[i * 3 + 2]; k++; }
+        return k ? s.multiplyScalar(1 / k) : V((x0 + x1) / 2, md.size.y / 2, 0);
+      }
+      var c = mid(hx - head, hx + 1), lo = V(1e9, 1e9, 1e9), hi = V(-1e9, -1e9, -1e9);
+      for (i = 0; i < n; i++) if (p[i * 3] >= hx - head){ var v = V(p[i * 3], p[i * 3 + 1], p[i * 3 + 2]); lo.min(v); hi.max(v); }
+      var ey = hi.y - lo.y, ez = hi.z - lo.z, axis = ey > ez ? V(0, 1, 0) : V(0, 0, 1);
+      // the very end (the roller itself, the mallet's head): the middle and the radius of its box
+      var lo2 = V(1e9, 1e9, 1e9), hi2 = V(-1e9, -1e9, -1e9), endX = hx - head * 0.85;
+      for (i = 0; i < n; i++) if (p[i * 3] >= endX){ var w = V(p[i * 3], p[i * 3 + 1], p[i * 3 + 2]); lo2.min(w); hi2.max(w); }
+      // (the roller's cylinder may lie at a slant: its middle and its direction from the points themselves)
+      var endC = V(), k2 = 0, cv = [0, 0, 0, 0, 0, 0];
+      for (i = 0; i < n; i++) if (p[i * 3] >= endX){ endC.x += p[i * 3]; endC.y += p[i * 3 + 1]; endC.z += p[i * 3 + 2]; k2++; }
+      endC.multiplyScalar(1 / Math.max(1, k2));
+      for (i = 0; i < n; i++) if (p[i * 3] >= endX){ var ax = p[i * 3] - endC.x, ay = p[i * 3 + 1] - endC.y, az = p[i * 3 + 2] - endC.z; cv[0] += ax * ax; cv[1] += ax * ay; cv[2] += ax * az; cv[3] += ay * ay; cv[4] += ay * az; cv[5] += az * az; }
+      var endAxis = eigen3(cv)[0].vec.normalize(), across = Math.min(hi2.y - lo2.y, 0.3);
+      // (once more, only with the points close to that line: the frame holding it is left out)
+      // (the cover's surface: points about a radius away from that line, not the thin axle along it)
+      var rel = V(), pa = 1e9, pb = -1e9, k3 = 0;
+      for (i = 0; i < n; i++) if (p[i * 3] >= endX){
+        rel.set(p[i * 3], p[i * 3 + 1], p[i * 3 + 2]).sub(endC);
+        var along2 = rel.dot(endAxis), off2 = rel.clone().addScaledVector(endAxis, -along2).length();
+        if (off2 > across * 0.32 && off2 < across * 0.62){ pa = Math.min(pa, along2); pb = Math.max(pb, along2); k3++; }
+      }
+      var coverLen = 0.3;
+      if (k3 > 20){ endC = endC.clone().addScaledVector(endAxis, (pa + pb) / 2); coverLen = pb - pa; }
+      return { grip: mid(-hx + 0.05, -hx + 0.14), grip2: twoHands ? mid(-hx + 0.62, -hx + 0.72) : null, head: c, axis: axis,
+               long: Math.max(ey, ez), thick: Math.min(ey, ez, hi.x - lo.x), end: endC, endAxis: endAxis, endR: across / 2, endLen: coverLen, dir: V(1, 0, 0), up: axis };
+    }
+    function instance(key){ var md = MODELS[key]; return (md.obj || (md.failed && MODELS.parcel.obj) || new T.Group()).clone(true); }   // (a missing model: a box)
     // all vertices of a model as [x, y, z, x, y, z, ...] (packed models store whole numbers that stand for fractions)
     function pointsOf(obj){
       var out = [], v = V();
@@ -1236,14 +1330,25 @@
       var jt = MODELS.broth.tool;
       place.home = { knife: { pos: place.knifeHome, rot: 0.25 },
                      broth: { pos: V(shelfX, SHELF_Y, shelfZ - 0.17), rot: Math.atan2(jt.up.z, jt.up.x) },   // its handle toward the aisle
-                     spice: { pos: V(shelfX, SHELF_Y, shelfZ + 0.24), rot: 0.4 } };
+                     spice: { pos: V(shelfX, SHELF_Y, shelfZ + 0.24), rot: 0.4 },
+                     // in the storeroom, by its door: the roller leaning against the wall, the mallet on the floor below it
+                     roller: leaning('roller', V(9.02, 0.01, -12.62), V(0.12, 1, 0), V(0, 0, 1)), mallet: { pos: V(8.72, 0, -12.45), rot: 0.15 } };
+      function leaning(kind, foot, dir, axis){   // a long tool standing on its end
+        var t = MODELS[kind].tool; if (!t) return { pos: foot, rot: 0 };
+        var o = { pos: V(), dir: V(), up: V() }, d = dir.clone().normalize(), u = axis.clone().addScaledVector(d, -axis.dot(d)).normalize();
+        rotA.makeBasis(d, u, V().crossVectors(d, u)); rotB.makeBasis(t.dir, t.up, V().crossVectors(t.dir, t.up));
+        var q = new T.Quaternion().setFromRotationMatrix(rotA.multiply(rotB.transpose()));
+        return { pos: foot.clone().addScaledVector(d, 0.9), q: q, at: foot.clone().sub(V(-MODELS[kind].size.x / 2, 0, 0).applyQuaternion(q)) };
+      }
       function holdOf(kind, pose, more){
         var t = MODELS[kind].tool, o = { tool: true, grip: t.grip, dir: t.dir, up: t.up, lean: 0.3, pose: pose };
         Object.keys(more || {}).forEach(function(key){ o[key] = more[key]; });
         return o;
       }
       knifeHold = holdOf('knife', knifePose, { lean: 0.34 });
-      toolHold = { knife: knifeHold, broth: holdOf('broth', jugPose, { upright: true }), spice: holdOf('spice', spicePose, { upright: true }), ladle: holdOf('ladle', ladlePose) };
+      toolHold = { knife: knifeHold, broth: holdOf('broth', jugPose, { upright: true }), spice: holdOf('spice', spicePose, { upright: true }), ladle: holdOf('ladle', ladlePose),
+                   roller: MODELS.roller.tool && holdOf('roller', rollerPose, { grip2: MODELS.roller.tool && MODELS.roller.tool.grip2, pole: true, lean: 0.12 }),
+                   mallet: MODELS.mallet.tool && holdOf('mallet', malletPose, { lean: 0.3, kneel: function(){ return !!laying; } }) };
       // the pantry corner: three crates side by side at the kitchen's back wall, between
       // the door to the back rooms and the side counter, right beside the range
       var cs = MODELS.crate.size, wallZ = -10;
@@ -1455,6 +1560,7 @@
     }
     // the mouse while cutting (called from index.html; true = the movement was used here)
     function mouse(dx, dy){
+      if (toolMouse(dx, dy)) return true;
       if (pouring){ pouring.tilt = clamp(pouring.tilt + dy * 0.0045); return true; }   // pulled down it tips further
       if (stirring){
         var S = stirring, P = place.pot, k = 0.0011, lim = P.inner * 0.7;
@@ -1478,7 +1584,7 @@
       if (cutting.h <= 0.03 && cutting.armed){ cutting.armed = false; chop(); }
       return true;
     }
-    window.addEventListener('mousedown', function(e){ if (e.button === 2){ if (cutting) stopCutting(); if (pouring) stopPour(); if (stirring) stopStir(); } });
+    window.addEventListener('mousedown', function(e){ if (e.button === 2){ if (cutting) stopCutting(); if (pouring) stopPour(); if (stirring) stopStir(); stopRolling(); stopLaying(); dipping = null; } });
     // where the knife is while it is led (see knifeHold): its blade above the cut, the handle toward the chef
     function knifePose(out){
       if (!cutting || !place.board) return false;
@@ -1591,6 +1697,7 @@
       var inRoom = x - fp.hx > -4.75 && x + fp.hx < 2.3 && z - fp.hz > -9.7 && z + fp.hz < 8.1;   // (the guests walk along the front wall and the aisle by the tables)
       if (!inExtension && !inRoom) return false;
       if (chef && Math.abs(chef.position.x - x) < fp.hx + 0.4 && Math.abs(chef.position.z - z) < fp.hz + 0.4) return false;
+      if (Object.keys(state.items).some(function(id){ var o = state.items[id]; return o.at === 'surface' && o.y < 0.05 && Math.abs(o.x - x) < fp.hx + 0.35 && Math.abs(o.z - z) < fp.hz + 0.35; })) return false;
       return ctx.boxFree ? ctx.boxFree(x - fp.hx, x + fp.hx, z - fp.hz, z + fp.hz) : true;
     }
     var aimDir2 = V(), aimFrom2 = V();
@@ -1633,11 +1740,307 @@
       ghost.obj.traverse(function(m){ if (m.isMesh) m.material = mat; });
     }
 
+    // ---------- painting and laying the floor ------------------------------------------------------
+    // The bucket and the pack are put down where he works. The roller (from the storeroom) is dipped
+    // into the bucket; with the left mouse button held against a wall the mouse leads it up and down
+    // and sideways, and where it goes the paint goes. A panel is done when it is covered all over;
+    // a dip holds paint for one panel. The rubber mallet lays the floor: kneeling at a square, each
+    // knock (mouse up, then down) lays one row of boards from the pack beside him.
+    var rayFrom = V(), rayDir = V(), hit = { c: 0, y: 0, x: 0, z: 0 };
+    // the wall panel or floor square he looks at (within reach); hit: where
+    function lookedAt(kind, far){
+      var S2 = ctx.surfaces; if (!S2) return null;
+      camera.getWorldPosition(rayFrom); camera.getWorldDirection(rayDir);
+      if (kind === 'floor'){
+        if (rayDir.y > -0.15) return null;
+        var t0 = -rayFrom.y / rayDir.y, fx = rayFrom.x + rayDir.x * t0, fz = rayFrom.z + rayDir.z * t0;
+        hit.x = fx; hit.z = fz;
+        if (t0 > (far || 4.5)) return null;
+        return S2.squares.filter(function(q){ return fx >= q.x0 && fx < q.x1 && fz >= q.z0 && fz < q.z1 && ctx.squareShown(q); })[0] || null;
+      }
+      var best = null, bt = far || ROLL.far + 0.9;
+      S2.panels.forEach(function(p){
+        if (!ctx.panelShown(p)) return;
+        var o = p.along === 'x' ? rayFrom.z : rayFrom.x, dd = p.along === 'x' ? rayDir.z : rayDir.x;
+        if (Math.abs(dd) < 1e-4 || dd * p.facing > 0) return;   // (only from the room's side)
+        var t1 = (p.at - o) / dd; if (t1 < 0 || t1 > bt) return;
+        var c = p.along === 'x' ? rayFrom.x + rayDir.x * t1 : rayFrom.z + rayDir.z * t1, y = rayFrom.y + rayDir.y * t1;
+        if (c < p.a || c > p.b || y < (p.y0 || 0) || y > ctx.wallHeight) return;
+        best = p; bt = t1; hit.c = c; hit.y = y;
+      });
+      return best;
+    }
+    function wallNormal(p){ return p.along === 'x' ? V(0, 0, p.facing) : V(p.facing, 0, 0); }
+    function wallAlong(p){ return p.along === 'x' ? V(1, 0, 0) : V(0, 0, 1); }
+    function wallPoint(p, c, y){ return p.along === 'x' ? V(c, y, p.at) : V(p.at, y, c); }
+    function fromWall(p){ var me = ctx.getChef().position; return (p.along === 'x' ? me.z - p.at : me.x - p.at) * p.facing; }
+    function whereOf(o){ return o.at === 'dock' ? dockSpot(o.slot) : V(o.x || 0, 0, o.z || 0); }
+    function nearest(kind, from, test, within){
+      var best = null, bd = within;
+      Object.keys(state.items).forEach(function(id){
+        var o = state.items[id]; if (o.kind !== kind || o.at === 'hand' || (test && !test(o))) return;
+        var w = whereOf(o), d = Math.hypot(w.x - from.x, w.z - from.z); if (d < bd){ bd = d; best = o; }
+      });
+      return best;
+    }
+    // what has been rolled of a panel so far (until it is done): its colour, a grid of covered cells, the strokes
+    var partial = {};   // panel id -> { color, cols, rows, cells: [], strokes: [[c0, c1, lo, hi], ...] }
+    var rolling = null; // { p, look, c, y, from (where he stood), stroke (the one going on), dry }
+    var dipping = null; // { t, bucket, look, f, r }
+    var laying = null;  // { q, pack, look, kind, axis, sign, rows, h, armed, cool, x (along the row), f, r, from }
+    function partialOf(p, color){
+      var pp = partial[p.id];
+      if (!pp || pp.color !== color){
+        var cols = Math.max(2, Math.round((p.b - p.a) / 0.2)), rows = Math.max(2, Math.round((ctx.wallHeight - (p.y0 || 0)) / 0.25));
+        pp = partial[p.id] = { color: color, cols: cols, rows: rows, cells: new Array(cols * rows).fill(false), strokes: [], n: 0 };
+      }
+      return pp;
+    }
+    function startRolling(p){
+      var it = carried(); if (!it || it.kind !== 'roller' || rolling) return;
+      var me = ctx.getChef().position, y0 = (p.y0 || 0) + 0.08, top = ctx.wallHeight - 0.08;
+      var n = wallNormal(p), look = Math.atan2(-n.x, -n.z);
+      rolling = { p: p, look: look, c: clamp(hit.c, p.a + ROLL.width / 2, p.b - ROLL.width / 2), y: clamp(hit.y, y0, top), from: V(me.x, 0, me.z), stroke: null, dry: false };
+      partialOf(p, it.color);
+    }
+    function stopRolling(){ if (rolling){ rolling = null; } }
+    // the roller has moved from (c0, y0) to where it is: what it went over gets paint
+    function rollOver(c0, y0){
+      var R = rolling, it = carried(), p = R.p, pp = partialOf(p, it.color), w = ROLL.width / 2, band = 0.07;
+      if (!(it.load > 0)){ if (!R.dry){ R.dry = true; say('The roller is dry \u2013 dip it in the paint again'); } return; }
+      var lo = Math.min(y0, R.y) - band, hi = Math.max(y0, R.y) + band, a = Math.min(c0, R.c) - w, b = Math.max(c0, R.c) + w;
+      // (the strokes: a column every 9 cm across the panel, each as high as the roller went in it)
+      var COL = 0.09, grew = false;
+      for (var cc = Math.floor((a - p.a) / COL); cc * COL + p.a < b; cc++){
+        if (cc < 0) continue;
+        var s0 = Math.max(p.a, p.a + cc * COL), s1 = Math.min(p.b, p.a + (cc + 1) * COL), s = pp.strokes[cc];
+        if (!s){ pp.strokes[cc] = [s0, s1, lo, hi]; grew = true; }
+        else if (lo < s[2] - 0.01 || hi > s[3] + 0.01){ s[2] = Math.min(s[2], lo); s[3] = Math.max(s[3], hi); grew = true; }
+      }
+      // the cells whose middle it went over
+      var y0p = p.y0 || 0, cw = (p.b - p.a) / pp.cols, rh = (ctx.wallHeight - y0p) / pp.rows, fresh = 0;
+      for (var i = 0; i < pp.cols; i++){
+        var cx = p.a + (i + 0.5) * cw; if (cx < a || cx > b) continue;
+        for (var j = 0; j < pp.rows; j++){
+          var cy = y0p + (j + 0.5) * rh;
+          if (cy >= lo && cy <= hi && !pp.cells[i * pp.rows + j]){ pp.cells[i * pp.rows + j] = true; pp.n++; fresh++; }
+        }
+      }
+      if (fresh) act('roll', fresh / (pp.cols * pp.rows));
+      if (grew) ctx.surfaces.strokes(p.id, pp.color, pp.strokes.filter(Boolean));
+      if (pp.n >= Math.ceil(pp.cols * pp.rows * 0.97)){   // covered (all but a sliver at the edge: that is done with it)
+        if (act('paint', p.id)) say('Done \u2013 a fresh coat of ' + lookItem('wall', pp.color).name.toLowerCase());
+        delete partial[p.id]; ctx.surfaces.strokes(p.id, null, []);
+        stopRolling();
+      }
+    }
+    function startDip(bucket){
+      var it = carried(); if (!it || it.kind !== 'roller' || dipping || rolling) return;
+      var me = ctx.getChef().position, w = whereOf(bucket), f = V(w.x - me.x, 0, w.z - me.z).normalize(), look = Math.atan2(f.x, f.z);
+      dipping = { t: 0, bucket: bucket.id, look: look, f: f, r: V(-Math.cos(look), 0, Math.sin(look)) };
+    }
+    function startLaying(q, pack){
+      var it = carried(); if (!it || it.kind !== 'mallet' || laying) return;
+      var me = ctx.getChef().position, cx = (q.x0 + q.x1) / 2, cz = (q.z0 + q.z1) / 2;
+      // the rows run across the way he looks at the square; the first one at its far side
+      var dx = cx - me.x, dz = cz - me.z, axis = Math.abs(dx) > Math.abs(dz) ? 'x' : 'z', sign = (axis === 'x' ? dx : dz) > 0 ? 1 : -1;
+      laying = { q: q, pack: pack.id, kind: pack.floor, before: state.decor.floor[q.id] || 'tiles', axis: axis, sign: sign, rows: 0, h: 1, armed: true, cool: 0.2, x: 0.5, from: V(me.x, 0, me.z), fresh: -1 };
+      ctx.surfaces.boards(q.id, pack.floor, []);
+    }
+    function stopLaying(){
+      if (!laying) return;
+      ctx.surfaces.boards(laying.q.id, laying.kind, []);   // (rows of a square not finished are taken up again)
+      laying = null;
+    }
+    function rowRect(L, rows){   // the part of the square the first rows cover: [x0, x1, z0, z1]
+      var q = L.q, s = rows / FLOOR_ROWS;
+      if (L.axis === 'x') return L.sign > 0 ? [q.x1 - (q.x1 - q.x0) * s, q.x1, q.z0, q.z1] : [q.x0, q.x0 + (q.x1 - q.x0) * s, q.z0, q.z1];
+      return L.sign > 0 ? [q.x0, q.x1, q.z1 - (q.z1 - q.z0) * s, q.z1] : [q.x0, q.x1, q.z0, q.z0 + (q.z1 - q.z0) * s];
+    }
+    function rowSpot(L){   // where the mallet knocks: the middle of the row being laid, at L.x along it
+      var q = L.q, k = (L.rows + 0.5) / FLOOR_ROWS;
+      if (L.axis === 'x') return V(L.sign > 0 ? q.x1 - (q.x1 - q.x0) * k : q.x0 + (q.x1 - q.x0) * k, 0, q.z0 + (q.z1 - q.z0) * L.x);
+      return V(q.x0 + (q.x1 - q.x0) * L.x, 0, L.sign > 0 ? q.z1 - (q.z1 - q.z0) * k : q.z0 + (q.z1 - q.z0) * k);
+    }
+    function chefSpot(L){   // where he kneels: a little behind the row being laid
+      var s = rowSpot(L), back = L.axis === 'x' ? V(-L.sign, 0, 0) : V(0, 0, -L.sign);
+      return s.addScaledVector(back, 0.45);
+    }
+    function knock(){
+      var L = laying;
+      L.rows++; L.cool = 0.28; L.fresh = 0;
+      knockSound();
+      ctx.surfaces.boards(L.q.id, L.kind, [rowRect(L, L.rows)]);
+      if (L.rows >= FLOOR_ROWS){
+        var ok = act('lay', { id: L.q.id, pack: L.pack });
+        if (ok) say('Done \u2013 ' + lookItem('floor', L.kind).name.toLowerCase() + ' laid');
+        ctx.surfaces.boards(L.q.id, L.kind, []);
+        laying = null;
+      }
+    }
+    function knockSound(){
+      try {
+        audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+        var t = audio.currentTime, n = Math.floor(audio.sampleRate * 0.12), buf = audio.createBuffer(1, n, audio.sampleRate), d = buf.getChannelData(0);
+        for (var i = 0; i < n; i++) d[i] = ((Math.random() * 2 - 1) * 0.5 + Math.sin(i / audio.sampleRate * 2 * Math.PI * 140)) * Math.pow(1 - i / n, 4);
+        var src = audio.createBufferSource(); src.buffer = buf;
+        var flt = audio.createBiquadFilter(); flt.type = 'lowpass'; flt.frequency.value = 900;
+        var gn = audio.createGain(); gn.gain.value = 0.5;
+        src.connect(flt); flt.connect(gn); gn.connect(audio.destination); src.start(t);
+      } catch (e) { /* no sound then */ }
+    }
+    // the mouse while rolling or knocking (see mouse())
+    function toolMouse(dx, dy){
+      if (rolling){
+        var R = rolling, p = R.p, c0 = R.c, y0 = R.y;
+        R.c = clamp(R.c + dx * ROLL.side, p.a + ROLL.width / 2, p.b - ROLL.width / 2);
+        R.y = clamp(R.y - dy * ROLL.up, (p.y0 || 0) + 0.08, ctx.wallHeight - 0.08);
+        if (Math.abs(R.y - y0) > 1e-4 || Math.abs(R.c - c0) > 1e-4) rollOver(c0, y0);
+        return true;
+      }
+      if (laying){
+        var L = laying;
+        L.x = clamp(L.x + dx * 0.0016, 0.15, 0.85);
+        if (L.cool <= 0){
+          L.h = clamp(L.h - dy * 0.006);
+          if (L.h >= 0.7) L.armed = true;
+          if (L.h <= 0.06 && L.armed){ L.armed = false; knock(); }
+        }
+        return true;
+      }
+      return false;
+    }
+    // where the tools are while they are led (see toolHold): pos = where the hand holding the end is
+    var rotA = new T.Matrix4(), rotB = new T.Matrix4();
+    // the tool's head at 'at', its handle toward dir. along: the roller's own direction in the world
+    // (it lies flat along the wall / across the bucket): then that is kept exactly and the handle
+    // comes as close to dir as it can
+    function placeTool(out, kind, at, dir, up, along, hands){   // hands: where he would like to hold it (a long handle)
+      var t = MODELS[kind].tool, d = dir.clone().normalize(), q, mid = along ? t.end : t.head;
+      if (along){
+        var a1 = along.clone().normalize(), a2 = d.clone().addScaledVector(a1, -d.dot(a1)).normalize();
+        var b1 = t.endAxis.clone(), b2 = t.dir.clone().addScaledVector(b1, -t.dir.dot(b1)).normalize();
+        rotA.makeBasis(a1, a2, V().crossVectors(a1, a2)); rotB.makeBasis(b1, b2, V().crossVectors(b1, b2));
+      } else {
+        var u = up.clone().addScaledVector(d, -up.dot(d)).normalize();
+        rotA.makeBasis(d, u, V().crossVectors(d, u)); rotB.makeBasis(t.dir, t.up, V().crossVectors(t.dir, t.up));
+      }
+      q = new T.Quaternion().setFromRotationMatrix(rotA.multiply(rotB.transpose()));
+      out.pos.copy(at).sub(mid.clone().sub(t.grip).applyQuaternion(q));
+      out.dir.copy(t.dir).applyQuaternion(q); out.up.copy(t.up).applyQuaternion(q);
+      out.slide = 0;
+      if (hands){   // (along the pole toward the head, as far as it lets him: the other hand needs room above)
+        out.slide = clamp(hands.clone().sub(out.pos).dot(out.dir), 0, MODELS[kind].size.x - 0.95);
+        out.pos.addScaledVector(out.dir, out.slide);
+      }
+      return true;
+    }
+    function rollerPose(out){
+      var me = ctx.getChef(), t = MODELS.roller.tool;
+      if (rolling){
+        var p = rolling.p, n = wallNormal(p), at = wallPoint(p, rolling.c, rolling.y).addScaledVector(n, t.thick * 0.5 + 0.012);
+        var th = me.rotation.y, rr = V(-Math.cos(th), 0, Math.sin(th));   // (his hands: in front of his belly, to his right, so the pole passes beside his head)
+        var hands = V(me.position.x, me.position.y + 1.05, me.position.z).addScaledVector(n, -0.42).addScaledVector(rr, 0.26);
+        return placeTool(out, 'roller', at, hands.clone().sub(at).negate(), null, wallAlong(p), hands);
+      }
+      if (dipping){
+        var b = state.items[dipping.bucket]; if (!b) return false;
+        var w = whereOf(b), k = dipping.t / DIP_TIME, wob = Math.sin(k * Math.PI * 4);   // in, rolled back and forth, out
+        var depth = Math.sin(Math.min(1, k * 1.25) * Math.PI) * 0.12;
+        var at2 = V(w.x, MODELS.paint.size.y + 0.06 - depth, w.z).addScaledVector(dipping.f, wob * 0.05);
+        var hands2 = V(me.position.x, me.position.y + 1.1, me.position.z).addScaledVector(dipping.f, 0.38).addScaledVector(dipping.r, 0.2);
+        return placeTool(out, 'roller', at2, hands2.clone().sub(at2).negate(), null, dipping.r, hands2);
+      }
+      return false;
+    }
+    function malletPose(out){
+      if (!laying) return false;
+      var me = ctx.getChef(), t = MODELS.mallet.tool, s = rowSpot(laying), f = V(s.x - me.position.x, 0, s.z - me.position.z), d = f.length();
+      f.normalize(); if (d > 0.55) s = V(me.position.x, 0, me.position.z).addScaledVector(f, 0.55);   // (within reach of his hand: at the edge of the boards)
+      var lift = laying.h * 0.55, at = V(s.x, 0.016 + t.long / 2 + lift, s.z).addScaledVector(f, -laying.h * 0.12);
+      var dir = f.clone(); dir.y = -0.2 + laying.h * 1.3;   // swung up: the head high above the hand; knocking: the handle flat
+      return placeTool(out, 'mallet', at, dir, V(0, 1, 0));
+    }
+    // every frame: the panels and squares show what the state says; tools being led
+    var shownSurf = { walls: {}, floor: {} };
+    function syncSurfaces(dt){
+      var S2 = ctx.surfaces; if (!S2 || !S2.paint) return;
+      S2.panels.forEach(function(p){ var v = state.decor.walls[p.id] || null; if (shownSurf.walls[p.id] === v) return; shownSurf.walls[p.id] = v; S2.paint(p.id, v); });
+      S2.squares.forEach(function(q){ var v = state.decor.floor[q.id] || null; if (shownSurf.floor[q.id] === v) return; shownSurf.floor[q.id] = v; S2.lay(q.id, v); });
+      var chefNow = ctx.getChef(); if (!chefNow) return;
+      var it = carried(), me = chefNow.position;
+      if (rolling && (!it || it.kind !== 'roller' || Math.hypot(me.x - rolling.from.x, me.z - rolling.from.z) > 0.35)) stopRolling();
+      if (dipping){
+        var db = state.items[dipping.bucket];
+        if (!it || it.kind !== 'roller' || !db || db.at === 'hand' || Math.hypot(whereOf(db).x - me.x, whereOf(db).z - me.z) > 1.9){ dipping = null; }
+        else if ((dipping.t += dt) >= DIP_TIME){
+          var col = state.items[dipping.bucket].color;
+          if (act('dip', dipping.bucket)) say('The roller is full of ' + lookItem('wall', col).name.toLowerCase());
+          dipping = null;
+        }
+      }
+      if (laying){
+        var spotNow = chefSpot(laying), away = Math.hypot(me.x - spotNow.x, me.z - spotNow.z);
+        laying.best = Math.min(laying.best === undefined ? away : laying.best, away);
+        if (!it || it.kind !== 'mallet' || !state.items[laying.pack] || away > laying.best + 0.4) stopLaying();   // (he walked off: further from his spot than he has been)
+        else {
+          if (laying.cool > 0){ laying.cool -= dt; laying.h = clamp(laying.h + dt * 2.2 * (laying.cool > 0 ? 0.6 : 0)); if (laying.h >= 0.7) laying.armed = true; }
+          if (laying.fresh >= 0) laying.fresh += dt;
+          // he shuffles along on his knees, staying just behind the row he is laying
+          var want = chefSpot(laying), gx = want.x - me.x, gz = want.z - me.z, gd = Math.hypot(gx, gz), step = Math.min(gd, 0.4 * dt);
+          if (gd > 0.02 && ctx.nudgeChef && ctx.nudgeChef(me.x + gx / gd * step, me.z + gz / gd * step)) laying.from.set(me.x, 0, me.z);   // (from: where he was put, see the check above)
+        }
+      }
+    }
+    // the paint in a bucket: its colour, lower with every dip
+    function bucketPaint(v, o){
+      var s = MODELS.paint.size; if (!s) return;
+      if (!v.paint){
+        v.paint = new T.Mesh(new T.CircleGeometry(Math.min(s.x, s.z) * 0.46, 28), new T.MeshStandardMaterial({ roughness: 0.25, metalness: 0 }));
+        v.paint.rotation.x = -Math.PI / 2; v.obj.add(v.paint);
+      }
+      if (v.paintColor !== o.color){ v.paintColor = o.color; v.paint.material.color.set(lookItem('wall', o.color).swatch).convertSRGBToLinear(); }
+      v.paint.position.y = s.y * 0.915;   // (over the white the model has in it)
+    }
+    // the roller's paint: its cover (the white fluff at the end of the pole) takes on the colour it was
+    // dipped in. Its materials get a few lines more: at that end of the pole, what is not dark (the cover,
+    // the frame holding it) takes on the paint colour (amount: 0 dry .. 1 full).
+    function rollerCoat(v, o){
+      var t = MODELS.roller.tool; if (!t) return;
+      if (!v.coat){
+        var U = v.coat = { color: { value: new T.Color() }, amount: { value: 0 }, x0: { value: MODELS.roller.size.x / 2 - 0.42 } };
+        v.obj.updateMatrixWorld(true);
+        var inv = new T.Matrix4().copy(v.obj.matrixWorld).invert();
+        v.obj.traverse(function(m){
+          if (!m.isMesh) return;
+          var toHolder = new T.Matrix4().multiplyMatrices(inv, m.matrixWorld);   // (the mesh's own space -> the tool's)
+          m.material = m.material.clone();
+          m.material.onBeforeCompile = function(sh){
+            sh.uniforms.toHolder = { value: toHolder };
+            ['color', 'amount', 'x0'].forEach(function(k){ sh.uniforms['coat_' + k] = U[k]; });
+            sh.vertexShader = 'uniform mat4 toHolder;\nvarying vec3 vHold;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvHold = (toHolder * vec4(transformed, 1.0)).xyz;');
+            sh.fragmentShader = 'uniform vec3 coat_color;\nuniform float coat_amount, coat_x0;\nvarying vec3 vHold;\n' +
+              sh.fragmentShader.replace('#include <map_fragment>', '#include <map_fragment>\n' +
+                '{ float lum = dot(diffuseColor.rgb, vec3(0.333)), sat = max(diffuseColor.r, max(diffuseColor.g, diffuseColor.b)) - min(diffuseColor.r, min(diffuseColor.g, diffuseColor.b));\n' +
+                '  float on = step(coat_x0, vHold.x) * smoothstep(0.1, 0.25, lum) * (1.0 - 0.5 * smoothstep(0.15, 0.35, sat));\n' +
+                '  diffuseColor.rgb = mix(diffuseColor.rgb, coat_color * (0.75 + 0.25 * diffuseColor.g), on * coat_amount); }');
+          };
+          m.material.customProgramCacheKey = function(){ return 'roller-coat'; };
+        });
+      }
+      var want = o.color && o.load > 0 ? o.color : null;
+      v.coat.amount.value = want ? 0.35 + 0.6 * clamp(o.load) : 0;
+      if (want && v.coatColor !== want){ v.coatColor = want; v.coat.color.value.set(lookItem('wall', want).swatch).convertSRGBToLinear(); }
+    }
+
     // ---------- what the chef can do: F picks up / puts down, E uses ---------------------------
     function list(words){ return words.join(', ').replace(/, ([^,]*)$/, ' and $1'); }
     play.addInteractables(function(hands){
       var out = [], it = carried(), pot = state.pot;
       if (!place.pot || hold || pc || (ctx.seat && ctx.seat.active())) return out;
+      if (rolling) return [{ pos: rolling.from, reach: 9, key: 'E', label: 'Stop painting', use: stopRolling }];
+      if (laying) return [{ pos: laying.from, reach: 9, key: 'E', label: 'Stop laying the floor', use: stopLaying }];
+      if (dipping) return out;
       if (ghost){   // a piece of furniture is being placed: that is all he can do
         var me2 = ctx.getChef(), name = furnitureItem(ghost.key).name.toLowerCase();
         return [ghost.ok ? { pos: me2.position, reach: 9, key: 'E', label: 'Put the ' + name + ' here', use: function(){ if (ghost && ghost.ok && act('place', { id: ghost.id, x: +ghost.x.toFixed(3), z: +ghost.z.toFixed(3), rot: ghost.rot })) saveNow(false); } }
@@ -1736,10 +2139,54 @@
       });
       // a delivery: the box in the storeroom, its broth at the shelf
       var atDock = parcels().filter(function(p){ return p.at === 'dock'; })[0];
+      Object.keys(state.items).forEach(function(id){
+        var o = state.items[id];
+        if (o.at !== 'dock' || o.kind === 'parcel' || !free) return;
+        add({ pos: dockSpot(o.slot), reach: RULES.itemReach, key: 'F', label: 'Pick up ' + nameOf(o, 'the') + thingNote(o), use: function(){ act('pickUp', o.id); }, obj: see(o) });
+      });
+      if (it && (it.kind === 'paint' || it.kind === 'boards')) add({ pos: DOCK, reach: RULES.itemReach + 0.6, key: 'F', label: 'Put ' + nameOf(it, 'the') + ' down here', use: function(){ act('toDock'); } });
       if (atDock && free) add({ pos: DOCK, reach: RULES.itemReach, key: 'F', label: 'Pick up the delivery box', use: function(){ act('pickUp', atDock.id); }, obj: see(atDock) });
       if (it && it.kind === 'parcel'){
         if (!atDock) add({ pos: DOCK, reach: RULES.itemReach, key: 'F', label: 'Put the delivery box down', use: function(){ act('toDock'); } });
         if (it.goods.broth > 0) add({ pos: place.home.broth.pos, reach: RULES.shelfReach, key: 'E', label: 'Unpack the broth', use: function(){ act('unpack', 'broth'); }, obj: see(state.items[state.tools.broth]) });
+      }
+      // the tools for walls and floor, in the storeroom
+      ['roller', 'mallet'].forEach(function(kind){
+        var o = state.items[state.tools[kind]], at = place.home[kind].pos;
+        if (it === o) add({ pos: at, reach: 1.7, key: 'F', label: 'Put ' + KINDS[kind].the + ' back', use: function(){ act('putHome'); } });
+        else if (free && o.at === 'home') add({ pos: at, reach: 1.7, key: 'F', label: 'Take ' + KINDS[kind].the, use: function(){ act('pickUp', o.id); }, obj: see(o) });
+      });
+      var me3 = ctx.getChef();
+      // a bucket or a pack: put down on the floor where he looks
+      if (it && (it.kind === 'paint' || it.kind === 'boards')){
+        lookedAt('floor', 3);
+        var fx = hit.x, fz = hit.z, ok3 = rayDir.y < -0.15 && Math.hypot(fx - me3.position.x, fz - me3.position.z) < 2.8 && ctx.floorFree(fx, fz, 0.3) &&
+                  !Object.keys(state.items).some(function(id){ var o = state.items[id]; return o.at === 'surface' && o.y < 0.05 && Math.hypot(o.x - fx, o.z - fz) < 0.6; }) &&
+                  !state.furniture.some(function(fu){ var fp = footprint(fu.key, fu.rot); return Math.abs(fu.x - fx) < fp.hx + 0.3 && Math.abs(fu.z - fz) < fp.hz + 0.3; });
+        if (ok3) add({ pos: V(fx, 0, fz), reach: 3, key: 'F', bias: 0.5, label: 'Put ' + nameOf(it, 'the') + ' down here', use: function(){ act('setDown', { x: +fx.toFixed(3), z: +fz.toFixed(3), rot: +(Math.atan2(fx - me3.position.x, fz - me3.position.z)).toFixed(3) }); } });
+      }
+      // the roller: dipped into a bucket, then against the wall
+      if (it && it.kind === 'roller'){
+        var bucket = nearest('paint', me3.position, function(o){ return o.left > 0; }, 1.6);
+        if (bucket && bucket.color === it.color && it.load >= 0.999) add({ pos: whereOf(bucket), reach: 1.6, key: 'E', bias: -0.5, label: 'The roller is full of paint' });
+        else if (bucket) add({ pos: whereOf(bucket), reach: 1.6, key: 'E', bias: -0.5, label: 'Dip the roller in the ' + lookItem('wall', bucket.color).name.toLowerCase(), use: function(){ startDip(bucket); }, obj: see(bucket) });
+        var pw = lookedAt('wall');
+        if (pw){
+          var cur = state.decor.walls[pw.id] || 'cream', dist = fromWall(pw);
+          var lw = !(it.load > 0) ? 'Dip the roller in paint first' : cur === it.color ? 'This part of the wall has that colour already'
+                 : dist < ROLL.near ? 'Step back from the wall a little' : dist > ROLL.far ? 'Go closer to the wall' : null;
+          add(lw ? { pos: me3.position, reach: 9, key: 'LMB', bias: 4, label: lw } : { pos: me3.position, reach: 9, key: 'LMB', bias: -1, label: 'Paint the wall', use: function(){ startRolling(pw); } });
+        }
+      }
+      // the mallet: at a square of the floor, with a pack of boards beside him
+      if (it && it.kind === 'mallet'){
+        var sq = lookedAt('floor', 3.2);
+        if (sq){
+          var have = state.decor.floor[sq.id] || 'tiles', pack = nearest('boards', me3.position, function(o){ return o.left > 0 && o.floor !== have; }, 3.2);
+          var dSq = Math.hypot(Math.max(sq.x0 - me3.position.x, 0, me3.position.x - sq.x1), Math.max(sq.z0 - me3.position.z, 0, me3.position.z - sq.z1));   // (from the square's edge)
+          var ll = !pack ? (nearest('boards', me3.position, null, 3.2) ? 'This square has that floor already' : 'Put a pack of flooring down beside you') : dSq > 1.9 ? 'Go closer to the square' : null;
+          add(ll ? { pos: me3.position, reach: 9, key: 'LMB', bias: 4, label: ll } : { pos: me3.position, reach: 9, key: 'LMB', bias: -1, label: 'Lay ' + lookItem('floor', pack.floor).name.toLowerCase() + ' here', use: function(){ startLaying(sq, pack); } });
+        }
       }
       // furniture that stands somewhere: it can be moved
       if (free) state.furniture.forEach(function(f){
@@ -1757,7 +2204,7 @@
       } else if (inOffice && office.desk){   // (as long as the chair cannot be sat on: standing at the desk)
         add({ pos: V(office.desk.x, 0, office.desk.z), reach: 2.2, key: 'E', label: 'Use the computer', use: openPC });
       }
-      if (it && !HOME[it.kind] && aim && !scoop){
+      if (it && !HOME[it.kind] && it.kind !== 'paint' && it.kind !== 'boards' && aim && !scoop){
         if (aim.free) add({ pos: V(aim.x, 0, aim.z), reach: 2.4, key: 'F', bias: 0.35, label: 'Put ' + nameOf(it, 'the') + ' down', use: function(){ if (aim && aim.free) act('putDown', aim); } });
         else add({ pos: V(aim.x, 0, aim.z), reach: 2.4, key: 'F', bias: 0.35, label: 'No room here' });
       }
@@ -1824,6 +2271,13 @@
 
     // ---------- the things themselves: one object per item, following the state --------------
     var objs = {};   // item id -> { obj, kind }
+    // what a bucket / a pack is for, in a few words
+    function thingNote(o){
+      if (o.kind === 'roller') return o.color && o.load > 0 ? ' (' + lookItem('wall', o.color).name.toLowerCase() + ')' : '';
+      if (o.kind === 'paint') return ' (' + lookItem('wall', o.color).name.toLowerCase() + ', ' + o.left + (o.left === 1 ? ' wall panel' : ' wall panels') + ')';
+      if (o.kind === 'boards') return ' (' + lookItem('floor', o.floor).name.toLowerCase() + ', ' + o.left + (o.left === 1 ? ' square' : ' squares') + ')';
+      return '';
+    }
     function nameOf(o, form){
       var K = KINDS[o.kind];
       if (isVeg(o.kind) && isCut(o)) return (form === 'the' ? 'the ' : '') + K.cutName;
@@ -1865,6 +2319,9 @@
           var kind = want.split('#')[0];
           v = objs[id] = { obj: o.cut && isVeg(kind) ? makeCut(kind, o.cut, o.cut.done) : kind === 'dirty' ? makeDirty() : instance(kind), look: want, placed: false, rot: rot };
         }
+        if (v.placed && (v.at !== o.at || v.px !== o.x || v.pz !== o.z || v.slot !== o.slot)) v.placed = false;   // (it was moved)
+        if (o.kind === 'roller') rollerCoat(v, o);
+        if (o.kind === 'paint') bucketPaint(v, o);
         if (o.at === 'hand'){
           if (shown.carry !== o.id){ shown.carry = o.id; v.placed = false; v.rot = undefined; play.setCarry(v.obj, toolHold[o.kind] || KINDS[o.kind].carry); }
           return;
@@ -1873,11 +2330,12 @@
         if (!v.placed){
           if (o.at === 'table' && o.kind === 'dirty' && num(o.x)){ v.obj.position.set(o.x, o.y, o.z); v.obj.rotation.set(0, rnd(0, 6.28), 0); }
           else if (o.at === 'table'){ var gv = views[o.guest]; placeBowl(gv); v.obj.position.copy(gv.bowlAt); v.obj.rotation.set(0, rnd(0, 6.28), 0); }
+          else if (o.at === 'home' && place.home[o.kind].q){ v.obj.position.copy(place.home[o.kind].at); v.obj.quaternion.copy(place.home[o.kind].q); }
           else if (o.at === 'home'){ v.obj.position.copy(place.home[o.kind].pos); v.obj.rotation.set(0, place.home[o.kind].rot, 0); }
-          else if (o.at === 'dock'){ v.obj.position.copy(DOCK); v.obj.rotation.set(0, 0.35, 0); }
+          else if (o.at === 'dock'){ v.obj.position.copy(dockSpot(o.slot)); v.obj.rotation.set(0, o.slot ? 0 : 0.35, 0); }
           else if (o.at === 'board'){ v.obj.position.copy(place.board.pos); if (v.rot === undefined) v.rot = o.rot || 0; v.obj.rotation.set(0, v.rot, 0); }
           else { v.obj.position.set(o.x, o.y, o.z); v.obj.rotation.set(0, o.rot || 0, 0); }
-          v.obj.visible = true; root.add(v.obj); v.placed = true;
+          v.obj.visible = true; root.add(v.obj); v.placed = true; v.at = o.at; v.px = o.x; v.pz = o.z; v.slot = o.slot;
         }
         if (o.at === 'board'){   // it turns to how it is laid
           v.rot += angle((o.rot || 0) - v.rot) * Math.min(1, dt * 9);
@@ -1886,7 +2344,7 @@
       });
       if (!it && shown.carry !== null && shown.carry !== 'tool'){ shown.carry = null; play.setCarry(null); }   // ('tool': the ladle while stirring)
       // the line above the hint: cutting, a short message, or what he carries
-      var label = it ? 'Carrying ' + nameOf(it, 'a') + (it.kind === 'parcel' ? ': ' + goodsText(it.goods) : '') : '', ob = state.board && state.items[state.board];
+      var label = it ? 'Carrying ' + nameOf(it, 'a') + (it.kind === 'parcel' ? ': ' + goodsText(it.goods) : thingNote(it)) : '', ob = state.board && state.items[state.board];
       if (cutting && ob && cutAxis(ob)){
         var pl = CUTS[ob.kind];
         label = 'Slide the mouse sideways, pull it down to cut   \u00b7   cut ' + (cutCount(ob) + 1) + ' of ' + (pl.a + pl.b);
@@ -1939,17 +2397,23 @@
       if (stirring && (carried() || ctx.isMoving() || state.pot.phase === 'burnt' || !inPot())) stopStir();
       if (shake){ shake.t += dt / 0.5; if (shake.t >= 1) shake = null; }
       if (shown.delivered !== state.delivered){
-        if (shown.delivered !== undefined) say('A delivery has arrived \u2013 the box is in the storeroom', 6);
+        if (shown.delivered !== undefined) say('A delivery has arrived \u2013 it is in the storeroom', 6);
         shown.delivered = state.delivered;
       }
       drawPC();
       syncFurniture();
+      syncSurfaces(dt);
       // the dining room's look and its extension (index.html)
-      var lookKey = state.look.wall + '|' + state.look.floor;
-      if (shown.look !== lookKey && ctx.setLook){ shown.look = lookKey; ctx.setLook(state.look); }
+
       if (!!state.owned.bigroom !== !!shown.bigroom && ctx.openExtension){ shown.bigroom = !!state.owned.bigroom; ctx.openExtension(shown.bigroom); }
       // while a tool is led the view goes to where it works
       var work = cutting ? { yaw: cutting.look, at: place.board.pos } : pouring ? { yaw: pouring.look, at: place.pot.pos } : stirring ? { yaw: stirring.look, at: place.pot.pos } : null;
+      var job = rolling ? wallPoint(rolling.p, rolling.c, rolling.y) : laying ? rowSpot(laying) : dipping && state.items[dipping.bucket] ? whereOf(state.items[dipping.bucket]) : null;
+      if (job){   // painting / laying / dipping: he looks at where the roller / mallet is
+        var cam2 = camera.position, dxj = job.x - cam2.x, dzj = job.z - cam2.z, yawJ = Math.atan2(dxj, dzj) + Math.PI, L2 = ctx.look.get();
+        var pitchJ = clamp(Math.atan2(job.y - cam2.y, Math.max(0.15, Math.hypot(dxj, dzj))), -1.25, 1.1), e2 = 1 - Math.exp(-6 * dt);
+        ctx.look.set(L2.yaw + angle(yawJ - L2.yaw) * e2, L2.pitch + (pitchJ - L2.pitch) * e2);
+      }
       if (work){
         var L = ctx.look.get(), cam = camera.position, wy = work.at.y + (cutting ? 0 : place.pot.size.y * 0.6);
         var ahead = (work.at.x - cam.x) * Math.sin(work.yaw) + (work.at.z - cam.z) * Math.cos(work.yaw);
@@ -2130,6 +2594,8 @@
     // the game's own paper notes (the recipe, the day's slip) pinned on dark wood. The mouse
     // is free while it is on; E or Esc switches it off and he gets up. The game goes on.
     var DOCK = V(6.95, 0, -12.75);   // where deliveries are put down in the storeroom
+    // spot 0 for the delivery box, 1 .. 4 for buckets and packs, along the wall
+    function dockSpot(slot){ return slot ? V(7.62, 0, -12.9 - (slot - 1) * 0.55) : DOCK.clone(); }   // (between the sacks and the boxes)
     var pc = null;   // while it is used: { page: 'supplies' | 'accounts' | 'reviews', cart, said: [text, kind], fresh, sig, when }
     var pcEl = document.createElement('div'); pcEl.className = 'hp-pc';
     pcEl.innerHTML = '<div class="case"><div class="screen"></div></div>';
@@ -2211,7 +2677,7 @@
       var day = state.day, total = priceOf(pc.cart), boxes = parcels();
       var sig = [pc.page, JSON.stringify(pc.cart), pc.said, state.money, GOODS.map(function(k){ return oneDec(stockOf(k)) + '/' + room(k) + '/' + coming(k) + '/' + (state.store[k] || 0); }).join(' '),
                  state.orders.map(function(o){ return Math.ceil(o.left); }).join(','), boxes.map(function(p){ return p.at + JSON.stringify(p.goods); }).join(','),
-                 day.n, day.phase, day.served, day.lost, day.sales, day.tips, day.spent, state.history.length, Object.keys(state.owned).join(','), pc.shopCat, JSON.stringify(state.look), state.furniture.length, state.furniture.filter(function(f){ return f.placed; }).length, state.reviews.length ? state.reviews[state.reviews.length - 1].id : 0].join('|');
+                 day.n, day.phase, day.served, day.lost, day.sales, day.tips, day.spent, state.history.length, Object.keys(state.owned).join(','), pc.shopCat, state.furniture.length, state.furniture.filter(function(f){ return f.placed; }).length, state.reviews.length ? state.reviews[state.reviews.length - 1].id : 0].join('|');
       var when = 'Day ' + day.n + ' · ' + clockText() + ' · ' + (day.phase === 'open' ? 'Open' : day.phase === 'prep' ? 'Closed' : 'Closed for today');
       if (sig === pc.sig){   // only the clock has moved on: its text alone is changed, the screen is not built again
         if (when !== pc.when){ pc.when = when; var clockEl = pcScreen.querySelector('.when'); if (clockEl) clockEl.textContent = when; }
@@ -2247,7 +2713,7 @@
           rows.push('<div class="ship"><span class="tag here">' + (p.at === 'dock' ? 'In the storeroom' : 'Not unpacked') + '</span><div class="small cut">A box with ' + goodsText(p.goods) + '</div></div>');
         });
         state.orders.forEach(function(o){
-          rows.push('<div class="ship"><span class="tag">On its way</span>' + minSec(o.left) + '<div class="small cut">' + goodsText(o.goods) + '</div>' +
+          rows.push('<div class="ship"><span class="tag">On its way</span>' + minSec(o.left) + '<div class="small cut">' + (o.thing ? nameOf(o.thing, 'a') + thingNote(o.thing) : goodsText(o.goods)) + '</div>' +
                     '<div class="bar"><i style="width:' + pct(1 - o.left / RULES.delivery) + '%"></i></div></div>');
         });
         var fit = GOODS.filter(function(k){ return pc.cart[k] > 0; }).length >= 3 ? 1 : 2;   // (a long order leaves less room below it)
@@ -2278,11 +2744,13 @@
         else {
           var part = cat === 'walls' ? 'wall' : 'floor';
           LOOK[part].forEach(function(t){
-            var id = part + ':' + t.key, have = state.look.have.indexOf(id) >= 0, used = state.look[part] === t.key;
+            var id = part + ':' + t.key;
             var pic = t.swatch ? '<i class="swatch" style="background:' + t.swatch + '"></i>' : '<i class="swatch" style="background:#3a2414 url(' + t.img + ') center/120px"></i>';
-            items += card(pic, t.name, have ? null : t.price, used ? 'In the dining room now.' : have ? 'Yours: switch to it at any time.' : 'Buy it once, then switch freely.',
-              used ? '<span class="tag here">In use</span>' : have ? '<button class="primary small-btn" data-do="look:' + id + '">Use</button>' : buyBtn('buylook:' + id, t.price));
+            items += card(pic, t.name + (part === 'wall' ? ' paint' : ''), t.price,
+              part === 'wall' ? 'A bucket with a roller, for ' + PAINT_COVERS + ' wall panels. Paint them one by one.' : 'A pack for ' + FLOOR_COVERS + ' squares of floor. Lay them one by one.',
+              buyBtn('buylook:' + id, t.price));
           });
+          items += '<p class="muted small" style="color:#ead9b8">Delivered to the storeroom like supplies. Carry it to the dining room and put it down there (F). Paint with the roller from the storeroom: dip it in the bucket (E), then hold the left mouse button at a wall and move the mouse. Lay boards with the rubber mallet: look at a square beside the pack, left mouse button, mouse up and down to knock.</p>';
         }
         var placedN = state.furniture.filter(function(f){ return f.placed; }).length;
         var info = '<div class="card note"><h4>The restaurant</h4>' +
@@ -2355,10 +2823,10 @@
         if (ft && act('buyFurniture', k)){ pc.said = [ft.name + ' \u2013 bought! Get up and place it.', 'ok']; saveNow(false); }
         else pc.said = ['This is not possible.', 'warn'];
       }
-      else if (p[0] === 'buylook' || p[0] === 'look'){
+      else if (p[0] === 'buylook'){
         var lid = k + ':' + p[2], lt = lookItem(k, p[2]);
-        if (lt && act(p[0] === 'look' ? 'useLook' : 'buyLook', lid)){ pc.said = [lt.name + (p[0] === 'look' ? ' \u2013 in use.' : ' \u2013 bought!'), 'ok']; saveNow(false); }
-        else pc.said = ['This is not possible.', 'warn'];
+        if (lt && act('buyLook', lid)){ pc.said = [lt.name + ' \u2013 ordered! It comes to the storeroom.', 'ok']; saveNow(false); }
+        else pc.said = [lt && state.money >= lt.price ? 'No more room in the storeroom \u2013 use up what is there first.' : 'This is not possible.', 'warn'];
       }
       else if (p[0] === 'purchase'){
         var t = shopItem(k);
@@ -2418,6 +2886,10 @@
         VEG.forEach(function(k){ if (st.store && num(st.store[k])) store[k] = Math.max(0, Math.min(RULES.storeStock * (st.owned && st.owned.bigstore === true ? 2 : 1), Math.floor(st.store[k]))); });
         st.store = store;
       }
+      if (ok && st.tools && typeof st.tools === 'object' && num(st.nextId)) ['roller', 'mallet'].forEach(function(k){   // (an older game had no tools for walls and floor)
+        if (st.tools[k] !== undefined) return;
+        var t = { id: st.nextId++, kind: k, at: 'home' }; st.items[t.id] = t; st.tools[k] = t.id;
+      });
       ok = ok && Object.keys(HOME).every(function(k){ var o = st.items[st.tools[k]]; return !!o && o.kind === k; });
       ok = ok && Object.keys(st.items).every(function(id){
         var o = st.items[id];
@@ -2427,6 +2899,7 @@
       });
       ok = ok && num(st.items[st.tools.broth].left) && (st.day.phase !== 'done' || (!!st.day.report && num(st.day.report.n)));
       if (!ok) return null;
+      var hadDecor = !!st.decor && typeof st.decor === 'object' && !!st.decor.walls && !!st.decor.floor;
       // what a newer game knows and this save does not: as in a new game
       var fresh = newState();
       Object.keys(fresh).forEach(function(k){ if (st[k] === undefined || st[k] === null && fresh[k] !== null) st[k] = fresh[k]; });
@@ -2440,11 +2913,43 @@
       if (st.owned && typeof st.owned === 'object') SHOP.forEach(function(t){ if (st.owned[t.key] === true) owned[t.key] = true; });
       st.owned = owned;
       // the room's look: only known paints and floors
-      var look = { wall: 'cream', floor: 'tiles', have: ['wall:cream', 'floor:tiles'] };
-      if (st.look && Array.isArray(st.look.have)) st.look.have.forEach(function(id){ var q = String(id).split(':'); if (lookItem(q[0], q[1]) && look.have.indexOf(id) < 0) look.have.push(id); });
-      if (st.look && look.have.indexOf('wall:' + st.look.wall) >= 0) look.wall = st.look.wall;
-      if (st.look && look.have.indexOf('floor:' + st.look.floor) >= 0) look.floor = st.look.floor;
-      st.look = look;
+      // the walls and the floor: known panels / squares with known paints / floors; an older game's look becomes them
+      var decorS = { walls: {}, floor: {} }, SS = ctx.surfaces;
+      if (SS){
+        var oldWall = st.look && lookItem('wall', st.look.wall) ? st.look.wall : null, oldFloor = st.look && lookItem('floor', st.look.floor) ? st.look.floor : null;
+        SS.panels.forEach(function(p){ var v = hadDecor ? st.decor.walls[p.id] : oldWall; if (lookItem('wall', v) && v !== 'cream') decorS.walls[p.id] = v; });
+        SS.squares.forEach(function(q){ var v = hadDecor ? st.decor.floor[q.id] : oldFloor; if (lookItem('floor', v) && v !== 'tiles') decorS.floor[q.id] = v; });
+      }
+      st.decor = decorS; delete st.look;
+      var rl = st.items[st.tools.roller];   // (the paint on the roller: a known one, 0 .. 1)
+      if (!(rl.color && lookItem('wall', rl.color) && num(rl.load) && rl.load > 0)){ delete rl.color; delete rl.load; } else rl.load = Math.min(1, rl.load);
+      // buckets and packs: made anew from what is known of them (a known paint / floor, a whole number left),
+      // in the hands or at the storeroom's spots; at most DOCK_SLOTS - 1 of them, bought ones included
+      function thingOf(o){
+        if (!o) return null;
+        var paint = o.kind === 'paint', max = paint ? PAINT_COVERS : FLOOR_COVERS;
+        if (!(paint ? lookItem('wall', o.color) : o.kind === 'boards' && lookItem('floor', o.floor)) || !num(o.left) || o.left < 1) return null;
+        var t = paint ? { kind: 'paint', color: o.color } : { kind: 'boards', floor: o.floor };
+        t.left = Math.min(max, Math.floor(o.left)); return t;
+      }
+      var things = 0, spots = {};
+      function nextSpot(){ for (var s = 1; spots[s]; s++); spots[s] = true; return s; }
+      Object.keys(st.items).forEach(function(id){ var o = st.items[id];
+        if (o.kind !== 'paint' && o.kind !== 'boards') return;
+        var t = thingOf(o);
+        if (!t || things >= DOCK_SLOTS - 1){ delete st.items[id]; if (st.carry === +id) st.carry = null; return; }
+        things++; t.id = o.id; t.at = o.at === 'hand' && st.carry === +id ? 'hand' : o.at === 'surface' && num(o.x) && num(o.z) && Math.abs(o.x) < 40 && Math.abs(o.z) < 40 ? 'surface' : 'dock';
+        if (t.at === 'surface'){ t.x = o.x; t.y = 0; t.z = o.z; t.rot = num(o.rot) ? o.rot : 0; }
+        if (t.at === 'dock'){ var sl = o.slot; if (o.at === 'dock' && sl >= 1 && sl < DOCK_SLOTS && sl === Math.floor(sl) && !spots[sl]) spots[sl] = true; else sl = nextSpot(); t.slot = sl; }
+        st.items[id] = t;
+      });
+      Object.keys(st.items).forEach(function(id){ var o = st.items[id]; if (o.kind === 'parcel') o.slot = 0; });
+      st.orders = st.orders.filter(function(o){
+        if (!o.thing) return true;
+        var t = things < DOCK_SLOTS - 1 ? thingOf(o.thing) : null;
+        if (!t){ if (num(o.cost) && o.cost > 0) st.money += o.cost; return false; }   // (what cannot come is paid back)
+        things++; o.thing = t; return true;
+      });
       // furniture: known pieces with numbers for places; at most one waiting to be placed
       var waiting = false, ids = {};
       st.furniture = (Array.isArray(st.furniture) ? st.furniture : []).filter(function(f){
@@ -2490,7 +2995,7 @@
         if (o.at === 'table') lost = o.kind === 'dirty' ? !(num(o.x) && num(o.y) && num(o.z)) : !st.guests.some(function(g){ return g.phase === 'eating' && g.item === o.id; });
         else if (o.at === 'hand') lost = st.carry !== o.id;
         else if (o.at === 'board') lost = st.board !== o.id;
-        else if (o.at === 'dock') lost = o.kind !== 'parcel';
+        else if (o.at === 'dock') lost = o.kind !== 'parcel' && o.kind !== 'paint' && o.kind !== 'boards';
         if (!lost) return;
         if (HOME[o.kind]) o.at = 'home';
         else { if (o.kind === 'bowl' || o.kind === 'stew' || o.kind === 'dirty') st.bowls++; delete st.items[id]; }
@@ -2504,7 +3009,8 @@
       Object.keys(objs).forEach(function(id){ if (objs[id].obj.parent) objs[id].obj.parent.remove(objs[id].obj); delete objs[id]; });
       play.setCarry(null);
       cutting = null; pouring = null; stirring = null; shake = null; scoop = null; note.t = 0;
-      closePC(); shown.delivered = undefined; shown.stars = null; shown.look = null;
+      closePC(); shown.delivered = undefined; shown.stars = null; shownSurf = { walls: {}, floor: {} };
+      rolling = null; dipping = null; if (laying) stopLaying(); Object.keys(partial).forEach(function(id){ ctx.surfaces.strokes(id, null, []); }); partial = {};
       Object.keys(views).forEach(function(id){ views[id].review = undefined; });   // (their reviews are the loaded game's)
       if (ctx.seat && ctx.seat.reset) ctx.seat.reset();   // (not sitting in a loaded game)
       shown.carry = null; shown.money = null; shown.hud = null; shown.phase = undefined; shown.told = true;
@@ -2564,7 +3070,7 @@
       // ---- for tests only ----
       debugPC: function(cmd){ if (cmd === 'open') openPC(); else if (cmd) pcDo(cmd); return pc ? { page: pc.page, cart: pc.cart, said: pc.said } : null; },
       debugStore: function(){ return { kitchen: VEG.map(function(k){ return state.crates[k]; }).join('/'), store: VEG.map(function(k){ return state.store[k]; }).join('/') }; },
-      debugFurniture: function(){ return { pieces: state.furniture.map(function(f){ return f.key + (f.placed ? '@' + f.x.toFixed(2) + ',' + f.z.toFixed(2) : ' waiting'); }), ghost: ghost ? { x: +ghost.x.toFixed(2), z: +ghost.z.toFixed(2), ok: ghost.ok } : null, look: state.look, bigroom: !!state.owned.bigroom }; },
+      debugFurniture: function(){ return { pieces: state.furniture.map(function(f){ return f.key + (f.placed ? '@' + f.x.toFixed(2) + ',' + f.z.toFixed(2) : ' waiting'); }), ghost: ghost ? { x: +ghost.x.toFixed(2), z: +ghost.z.toFixed(2), ok: ghost.ok } : null, walls: state.decor.walls, floor: state.decor.floor, bigroom: !!state.owned.bigroom }; },
       debugShop: function(){ return { owned: Object.keys(state.owned), mood: +mood().toFixed(2), bowls: state.bowls, money: state.money }; },
       debugReviews: function(){ return { stars: +reputation().toFixed(2), list: state.reviews.map(function(r){ return r.stars + ' ' + r.who + ' (food ' + r.food + ' wait ' + r.wait + ' clean ' + r.clean + '): ' + r.text; }) }; },
       debugSupplies: function(){ var o = {}; GOODS.forEach(function(k){ o[k] = oneDec(stockOf(k)) + ' room ' + room(k) + ' coming ' + coming(k); }); o.orders = state.orders.map(function(x){ return goodsText(x.goods) + ' in ' + Math.ceil(x.left); }); o.boxes = parcels().map(function(p){ return p.at + ': ' + goodsText(p.goods); }); return o; },
@@ -2604,9 +3110,12 @@
       debugAct: act, debugPot: function(){ return state.pot; }, debugCookRules: COOK,
       debugTools: function(){ return { ids: state.tools, jug: MODELS.broth.tool, home: place.home, left: state.items[state.tools.broth].left }; },
       debugCut: { start: startCutting, stop: stopCutting, limits: function(){ var o = state.items[state.board]; return o && cutAxis(o) ? cutLimits(o, cutAxis(o)) : null; },
-                  ranges: function(kind){ return MODELS[kind].range; }, knife: function(){ return MODELS.knife.tool; }, sizes: function(){ var o = {}; Object.keys(MODELS).forEach(function(k){ o[k] = MODELS[k].size.toArray().map(function(x){ return +x.toFixed(3); }); }); return o; } },
+                  ranges: function(kind){ return MODELS[kind].range; }, knife: function(){ return MODELS.knife.tool; }, sizes: function(){ var o = {}; Object.keys(MODELS).forEach(function(k){ if (MODELS[k].size) o[k] = MODELS[k].size.toArray().map(function(x){ return +x.toFixed(3); }); }); return o; } },
       debugEat: function(){ Object.keys(state.items).forEach(function(id){ var o = state.items[id]; if (o.kind === 'stew' && o.at === 'surface'){ delete state.items[id]; state.bowls++; } }); },
       debugIds: function(kind){ return Object.keys(state.items).filter(function(id){ return state.items[id].kind === kind; }).map(Number); },
+      debugTool: function(k){ var t = MODELS[k] && MODELS[k].tool; return t ? { grip: t.grip.toArray(), grip2: t.grip2 && t.grip2.toArray(), head: t.head.toArray(), axis: t.axis.toArray(), long: t.long, thick: t.thick, size: MODELS[k].size.toArray() } : null; },      debugAim: function(){ var q = lookedAt('floor', 3); return { q: q && q.id, hit: [hit.x, hit.z], from: rayFrom.toArray(), dir: rayDir.toArray(), free: ctx.floorFree(hit.x, hit.z, 0.3) }; },
+      debugSlices: function(k){ var md = MODELS[k], p = md.pts, n = p.length / 3, hx = md.size.x / 2, out = []; for (var x0 = hx - 0.3; x0 < hx; x0 += 0.03){ var lo = [9, 9], hi = [-9, -9], c = 0; for (var i = 0; i < n; i++){ var x = p[i * 3]; if (x < x0 || x >= x0 + 0.03) continue; c++; lo[0] = Math.min(lo[0], p[i * 3 + 1]); hi[0] = Math.max(hi[0], p[i * 3 + 1]); lo[1] = Math.min(lo[1], p[i * 3 + 2]); hi[1] = Math.max(hi[1], p[i * 3 + 2]); } out.push([+x0.toFixed(2), c, +lo[0].toFixed(3), +hi[0].toFixed(3), +lo[1].toFixed(3), +hi[1].toFixed(3)]); } return { hx: hx, end: md.tool.end.toArray().map(function(v){ return +v.toFixed(3); }), endR: md.tool.endR, slices: out }; },
+      debugPaint: function(){ return { rolling: rolling && { c: +rolling.c.toFixed(2), y: +rolling.y.toFixed(2) }, dipping: !!dipping, laying: laying && { rows: laying.rows, h: +laying.h.toFixed(2) }, partial: Object.keys(partial).map(function(k){ return k + ':' + partial[k].n + '/' + partial[k].cells.length; }), roller: state.items[state.tools.roller] }; },
       debugRules: RULES, debugRecipe: RECIPE,
       debugGuest: function(id){ var v = views[id]; return v ? { spot: [v.info.spot.x, v.info.spot.z], bowlAt: v.bowlAt.toArray() } : null; },
       debugPlaces: function(){

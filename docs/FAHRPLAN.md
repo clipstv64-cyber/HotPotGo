@@ -75,7 +75,7 @@ aufnehmen, freie Platzwahl der Gäste, Spülen, Pausenmenü.
 | 3 | Warenlieferung und Lagerverwaltung | fertig in der ersten Fassung: Lieferung kommt nach 30 Sekunden als Karton ins Lager; auspacken in die drei Kisten im Lagerraum (je 12) oder in die Küchenkisten (je 6); aus dem Lager holt der Koch einzelnes Gemüse in die Küche. Bestellen kann man, was in Küche und Lager zusammen passt |
 | 4 | Geräte kaufen | teilweise: Seite „Shop“ am Computer mit vier Dingen, jedes mit Wirkung: mehr Schüsseln (45 €, 20 statt 10 auf dem Stapel), Tischkerzen (60 €) und Topfpflanzen (110 €) machen den Raum schöner und heben die Bewertungen, ein stärkerer Brenner (220 €) kocht den Eintopf in 28 statt 40 Sekunden; Gekauftes steht sofort im Restaurant und bleibt im Spielstand |
 | 5 | Möbel kaufen und platzieren | fertig in der ersten Fassung: Ledersofa, Jukebox, Aquarium (neue Meshy-Modelle), Garderobe; nach dem Kauf steht man auf, das Möbel folgt dem Blick als grüner oder roter Umriss, E stellt es hin, F dreht es, E an einem Möbel verschiebt es; jedes Möbel macht den Raum schöner (Bewertungen) |
-| 6 | Wände und Böden verändern | fertig in der ersten Fassung: vier Wandfarben (Creme, Salbeigrün, Terrakotta, Blassblau) und drei Böden (alte Fliesen, Holzdielen, Schiefer); einmal kaufen, dann jederzeit wechseln |
+| 6 | Wände und Böden verändern | fertig: vier Wandfarben (Creme, Salbeigrün, Terrakotta, Blassblau) und drei Böden (alte Fliesen, Holzdielen, Schiefer), gekauft als Farbeimer (reicht für 8 Wandstücke) oder Dielenpaket (6 Bodenfelder); sie werden geliefert, man stellt sie im Gastraum ab und arbeitet mit Werkzeug aus dem Lager: die Farbrolle (langer Stiel) wird in den Eimer getaucht und mit der Maus Bahn für Bahn über die Wand geführt; mit dem Gummihammer kniet der Koch am Bodenfeld und klopft die Dielen Reihe für Reihe fest |
 | 7 | Neue Räume freischalten | auf Wunsch anders gelöst: statt neuer Räume werden die vorhandenen Bereiche erweitert (Abschnitt „Expand“ im Shop): größerer Gastraum (die linke Wand rückt nach hinten, mehr Platz für Möbel, mehr Gäste), größere Küchenkisten (12 statt 6), mehr Lager (zweite Kistenreihe, 24 statt 12) |
 | 8 | Kundenzufriedenheit und Sternebewertungen | fertig in der ersten Fassung: jeder Gast bewertet seinen Besuch (Essen 35 %, Wartezeit 25 %, Sauberkeit 20 %, Preis 10 %, Atmosphäre 10 %), daraus werden 1 bis 5 Sterne und ein passender Satz; die Sterne des Restaurants sind der Schnitt der letzten 30 Bewertungen und bringen mehr oder weniger Gäste. Atmosphäre ist noch ein fester Wert, bis es Möbel zu kaufen gibt; Gästetypen fehlen |
 | 9 | Weitere Rezepte | fehlt |
@@ -126,6 +126,21 @@ Danach folgen Mehrspieler und Mitarbeiter (Phase 3).
   Meshy-Modell für ihn (niedrig, breit, ohne Armlehnen). Der Aktenschrank steht dafür neben
   der Bürotür.
 - **Erweitern statt neuer Räume** (Wunsch vom 24.11.2026): Küche, Gastraum und Lager werden größer, es kommen keine neuen Räume dazu. Die zuerst gebaute Lounge ist wieder entfernt.
+- **Streichen und Verlegen von Hand** (Wunsch vom 24. und 25.11.2026): Wände und Böden ändern sich
+  nicht mehr auf Knopfdruck. Jede Wand ist in Stücke von etwa 2,5 m geteilt (auch über den Türen),
+  der Boden in Felder. Farbe und Dielen kommen als Lieferung ins Lager (höchstens vier auf einmal),
+  man trägt sie in den Gastraum und stellt sie auf den Boden (F). Werkzeug liegt im Lager neben der
+  Tür: die Farbrolle an der Wand, der Gummihammer davor.
+  - Streichen: Die Rolle wird mit E in den Eimer getaucht (sie färbt sich), dann mit gedrückter
+    linker Maustaste an der Wand mit der Maus hoch, runter und zur Seite geführt. Wo sie war, ist
+    Farbe. Ein Eintauchen reicht für ein Wandstück, ein Eimer für acht. Ein Stück gilt bei 97 %
+    als fertig. Was halb gestrichen ist, bleibt bis zum Ende des Spiels stehen, wird aber nicht
+    gespeichert.
+  - Verlegen: Mit dem Hammer auf ein Bodenfeld schauen, das Paket muss in der Nähe stehen. Der
+    Koch kniet sich hin. Maus hoch holt aus, Maus runter klopft eine Reihe fest. Fünf Reihen sind
+    ein Feld, er rutscht dabei auf den Knien mit.
+  - Neue Meshy-Modelle: Farbrolle mit langem Stiel, Gummihammer, offener Farbeimer (die Farbe im
+    Eimer und auf der Rolle zeigt die gekaufte Farbe).
 - **Shop in Abschnitten** (Wunsch vom 24.11.2026): Kitchen, Room, Furniture, Walls, Floors. Damit die Raummitte frei für Möbel ist, gehen die Gäste jetzt an der Vorderwand entlang zu den Tischen.
 - **Bewertungen** (24.11.2026): Ein Gast schreibt nach dem Essen mit 75 % Wahrscheinlichkeit
   eine Bewertung, wer hungrig geht, immer (1 Stern). Der Satz dazu nennt, was am
