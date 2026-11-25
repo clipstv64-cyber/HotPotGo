@@ -2596,6 +2596,13 @@
         if (o.kind === 'roller') rollerCoat(v, o);
         if (o.kind === 'paint') bucketPaint(v, o);
         if (o.kind === 'stew' && v.look === 'stew') soupTop(v, o);
+        if (o.at === 'hand' && !HOME[o.kind]){   // held with the mouse button: it floats in front of where he looks
+          if (shown.carry === o.id){ play.setCarry(null); shown.carry = null; }
+          if (v.obj.parent !== root) root.add(v.obj);
+          v.obj.visible = true; v.placed = false; floatAt(v.obj, dt, v.floating !== true); v.floating = true;
+          return;
+        }
+        v.floating = false;
         if (o.at === 'hand'){
           if (shown.carry !== o.id){ shown.carry = o.id; v.placed = false; v.rot = undefined; play.setCarry(v.obj, toolHold[o.kind] || KINDS[o.kind].carry); }
           return;
@@ -2767,6 +2774,36 @@
       });
     }
     var heldProp = null, movingProp = null;
+    // something held with the mouse button floats in front of the view: further up when he looks up, over the pot when
+    // he looks at it (a little in front of the eyes, at least above the floor); jump: put there at once (just picked up)
+    var FLOAT = { dist: 0.95, ease: 16 }, floatDir = V(), floatTo = V();
+    // how far along a ray from the eye the first furniture box (or the floor) is
+    function sightHit(o, dir){
+      var best = dir.y < -1e-4 ? -o.y / dir.y : 1e9;
+      (ctx.getObstacles ? ctx.getObstacles() : []).forEach(function(b){
+        var t0 = 0, t1 = best, lo = [b.minX, 0, b.minZ], hi = [b.maxX, b.top || 0, b.maxZ], p = [o.x, o.y, o.z], dv = [dir.x, dir.y, dir.z];
+        for (var k = 0; k < 3; k++){
+          if (Math.abs(dv[k]) < 1e-6){ if (p[k] < lo[k] || p[k] > hi[k]) return; continue; }
+          var a = (lo[k] - p[k]) / dv[k], c = (hi[k] - p[k]) / dv[k]; if (a > c){ var s = a; a = c; c = s; }
+          t0 = Math.max(t0, a); t1 = Math.min(t1, c); if (t0 > t1) return;
+        }
+        if (t0 > 0.05 && t0 < best) best = t0;
+      });
+      return best;
+    }
+    function floatAt(obj, dt, jump){
+      camera.getWorldDirection(floatDir);
+      var box = new T.Box3().setFromObject(obj), r0 = box.isEmpty() ? 0.1 : box.getSize(V()).length() / 2;
+      // (not into what he looks at: it stops just in front of the first box or the floor on the way)
+      var d = Math.min(FLOAT.dist + r0, Math.max(0.3, sightHit(camera.position, floatDir) - r0 * 0.9));
+      floatTo.copy(camera.position).addScaledVector(floatDir, d);
+      floatTo.y = Math.max(floatTo.y, 0.05 + r0 * 0.5);
+      var mid = box.isEmpty() ? obj.position.clone() : box.getCenter(V()), off = obj.position.clone().sub(mid);   // (its middle goes there, not its foot)
+      floatTo.add(off);
+      if (jump) obj.position.copy(floatTo); else obj.position.lerp(floatTo, 1 - Math.exp(-FLOAT.ease * dt));
+      var yaw = Math.atan2(floatDir.x, floatDir.z);
+      obj.quaternion.setFromEuler(new T.Euler(0, yaw, 0));
+    }
     var PROP_NAME = { filing_cabinet: 'filing cabinet', office_shelf: 'office shelf', storage_rack: 'storage rack', boxes: 'boxes', sacks: 'sacks', cleaning_shelf: 'cleaning shelf', mop_bucket: 'mop bucket', brooms: 'brooms', umbrellastand: 'umbrella stand', slotmachine: 'slot machine', fridge: 'old fridge', plant: 'plant', coatrack: 'coat rack', wetsign: 'wet floor sign', crates: 'beer crates',
                       register: 'cash register', trophies: 'trophy', dogfigure: 'china dog', condiments: 'condiments', candlebottle: 'candle' };
     function propName(m){ return PROP_NAME[m.name] || m.name; }
@@ -2775,9 +2812,8 @@
       if (!m.home) m.home = m.holder.parent;
       m.holder.updateMatrixWorld(true);
       var s = new T.Box3().setFromObject(m.holder).getSize(V());
-      heldProp = m;
-      play.setCarry(m.holder, { half: Math.max(0.08, Math.min(0.28, Math.max(s.x, s.z) / 2)), fwd: 0.46, drop: -0.25, grip: 0.08, back: 0, curl: 0.35 });
-      m.holder.visible = true; shown.carry = 'prop';
+      heldProp = m; m.floatJump = true;
+      m.holder.visible = true;   // (it floats in front of the view: showProps / floatAt)
     }
     function dropProp(){
       var m = heldProp; if (!m) return;
@@ -2971,6 +3007,7 @@
       showSpills();
       if (!hold){ refall(); stepFalling(dt); stepPropFalling(dt); }
       showProps(); stepMoving();
+      if (heldProp){ var hp0 = heldProp; if (hp0.home && hp0.holder.parent !== hp0.home) hp0.home.add(hp0.holder); floatAt(hp0.holder, dt, hp0.floatJump); hp0.floatJump = false; }
       if (!phys && window.CANNON && place.pot && clock > 3){ physics(); syncStatics(); }   // (ready before anything is first let go)
       if (ctx.getWaiter && ctx.getWaiter().ready()) ctx.getWaiter().freeze(!!hold);
       if (!hold) waiterStep(dt);
