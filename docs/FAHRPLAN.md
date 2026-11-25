@@ -81,7 +81,12 @@ Phase 1 ist vollständig (der Kühlschrank hat seit dem 25.11.2026 eine Aufgabe:
 | 9 | Weitere Rezepte | fertig in der ersten Fassung: neben dem Gemüseeintopf (9 €) gibt es Kartoffelsuppe (2 Kartoffeln, 1 Zwiebel, 8 €) und Karottensuppe (2 Karotten, 1 Zwiebel, 10 €) und Wurst-Eintopf (1 Kartoffel, 1 Zwiebel, 1 Wurst aus dem Kühlschrank, 12 €, Rezept 160 €); die Rezepte kauft man am Computer (Abschnitt „Recipes“, 70 € und 120 €); was in den Topf kommt, entscheidet, was daraus wird; das Rezept an der Wand zeigt das Gericht, die Suppe hat ihre eigene Farbe in Topf und Schüssel; Gäste bestellen eines der Gerichte auf der Karte (Farbe in der Sprechblase), bekommen sie etwas anderes, ist das Essen weniger wert |
 | 10 | Reinigungssystem | teilweise: Flecken und Besen; Abwasch: die leere Schüssel bleibt mit dem Rest Eintopf auf dem Tisch, man räumt sie ab (F), spült sie an der Spüle (E) und stellt sie zurück auf den Stapel; an einem Platz mit schmutziger Schüssel setzt sich kein Gast, und schmutzige Schüsseln kosten in den Bewertungen Sauberkeit; nach dem Essen bleibt manchmal ein Fleck auf dem Tisch: das Putztuch liegt auf dem zweiten Arbeitstisch in der Küche (F), mit der linken Maustaste am Fleck und der Maus im Kreis wischt der Koch ihn weg; Flecken auf Tischen kosten ebenfalls Sauberkeit |
 
-Danach folgen Mehrspieler und Mitarbeiter (Phase 3).
+## Stand von Phase 3 (Mitarbeiter und Mehrspieler)
+
+| Nr. | Punkt aus dem Konzept | Stand |
+|---|---|---|
+| 1 | Mitarbeiter | angefangen: ein Kellner (neues Meshy-Modell mit Laufanimation), am Computer unter „Staff“ eingestellt (150 €, danach 30 € Lohn am Ende jedes Tages). Der Koch stellt volle Schüsseln auf die Theke (F, drei Plätze), der Kellner bringt sie dem Gast, der dieses Gericht bestellt hat, und nimmt an den Tischen die Bestellungen auf; er geht dabei den Weg der Gäste (an der Theke entlang, an der Vorderwand, dann den Gang bei den Tischen) und von Tisch zu Tisch, solange keine Schüssel auf ihn wartet. Der Koch kann weiter selbst bedienen |
+| 2 | Mehrspieler | offen |
 
 ## Absprachen
 
