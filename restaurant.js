@@ -83,6 +83,7 @@
               draw: [0.8, 1.25] },   // guests come this much less / more often at 1 star and at 5 stars
     autosave: 20,             // seconds between two automatic saves
     spill: { chance: 0.5,     // how often a guest leaves a spill on the table
+             most: 24,        // (never more spills than this at once)
              wipe: 2.2 },     // metres the cloth has to go over it to wipe it off
     reach: 2.1,               // how close the chef has to be to a crate, the pot, the bowls
     cutReach: 1.75,           // ... to the chopping block to cut on it
@@ -245,8 +246,8 @@
     paint:  { file: 'models/d_paintbucket.glb', height: 0.42 },          // an open bucket of paint
     roller: { file: 'models/d_roller.glb', width: 2.05, align: true },   // a paint roller on a long pole (its roller at +X)
     mallet: { file: 'models/d_mallet.glb', width: 0.4, align: true },    // a rubber mallet (its head at +X)
-    boards: { file: 'models/d_floorboards.glb', width: 0.9 },
-    rag:    { file: 'models/d_rag.glb', width: 0.26 },                   // a folded cleaning cloth                 // a bundle of planks tied with rope
+    boards: { file: 'models/d_floorboards.glb', width: 0.9 },                 // a bundle of planks tied with rope
+    rag:    { file: 'models/d_rag.glb', width: 0.26 },                   // a folded cleaning cloth
     candle: { file: 'models/d_candlebottle.glb', height: 0.4 },           // (the shop's pictures)
     plant:  { file: 'models/d_plant.glb', height: 1.75 },
     table:  { file: 'models/table.glb', width: 1.4 },
@@ -811,12 +812,12 @@
               var gv2 = views[g.id];
               used.kind = 'dirty'; delete used.batch; delete used.q; used.seat = g.seat;
               if (gv2){ used.x = gv2.bowlAt.x; used.y = gv2.bowlAt.y; used.z = gv2.bowlAt.z; }
-              if (gv2 && Math.random() < RULES.spill.chance){   // (beside the bowl, so it shows)
-                var sa = Math.random() * Math.PI * 2;
-                state.spills.push({ id: state.nextId++, x: gv2.bowlAt.x + Math.cos(sa) * 0.17, y: gv2.bowlAt.y, z: gv2.bowlAt.z + Math.sin(sa) * 0.12,
-                                    kind: Math.random() < 0.5 ? 1 : 3, size: 0.42 + Math.random() * 0.1, rot: Math.random() * 6.28, left: 1 });
-              }
               else { dropItem(used); state.bowls++; }   // (nowhere to show it: back on the stack)
+              if (gv2 && state.spills.length < RULES.spill.most && Math.random() < RULES.spill.chance){   // (beside the bowl and toward the middle of the table, so it shows and stays on it)
+                var tbl = gv2.info.spot.table, inward = tbl && gv2.bowlAt.z < tbl.z ? 1 : -1;
+                state.spills.push({ id: state.nextId++, x: gv2.bowlAt.x + (Math.random() < 0.5 ? -1 : 1) * (0.12 + Math.random() * 0.06), y: gv2.bowlAt.y, z: gv2.bowlAt.z + inward * (0.1 + Math.random() * 0.06),
+                                    kind: 3, size: 0.42 + Math.random() * 0.1, rot: Math.random() * 6.28, left: 1 });
+              }
             }
             g.item = null;
           }
@@ -1818,7 +1819,7 @@
     function startWipe(id){
       var s = spillOf(id), chef = ctx.getChef(); if (!s || wiping || !chef) return;
       var f = V(s.x - chef.position.x, 0, s.z - chef.position.z).normalize(), th = Math.atan2(f.x, f.z);
-      wiping = { id: id, at: V(s.x, s.y, s.z), look: th, f: f, r: V(-Math.cos(th), 0, Math.sin(th)), x: -f.x * 0.08, z: -f.z * 0.08 };
+      wiping = { id: id, at: V(s.x, s.y, s.z), look: th, f: f, r: V(-Math.cos(th), 0, Math.sin(th)), x: f.x * 0.04, z: f.z * 0.04 };   // (starting on the spill, where he can see it)
     }
     function stopWipe(){ wiping = null; }
     function ragPose(out){
@@ -2606,7 +2607,7 @@
         if (!m){
           var geo = new T.PlaneGeometry(1, 1), uv = geo.attributes.uv, u0 = (s.kind % 2) * 0.5, v0 = s.kind < 2 ? 0.5 : 0;
           for (var i = 0; i < uv.count; i++) uv.setXY(i, u0 + uv.getX(i) * 0.5, v0 + uv.getY(i) * 0.5);
-          m = spillMeshes[s.id] = new T.Mesh(geo, new T.MeshStandardMaterial({ map: spillTex, color: new T.Color(0x9a7258).convertSRGBToLinear(), transparent: true, depthWrite: false, roughness: 0.25, metalness: 0, polygonOffset: true, polygonOffsetFactor: -2 }));
+          m = spillMeshes[s.id] = new T.Mesh(geo, new T.MeshStandardMaterial({ map: spillTex, color: new T.Color(0x8c5a3c).convertSRGBToLinear(), transparent: true, alphaTest: 0.2, depthWrite: false, roughness: 0.25, metalness: 0, polygonOffset: true, polygonOffsetFactor: -2 }));
           m.rotation.set(-Math.PI / 2, 0, s.rot); m.position.set(s.x, s.y + 0.003, s.z); m.scale.setScalar(s.size); m.receiveShadow = true;
           root.add(m);
         }
@@ -3218,7 +3219,8 @@
       if (ok){   // spills on the tables (an older save has none)
         st.spills = (Array.isArray(st.spills) ? st.spills : []).filter(function(s){
           return !!s && num(s.id) && num(s.x) && num(s.y) && num(s.z) && (s.kind === 1 || s.kind === 3) && num(s.size) && s.size > 0 && s.size < 1 && num(s.rot) && num(s.left) && s.left > 0 && s.left <= 1;
-        }).slice(0, 64);
+        }).slice(0, RULES.spill.most);
+        var seen = {}; st.spills = st.spills.filter(function(s){ if (seen[s.id] || s.id >= st.nextId) return false; seen[s.id] = true; return true; });   // (each its own id)
       }
       if (ok){   // (an older save has no fridge and no sausage in the pot)
         st.fridge = num(st.fridge) ? Math.max(0, Math.min(RULES.fridgeStock, Math.floor(st.fridge))) : 0;
@@ -3377,6 +3379,7 @@
       Object.keys(objs).forEach(function(id){ if (objs[id].obj.parent) objs[id].obj.parent.remove(objs[id].obj); delete objs[id]; });
       play.setCarry(null);
       cutting = null; pouring = null; stirring = null; shake = null; scoop = null; wiping = null; note.t = 0;
+      Object.keys(spillMeshes).forEach(function(id){ var m = spillMeshes[id]; root.remove(m); m.geometry.dispose(); m.material.dispose(); delete spillMeshes[id]; });   // (the loaded game's spills are drawn anew)
       closePC(); shown.delivered = undefined; shown.stars = null; shownSurf = { walls: {}, floor: {} };
       rolling = null; dipping = null; if (laying) stopLaying(); Object.keys(partial).forEach(function(id){ ctx.surfaces.strokes(id, null, []); }); partial = {};
       Object.keys(views).forEach(function(id){ views[id].review = undefined; });   // (their reviews are the loaded game's)
