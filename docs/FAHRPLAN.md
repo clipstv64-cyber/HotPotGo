@@ -100,8 +100,12 @@ Phase 1 ist vollständig (der Kühlschrank hat seit dem 25.11.2026 eine Aufgabe:
   vor dem wartenden Gast ist serviert). Kochen (schneiden, rühren, gießen, würzen) bleibt auf
   der Maustaste. Werkzeuge (Messer, Krug, Streuer, Rolle, Hammer, Tuch, Besen) nimmt man mit
   E. Große Dinge (Pflanze, Garderobe, Spielautomat, Kisten, Regale und Möbel in den
-  Hinterzimmern) hebt man mit E an, sie folgen dem Blick, F dreht, E stellt hin. Wo alles
-  steht, bleibt im Spielstand. Anvisierte Gegenstände bekommen eine dünne Umrandung.
+  Hinterzimmern, die Regale mit Gläsern und Gemüse in der Küche) hebt man mit E an, sie
+  folgen dem Blick, F dreht, E stellt hin. Tische werden mit ihren vier Stühlen verschoben,
+  aber nur, wenn kein Gast im Restaurant ist, und nicht auf die Wege der Gäste und des
+  Kellners. Was man mit der Maus hält, schwebt vor dem Blick (hoch und runter mit dem Blick)
+  und bleibt vor Wänden und Flächen stehen; so lässt man es zum Beispiel in den Topf fallen.
+  Wo alles steht, bleibt im Spielstand. Anvisierte Gegenstände bekommen eine dünne Umrandung.
 - **Zutaten liegen in der Küche** (Vorratsecke neben dem Herd). Das Konzept erlaubt
   Kühlschrank oder Lager; das Lager wird mit den Lieferungen in Phase 2 gebraucht.
 - **Kochen einfacher als im Konzept** (Wunsch vom 20.11.2026): Der Herd kennt nur an und

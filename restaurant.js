@@ -337,6 +337,7 @@
         decor: { walls: {}, floor: {} },              // each wall panel's paint and each floor square's flooring (index.html: ctx.surfaces); none: as it was
         prices: {}, offer: {},                        // the menu: a dish's price when it is not the usual one; offer[dish] false: not on the menu today
         furniture: [],                                // { id, key, x, z, rot, placed } (not placed yet: it is being put somewhere)
+        tables: {},                                   // tables moved somewhere else: index -> { x, z }
         props: {},                                    // the decor moved somewhere else: key -> { x, y, z, q } (decor.js movables)
         spills: [],                                   // on the tables: { id, x, y, z, kind, size, rot, left (1 fresh .. 0 wiped off) }
         day: newDay(1)
@@ -2297,6 +2298,11 @@
       if (rolling) return [{ pos: rolling.from, reach: 9, key: 'E', label: 'Stop painting', use: stopRolling }];
       if (laying) return [{ pos: laying.from, reach: 9, key: 'E', label: 'Stop laying the floor', use: stopLaying }];
       if (dipping) return out;
+      if (movingTable){   // a table is being moved: that is all he can do
+        var me5 = ctx.getChef();
+        return [movingTable.ok ? { pos: me5.position, reach: 9, key: 'E', label: 'Put the table here', use: function(){ putTable(false); } } : { pos: me5.position, reach: 9, key: 'E', label: 'No room here' },
+                { pos: me5.position, reach: 9, key: 'F', label: 'Leave it where it was', use: function(){ putTable(true); } }];
+      }
       if (movingProp){   // a big decor thing is being moved: that is all he can do
         var me4 = ctx.getChef(), mp = movingProp;
         return [mp.ok ? { pos: me4.position, reach: 9, key: 'E', label: 'Put the ' + propName(mp) + ' here', use: putMoving } : { pos: me4.position, reach: 9, key: 'E', label: 'No room here' },
@@ -2448,6 +2454,10 @@
           if (o.at === 'pass') add({ pos: V(WP.pass[o.slot].x, 0, WP.pass[o.slot].z), reach: 1.9, key: 'HOLD', label: 'Pick up ' + nameOf(o, 'the'), use: function(){ act('pickUp', o.id); }, obj: see(o) });
         });
       }
+      // the tables (with their chairs): moved with E while nobody is in the restaurant
+      if (free && ctx.tables && !state.guests.some(function(g){ return g.phase !== 'away'; })) ctx.tables.list().forEach(function(t){
+        add({ pos: V(t.x, 0, t.z), reach: 2.2, key: 'E', label: 'Move the table', use: function(){ startTable(t); }, obj: t.obj, bias: 0.6 });
+      });
       // the decor's movable things: small ones held with the mouse button, big ones moved with E
       if (free && ctx.getMovables) ctx.getMovables().forEach(function(m){
         if (propFalling[m.key] || !m.holder.parent) return;
@@ -2773,13 +2783,62 @@
         m.holder.position.set(s.x, s.y, s.z); m.holder.quaternion.fromArray(s.q); boxAlong(m);
       });
     }
-    var heldProp = null, movingProp = null;
+    var heldProp = null, movingProp = null, movingTable = null;   // movingTable: { i, x, z, ok, was (its boxes), box }
+    function startTable(t){
+      if (carried() || heldProp || movingProp || movingTable) return;
+      if (state.guests.some(function(g){ return g.phase !== 'away'; })){ say('Not while guests are inside'); return; }
+      movingTable = { i: t.i, x: t.x, z: t.z, ok: false, half: t.half, from: { x: t.x, z: t.z },
+                      boxes: t.boxes.map(function(b){ var w = { b: b, minX: b.minX, maxX: b.maxX, minZ: b.minZ, maxZ: b.maxZ }; b.minX = b.maxX = b.minZ = b.maxZ = 999; return w; }) };   // (not in its own way)
+    }
+    function stepTable(){
+      var m = movingTable; if (!m) return;
+      var me = ctx.getChef(), f = V(Math.sin(me.rotation.y), 0, Math.cos(me.rotation.y)), dist = 0.8 + m.half.z + 0.2;
+      m.x = me.position.x + f.x * dist; m.z = me.position.z + f.z * dist;
+      m.ok = ctx.boxFree(m.x - m.half.x, m.x + m.half.x, m.z - m.half.z, m.z + m.half.z) && m.x - m.half.x > -10 && m.x + m.half.x < 2.05 && m.z - m.half.z > -9.9 && m.z + m.half.z < 8.1 &&
+             (m.x + m.half.x < -5.9 || m.x - m.half.x > -4.75);   // (not on the guests' way along the tables, the front wall, the waiter's along the bar)
+      var tl = ctx.tables.list()[m.i]; if (tl) tl.obj.position.set(m.x, 0, m.z);   // (only the table shows where it goes; the chairs follow when it is put down)
+    }
+    function putTable(cancel){
+      var m = movingTable; if (!m || (!m.ok && !cancel)) return;
+      movingTable = null;
+      m.boxes.forEach(function(w){ w.b.minX = w.minX; w.b.maxX = w.maxX; w.b.minZ = w.minZ; w.b.maxZ = w.maxZ; });   // (back where they were: moveTableSet moves them along)
+      var tl = ctx.tables.list()[m.i]; if (tl) tl.obj.position.set(m.from.x, 0, m.from.z);
+      if (cancel) return;
+      tableTo(m.i, m.x, m.z, true);
+    }
+    // a table put somewhere: its chairs, and what lies on it or belongs to it, go along
+    function tableTo(i, x, z, along){
+      var tl = ctx.tables.list()[i]; if (!tl) return false;
+      var dx = x - tl.x, dz = z - tl.z, inside = function(px, pz){ return Math.abs(px - tl.x) < tl.half.x + 0.1 && Math.abs(pz - tl.z) < tl.half.z; };
+      if (!ctx.tables.move(i, x, z)) return false;
+      state.tables[i] = { x: +x.toFixed(3), z: +z.toFixed(3) };
+      if (!along) return true;
+      Object.keys(state.items).forEach(function(id){ var o = state.items[id]; if (num(o.x) && num(o.z) && (o.at === 'table' || o.at === 'surface') && inside(o.x, o.z) && o.y > 0.5){ o.x += dx; o.z += dz; if (objs[id]) objs[id].placed = false; } });
+      state.spills.forEach(function(s){ if (inside(s.x, s.z)){ s.x += dx; s.z += dz; if (spillMeshes[s.id]){ spillMeshes[s.id].position.x += dx; spillMeshes[s.id].position.z += dz; } } });
+      (ctx.getMovables ? ctx.getMovables() : []).forEach(function(mv){
+        var p = mv.holder.position; if (mv.big || !inside(p.x, p.z) || p.y < 0.5) return;
+        putProp(mv, V(p.x + dx, p.y, p.z + dz), mv.holder.quaternion.clone());
+      });
+      Object.keys(views).forEach(function(id){   // (where a guest's bowl goes: at the table where it is now)
+        var v = views[id], sp = v.info.spot, t = sp.table, toTable = sp.z < t.z ? 1 : -1;
+        v.bowlAt = V(sp.x, t.top, t.z - toTable * (t.halfZ - 0.34));
+      });
+      return true;
+    }
+    var tablesShown = null;
+    function showTables(){
+      if (!ctx.tables || tablesShown === state.tables || !ctx.tables.list().length || movingTable) return;
+      if (state.guests.some(function(g){ return g.phase !== 'away'; }) && tablesShown !== null) return;
+      tablesShown = state.tables;
+      Object.keys(state.tables).forEach(function(i){ var s = state.tables[i]; tableTo(+i, s.x, s.z, false); });
+    }
     // something held with the mouse button floats in front of the view: further up when he looks up, over the pot when
     // he looks at it (a little in front of the eyes, at least above the floor); jump: put there at once (just picked up)
     var FLOAT = { dist: 0.95, ease: 16 }, floatDir = V(), floatTo = V();
     // how far along a ray from the eye the first furniture box (or the floor) is
     function sightHit(o, dir){
-      var best = dir.y < -1e-4 ? -o.y / dir.y : 1e9;
+      var best = dir.y < -1e-4 ? -o.y / dir.y : dir.y > 1e-4 ? (3.85 - o.y) / dir.y : 1e9;   // (the floor, the ceiling)
+      if (dir.z > 1e-4) best = Math.min(best, (9.9 - o.z) / dir.z);   // (the front wall has no box)
       (ctx.getObstacles ? ctx.getObstacles() : []).forEach(function(b){
         var t0 = 0, t1 = best, lo = [b.minX, 0, b.minZ], hi = [b.maxX, b.top || 0, b.maxZ], p = [o.x, o.y, o.z], dv = [dir.x, dir.y, dir.z];
         for (var k = 0; k < 3; k++){
@@ -2793,7 +2852,9 @@
     }
     function floatAt(obj, dt, jump){
       camera.getWorldDirection(floatDir);
-      var box = new T.Box3().setFromObject(obj), r0 = box.isEmpty() ? 0.1 : box.getSize(V()).length() / 2;
+      var box = new T.Box3().setFromObject(obj);
+      if (!(obj.userData.floatR > 0)) obj.userData.floatR = box.isEmpty() ? 0.1 : Math.min(0.45, box.getSize(V()).length() / 2);
+      var r0 = obj.userData.floatR;
       // (not into what he looks at: it stops just in front of the first box or the floor on the way)
       var d = Math.min(FLOAT.dist + r0, Math.max(0.3, sightHit(camera.position, floatDir) - r0 * 0.9));
       floatTo.copy(camera.position).addScaledVector(floatDir, d);
@@ -2804,15 +2865,14 @@
       var yaw = Math.atan2(floatDir.x, floatDir.z);
       obj.quaternion.setFromEuler(new T.Euler(0, yaw, 0));
     }
-    var PROP_NAME = { filing_cabinet: 'filing cabinet', office_shelf: 'office shelf', storage_rack: 'storage rack', boxes: 'boxes', sacks: 'sacks', cleaning_shelf: 'cleaning shelf', mop_bucket: 'mop bucket', brooms: 'brooms', umbrellastand: 'umbrella stand', slotmachine: 'slot machine', fridge: 'old fridge', plant: 'plant', coatrack: 'coat rack', wetsign: 'wet floor sign', crates: 'beer crates',
+    var PROP_NAME = { k_shelfjars: 'shelf with jars', k_shelfveg: 'vegetable shelf', filing_cabinet: 'filing cabinet', office_shelf: 'office shelf', storage_rack: 'storage rack', boxes: 'boxes', sacks: 'sacks', cleaning_shelf: 'cleaning shelf', mop_bucket: 'mop bucket', brooms: 'brooms', umbrellastand: 'umbrella stand', slotmachine: 'slot machine', fridge: 'old fridge', plant: 'plant', coatrack: 'coat rack', wetsign: 'wet floor sign', crates: 'beer crates',
                       register: 'cash register', trophies: 'trophy', dogfigure: 'china dog', condiments: 'condiments', candlebottle: 'candle' };
     function propName(m){ return PROP_NAME[m.name] || m.name; }
     function grabProp(m){
       if (carried() || heldProp || movingProp) return;
       if (!m.home) m.home = m.holder.parent;
-      m.holder.updateMatrixWorld(true);
-      var s = new T.Box3().setFromObject(m.holder).getSize(V());
-      heldProp = m; m.floatJump = true;
+      heldProp = m; m.floatJump = true; m.holder.userData.floatR = 0;
+      if (m.box){ if (!m.half) m.half = { x: (m.box.maxX - m.box.minX) / 2, z: (m.box.maxZ - m.box.minZ) / 2, yaw: 0 }; m.box.minX = m.box.maxX = m.box.minZ = m.box.maxZ = 999; }   // (boxAlong puts it where it lands)
       m.holder.visible = true;   // (it floats in front of the view: showProps / floatAt)
     }
     function dropProp(){
@@ -3006,7 +3066,7 @@
       buildPlaces();
       showSpills();
       if (!hold){ refall(); stepFalling(dt); stepPropFalling(dt); }
-      showProps(); stepMoving();
+      showProps(); stepMoving(); showTables(); stepTable();
       if (heldProp){ var hp0 = heldProp; if (hp0.home && hp0.holder.parent !== hp0.home) hp0.home.add(hp0.holder); floatAt(hp0.holder, dt, hp0.floatJump); hp0.floatJump = false; }
       if (!phys && window.CANNON && place.pot && clock > 3){ physics(); syncStatics(); }   // (ready before anything is first let go)
       if (ctx.getWaiter && ctx.getWaiter().ready()) ctx.getWaiter().freeze(!!hold);
@@ -3622,6 +3682,14 @@
         if (o.refall !== undefined && o.refall !== true) delete o.refall;
         if (o.tilt !== undefined && !(Array.isArray(o.tilt) && o.tilt.length === 4 && o.tilt.every(num) && Math.abs(Math.hypot(o.tilt[0], o.tilt[1], o.tilt[2], o.tilt[3]) - 1) < 0.01)) delete o.tilt;
       });
+      if (ok){   // where tables were moved to (an older save has none)
+        var tables = {};
+        if (st.tables && typeof st.tables === 'object') Object.keys(st.tables).forEach(function(k){
+          var s = st.tables[k];
+          if (/^[0-9]$/.test(k) && s && num(s.x) && num(s.z) && s.x > -10 && s.x < 2.3 && s.z > -10 && s.z < 8.2) tables[k] = { x: s.x, z: s.z };
+        });
+        st.tables = tables;
+      }
       if (ok){   // where decor things were moved to (an older save has none)
         var props = {};
         if (st.props && typeof st.props === 'object') Object.keys(st.props).forEach(function(k){
@@ -3799,6 +3867,9 @@
       if (heldProp){ var hp = heldProp; heldProp = null; play.setCarry(null); if (hp.home) hp.home.add(hp.holder); }
       if (movingProp){ if (movingProp.box && movingProp.boxWas){ var bw = movingProp.boxWas; movingProp.box.minX = bw.minX; movingProp.box.maxX = bw.maxX; movingProp.box.minZ = bw.minZ; movingProp.box.maxZ = bw.maxZ; } movingProp = null; }
       propsShown = null;   // (the loaded game's places)
+      if (movingTable) putTable(true);
+      tablesShown = null;
+      if (ctx.tables) ctx.tables.list().forEach(function(t, i){ if (!d.state.tables[i]) tableTo(i, [-7.5, -7.5, -7.5, -7.5][i], [-7, -2.33, 2.33, 7][i], false); });   // (a table the loaded game did not move: where it stood at first)
       job = null; if (ctx.getWaiter && ctx.getWaiter().ready()){ ctx.getWaiter().hold(null); ctx.getWaiter().show(false); }   // (he starts at the bar again)
       Object.keys(spillMeshes).forEach(function(id){ var m = spillMeshes[id]; root.remove(m); m.geometry.dispose(); m.material.dispose(); delete spillMeshes[id]; });   // (the loaded game's spills are drawn anew)
       closePC(); shown.delivered = undefined; shown.stars = null; shownSurf = { walls: {}, floor: {} };
@@ -3933,7 +4004,8 @@
       debugPhase: function(id, phase){ var g = guest(id); if (g){ g.phase = phase; g.t = 0; } },
       debugGuests: function(){ return state.guests.map(function(g){ return g.id + ':' + g.phase + '/' + views[g.id].info.where(); }).join(' '); },
       debugMoney: function(n){ state.money = n; },
-      debugLetGo: letGo, debugProps: function(){ return { props: state.props, held: heldProp && heldProp.key, moving: movingProp && movingProp.key, movables: (ctx.getMovables ? ctx.getMovables() : []).map(function(m){ return m.key; }) }; },
+      debugLetGo: letGo, debugTables: function(){ return ctx.tables ? ctx.tables.list().map(function(t){ return [t.x, t.z]; }) : null; },
+      debugMoveTable: function(i){ var t = ctx.tables.list()[i]; if (t) startTable(t); return !!movingTable; }, debugPutTable: function(){ putTable(false); return !movingTable; }, debugProps: function(){ return { props: state.props, held: heldProp && heldProp.key, moving: movingProp && movingProp.key, movables: (ctx.getMovables ? ctx.getMovables() : []).map(function(m){ return m.key; }) }; },
       debugGrabProp: function(k){ var m = (ctx.getMovables() || []).filter(function(x){ return x.key === k; })[0]; if (m){ if (m.big) startMoving(m); else grabProp(m); } return !!m; }, debugPutMoving: function(){ putMoving(); return !movingProp; }, debugFalling: function(){ return Object.keys(falling).length; },
       debugAct: act, debugPot: function(){ return state.pot; }, debugPots: function(){ return state.pots.map(function(p){ return p.phase + ' ' + p.dish + ' x' + p.portions + ' has ' + FOOD.map(function(k){ return p.has[k]; }).join('') + ' heat ' + p.heat + ' ' + Math.round(p.temp); }).join(' / ') + ' at ' + state.potAt; }, debugCookRules: COOK,
       debugTools: function(){ return { ids: state.tools, jug: MODELS.broth.tool, home: place.home, left: state.items[state.tools.broth].left }; },

@@ -1005,15 +1005,15 @@
     // and returns such entries.
     var moreInteractables = [];
     function interactables(){
-      var list = [], full = { reach: USE_REACH, label: 'Hands full', key: 'E' };
-      if (broomAt === 'closet') list.push(carry ? { pos: broomSpot, reach: full.reach, label: full.label, key: 'E' }
+      var list = [], full = { reach: USE_REACH, label: 'Hands full', key: 'E' }, busyHands = !!carry || holdInfo();   // (something floating in front counts)
+      if (broomAt === 'closet') list.push(busyHands ? { pos: broomSpot, reach: full.reach, label: full.label, key: 'E' }
                                                : { pos: broomSpot, reach: USE_REACH, label: 'Pick up broom', use: takeBroom, key: 'E', obj: standing });
       if (broomAt === 'hand') list.push({ pos: broomSpot, reach: USE_REACH, label: 'Put the broom back', use: storeBroom, key: 'E' });
       if (broomAt === 'floor'){   // any part of it within reach will do
         var chef = ctx.getChef(), a = held.position, d = V(0, 1, 0).applyQuaternion(held.quaternion);
         var t = clamp((chef.position.x - a.x) * d.x + (chef.position.z - a.z) * d.z, 0, BROOM_LEN);
         var at = V(a.x + d.x * t, 0, a.z + d.z * t);
-        list.push(carry ? { pos: at, reach: FLOOR_REACH, label: full.label, key: 'E' }
+        list.push(busyHands ? { pos: at, reach: FLOOR_REACH, label: full.label, key: 'E' }
                         : { pos: at, reach: FLOOR_REACH, label: 'Pick up broom', use: takeBroom, key: 'E', obj: held });
       }
       var door = ctx.getDoor && ctx.getDoor();

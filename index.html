@@ -109,6 +109,7 @@
   ];
   var characters = [];       // loaded people: { cfg, group, obj, mixer, angle }
   var chairSpots = [];       // { x, z, rot } of every chair, filled when the furniture loads
+  var tableSets = [];        // each table with its chairs: { obj, box, at: { x, z }, chairs: [{ obj, k (chairSpots index), boxes, dx, dz }], half }
   var TABLE_GLB_URL = "models/table.glb";
   var SHELF_WALL_GAP = 0.05; // shelves stand this far from the walls
   var SHELF_CORNER_GAP = 0.4; // space between the corner shelf and the side wall
@@ -586,6 +587,9 @@
           getWaiter: function(){ return waiterApi; },
           getObstacles: function(){ return obstacles; },   // (the furniture's boxes: what falling things land on)
           getMovables: function(){ return decor && decor.movables ? decor.movables : []; },   // (decor.js: what can be moved)
+          // the tables with their chairs: where each stands, how much room it takes, moving it
+          tables: { list: function(){ return tableSets.map(function(s, i){ return { i: i, x: s.at.x, z: s.at.z, half: s.half, obj: s.obj, boxes: [s.box].concat(s.chairs.reduce(function(a, c){ return a.concat(c.boxes); }, [])) }; }); },
+                    move: moveTableSet },
           showBought: function(key, on){ if (decor && decor.showBought) decor.showBought(key, on); },
           removeBox: removeBox, floorFree: floorFree, boxFree: boxFree,
           // the chef moved a little while he works on his knees (laying the floor); false where he cannot be
@@ -749,7 +753,7 @@
       // against the +X wall, facing -X; its width runs along Z
       holder.position.set(e - size.z / 2, 0, z0 + size.x / 2); holder.rotation.y = -Math.PI / 2;
       scene.add(holder);
-      addBox(holder.position.x, holder.position.z, size.z, size.x, size.y);
+      holder.userData.box = addBox(holder.position.x, holder.position.z, size.z, size.x, size.y);
       return z0 + size.x + KITCHEN_GAP;
     }
 
@@ -857,14 +861,23 @@
         if (wall(sk, 0.15) && ws){ ws.h.position.set(e - ws.s.z / 2, 1.95, sk.h.position.z); ws.h.rotation.y = -Math.PI / 2; scene.add(ws.h); }
         if (sk) kitchen.sinkAt = new THREE.Vector3(sk.h.position.x, 0, sk.h.position.z);   // the washing up is done here (restaurant.js)
         wall(sv, 0.15);
-        if (sj) wall(copy(sj), 0.1);
+        var sj2 = sj && copy(sj);
+        if (sj2) wall(sj2, 0.1);
         if (sc) wall(copy(sc), 0.15);
         // the right-hand side wall (+Z): another vegetable shelf and a jar shelf
         var xr = 9.9;
+        var rightWall = [];
         [sv, sj].forEach(function(a){
           if (!a) return; var c = copy(a);
           c.h.position.set(xr - c.s.x / 2, 0, 10 - 0.03 - c.s.z / 2); c.h.rotation.y = Math.PI; scene.add(c.h);
-          addBox(c.h.position.x, c.h.position.z, c.s.x, c.s.z, c.s.y); xr -= c.s.x + 0.25;
+          c.h.userData.box = addBox(c.h.position.x, c.h.position.z, c.s.x, c.s.z, c.s.y); xr -= c.s.x + 0.25; rightWall.push(c);
+        });
+        // the shelves are only furniture: they can be moved (restaurant.js, as the decor's big things)
+        if (decor && decor.movables) [['k_shelfjars1', sj], ['k_shelfveg1', sv], ['k_shelfjars2', sj2], ['k_shelfveg2', rightWall[0]], ['k_shelfjars3', rightWall[1]]].forEach(function(e){
+          if (!e[1] || !e[1].h.userData.box) return;
+          var b = e[1].h.userData.box;
+          decor.movables.push({ key: e[0], name: e[0].replace(/[0-9]+$/, ''), holder: e[1].h, box: b, big: true, boxOff: { x: 0, z: 0 },
+                                half: { x: (b.maxX - b.minX) / 2, z: (b.maxZ - b.minZ) / 2, yaw: e[1].h.rotation.y } });
         });
         // the steel prep island in the middle with the butcher block and the condiments on it
         if (il){
@@ -1003,7 +1016,8 @@
         TABLE_SPOTS.forEach(function(spot, ti){
           var t = table.clone(); t.position.set(spot[0], 0, spot[1]); scene.add(t);
           if (decor) decor.dressTable(t, spot, tSize, ti);
-          addBox(spot[0], spot[1], tSize.x, tSize.z, tSize.y);
+          var set = { obj: t, box: addBox(spot[0], spot[1], tSize.x, tSize.z, tSize.y), at: { x: spot[0], z: spot[1] }, chairs: [] };
+          tableSets.push(set);
           // two chairs on each long side, facing the table (chair front is +Z)
           var dz = tSize.z / 2 + cSize.z / 2 - CHAIR_TUCK, dx = tSize.x / 4;
           [[-dx, -dz, 0], [dx, -dz, 0], [-dx, dz, Math.PI], [dx, dz, Math.PI]].forEach(function(p){
@@ -1016,8 +1030,9 @@
                               table: { x: spot[0], z: spot[1], halfX: tSize.x / 2, halfZ: tSize.z / 2, top: tSize.y } });
             // seat (whole footprint) and the taller backrest strip at the back
             var backDepth = cSize.z * CHAIR_BACK, backDir = p[2] === 0 ? -1 : 1;
-            addBox(cx, cz, cSize.x, cSize.z, cSize.y * CHAIR_SEAT);
-            addBox(cx, cz + backDir * (cSize.z - backDepth) / 2, cSize.x, backDepth, cSize.y);
+            set.chairs.push({ obj: ch, k: chairSpots.length - 1, boxes: [addBox(cx, cz, cSize.x, cSize.z, cSize.y * CHAIR_SEAT),
+                                                                          addBox(cx, cz + backDir * (cSize.z - backDepth) / 2, cSize.x, backDepth, cSize.y)] });
+            set.half = { x: tSize.x / 2 + 0.05, z: dz + cSize.z / 2 + 0.05 };   // (the table with its chairs)
           });
         });
         characters.forEach(prepareSeat);
@@ -1939,6 +1954,26 @@
   }
   // A guest comes in through the entrance door and walks to their chair ...
   // a guest outside takes another chair: the seated pose is worked out again for it
+  // a table with its chairs moved to (x, z) (only while every guest is outside): the chairs' places, the boxes,
+  // and the seated poses and ways in, worked out again
+  function moveTableSet(ti, x, z){
+    var set = tableSets[ti]; if (!set) return false;
+    var dx = x - set.at.x, dz = z - set.at.z;
+    if (!dx && !dz) return true;
+    if (characters.some(function(c){ return c.state !== 'away'; })) return false;
+    function shift(b){ b.minX += dx; b.maxX += dx; b.minZ += dz; b.maxZ += dz; }
+    set.obj.position.x += dx; set.obj.position.z += dz; shift(set.box); set.at = { x: x, z: z };
+    set.chairs.forEach(function(c){
+      c.obj.position.x += dx; c.obj.position.z += dz; c.boxes.forEach(shift);
+      var sp = chairSpots[c.k]; sp.x += dx; sp.z += dz; sp.table.x = x; sp.table.z = z;
+    });
+    characters.forEach(function(ch){
+      ch.sits = {};   // (the poses kept for each chair: worked out again)
+      if (set.chairs.some(function(c){ return c.k === ch.cfg.seat; })){ ch.sit = null; prepareSeat(ch); }
+      if (ch.guestInfo && ch.sit) ch.guestInfo.spot = ch.sit.spot;
+    });
+    return true;
+  }
   function guestSitAt(ch, k){
     if (k === ch.cfg.seat) return true;
     if (ch.state !== 'away' || !chairSpots[k]) return false;
