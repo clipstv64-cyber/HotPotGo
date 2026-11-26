@@ -757,7 +757,7 @@
           if (day.phase !== 'closed' || inside()) return false;
           var wages = (state.owned.waiter && waiterHere() ? RULES.staff.wage : 0) + (state.owned.cleaner && cleanerHere() ? RULES.cleaner.wage : 0);   // (the waiter's and the cleaner's)
           state.money -= wages; day.spent += wages;
-          day.report = { n: day.n, served: day.served, lost: day.lost, sales: day.sales, tips: day.tips, cost: day.spent, wages: wages,
+          day.report = { n: day.n, served: day.served, lost: day.lost, sales: day.sales, tips: day.tips, cost: day.spent, wages: wages, cleaned: day.cleaned || 0,
                          reviews: day.reviewed, stars: day.reviewed ? day.stars / day.reviewed : 0,
                          profit: day.sales + day.tips - day.spent, money: state.money };
           state.history.push(day.report);
@@ -1081,7 +1081,7 @@
       if (!r) return;
       function row(name, value, cls){ return '<div class="row' + (cls ? ' ' + cls : '') + '"><span>' + name + '</span><b>' + value + '</b></div>'; }
       dayEl.innerHTML = '<h2>Day ' + r.n + '</h2><div class="sub">The day\u2019s accounts</div>' +
-        row('Guests served', r.served) + row('Guests who left hungry', r.lost, r.lost ? 'minus' : '') +
+        row('Guests served', r.served) + row('Guests who left hungry', r.lost, r.lost ? 'minus' : '') + (r.cleaned ? row('Cleaned up by the cleaner', r.cleaned) : '') +
         row('Reviews', r.reviews ? r.stars.toFixed(1) + ' \u2605 (' + r.reviews + ')' : 'none') +
         row('Food sold', euro(r.sales)) + row('Tips', euro(r.tips)) + row('Bought', signed(-(r.cost - (r.wages || 0))), r.cost - (r.wages || 0) ? 'minus' : '') + (r.wages ? row('Wages', signed(-r.wages), 'minus') : '') +
         row('Profit today', signed(r.profit), 'sum ' + (r.profit < 0 ? 'minus' : 'plus')) + row('In the till', signed(r.money)) +
@@ -3314,7 +3314,7 @@
           var left = cjob.kind === 'sweep' ? !!(play.cleanStain && play.cleanStain(cjob.x, cjob.z, dt / RULES.cleaner.sweep))
                                            : act('staffWipe', { id: cjob.id, amount: dt / RULES.cleaner.wipe }) && state.spills.some(function(s){ return s.id === cjob.id; });
           if (cjob.kind === 'wipe' && guestNear(cjob.x, cjob.z)) left = false;   // (somebody sat down there: later)
-          if (!left){ C.work(null); cjob = null; }
+          if (!left){ C.work(null); if (cjob.kind === 'sweep' ? !(play.cleanStain && play.cleanStain(cjob.x, cjob.z, 0)) : !state.spills.some(function(s){ return s.id === cjob.id; })) state.day.cleaned = (state.day.cleaned || 0) + 1; cjob = null; }   // (counted when it is really gone)
           return;
         }
         if (cjob.phase === 'home'){ if (!C.walking()){ C.face(0); cjob = null; } else if (clock < cLook) return; }
@@ -4203,7 +4203,7 @@
         return !!r && num(r.id) && num(r.day) && num(r.stars) && r.stars >= 1 && r.stars <= 5 && typeof r.text === 'string' && typeof r.who === 'string';
       }).slice(-60);
       st.reviews.forEach(function(r){ r.stars = Math.round(r.stars); r.text = r.text.slice(0, 200); r.who = r.who.slice(0, 40); });
-      var FIGURES = ['n', 'served', 'lost', 'sales', 'tips', 'cost', 'wages', 'profit', 'money', 'reviews', 'stars'];
+      var FIGURES = ['n', 'served', 'lost', 'sales', 'tips', 'cost', 'wages', 'cleaned', 'profit', 'money', 'reviews', 'stars'];
       function figures(r){ FIGURES.forEach(function(k){ if (!num(r[k])) r[k] = 0; }); }
       if (st.day.report) figures(st.day.report);
       st.history.forEach(figures);
@@ -4212,6 +4212,7 @@
       FOOD.forEach(function(k){ if (st.pot.cut[k] && !okCut(st.pot.cut[k])) delete st.pot.cut[k]; });
       st.pot.heat = st.pot.heat ? 1 : 0;
       st.day.time = clamp(st.day.time, RULES.day.opens, RULES.day.closes);
+      st.day.cleaned = num(st.day.cleaned) ? Math.max(0, Math.floor(st.day.cleaned)) : 0;   // (what the cleaner did today)
       // what was in the middle of happening is settled: guests on their way in or out are
       // outside, a bowl without its guest is back on the stack, a thing in nobody's hand is gone
       st.guests = st.guests.filter(function(g){ return !!g && typeof g.id === 'string'; });
