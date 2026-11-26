@@ -1031,12 +1031,12 @@
     }
     // what each key would act on right now: the nearest thing in front of him
     var focus = { E: null, F: null, LMB: null, HOLD: null };
-    var aimRay = new T.Ray(), aimBox = new T.Box3(), aimFrame = 0;
+    var aimRay = new T.Ray(), aimBox = new T.Box3(), aimFrame = 0, aimSize = new T.Vector3();
     function lookedAt(obj){
       if (!obj || !ctx.camera) return true;
       if (obj.userData.aimFrame === aimFrame) return obj.userData.aimOk;
       aimBox.setFromObject(obj);
-      var s = aimBox.getSize(new T.Vector3()), ok = true;
+      var s = aimBox.getSize(aimSize), ok = true;
       if (!aimBox.isEmpty() && s.x < 20 && s.y < 20 && s.z < 20){   // (a box that makes sense: the view must pass through it)
         aimBox.expandByScalar(0.04);
         ok = aimRay.intersectsBox(aimBox);
@@ -1045,7 +1045,6 @@
       return ok;
     }
     function findFocus(){
-      aimFrame++;
       if (ctx.camera){ ctx.camera.getWorldPosition(aimRay.origin); ctx.camera.getWorldDirection(aimRay.direction); }
       var chef = ctx.getChef(), out = { E: null, F: null, LMB: null, HOLD: null }, rank = { E: 1e9, F: 1e9, LMB: 1e9, HOLD: 1e9 };
       out.rank = rank;
@@ -1095,7 +1094,8 @@
     function hpLog(){ try { if (window.hotpotLog) window.hotpotLog.log(Array.prototype.join.call(arguments, ' ')); } catch (e){} }
     window.addEventListener('mousedown', function(e){ hpLog('mousedown', e.button, 'locked', document.pointerLockElement === canvas); }, true);
     window.addEventListener('mouseup', function(e){ hpLog('mouseup', e.button, 'locked', document.pointerLockElement === canvas, 'pressed', pressed); }, true);
-    window.addEventListener('wheel', function(e){ hpLog('wheel', e.deltaY, e.deltaX, e.deltaMode, 'locked', document.pointerLockElement === canvas); }, true);
+    var wheelLogged = 0;
+    window.addEventListener('wheel', function(e){ var now = performance.now(); if (now - wheelLogged < 250) return; wheelLogged = now; hpLog('wheel', e.deltaY, e.deltaX, e.deltaMode, 'locked', document.pointerLockElement === canvas); }, true);
     var releasers = [], holdInfo = function(){ return false; }, pressed = false, charging = null;   // charging: { it, t }
     function letGo(){ if (!charging || charging.key !== 'E') charging = null; if (!pressed) return; pressed = false; releasers.forEach(function(fn){ fn(); }); }
     function stepCharge(dt){
@@ -1150,6 +1150,7 @@
 
     // ---------- every frame ---------------------------------------------------------------
     function update(dt, time){
+      aimFrame++;   // (what is looked at: worked out once this frame)
       stepCharge(dt);
       if (move){   // the broom on its way into the hands / back to its place
         move.t += dt / TAKE_TIME;

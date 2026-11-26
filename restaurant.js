@@ -2482,20 +2482,24 @@
         });
       }
       // the tables (with their chairs): moved with E while nobody is in the restaurant
-      if (free && ctx.tables) ctx.tables.list().forEach(function(t){
+      if (free && ctx.tables) lists().tables.forEach(function(t){
         if (tableBusy(t)) return;
         add({ pos: V(t.x, 0, t.z), reach: 3.0, key: 'HOLD', charge: 0.6, label: 'Move the table', use: function(){ startTable(t); }, obj: t.obj, bias: 0.6 });
       });
-      if (free && ctx.tables && ctx.tables.chairs) ctx.tables.chairs().forEach(function(c){
+      if (free && ctx.tables && ctx.tables.chairs) lists().chairs.forEach(function(c){
         if (c.obj && !seatBusy(c.k)) add({ pos: V(c.x, 0, c.z), reach: 2.2, key: 'HOLD', charge: 0.45, label: 'Move the chair', use: function(){ startChair(c); }, obj: c.obj, bias: 0.4 });
       });
       // the decor's movable things: small ones held with the mouse button, big ones moved with E
-      if (free && ctx.getMovables) ctx.getMovables().forEach(function(m){
+      var me7 = ctx.getChef();
+      if (free && ctx.getMovables && me7) ctx.getMovables().forEach(function(m){
+        var mw = m.holder.matrixWorld.elements;
+        if (Math.abs(mw[12] - me7.position.x) > 3.2 || Math.abs(mw[14] - me7.position.z) > 3.2) return;   // (far away: not looked at further)
         if (propFalling[m.key] || !m.holder.parent || (m.canMove && !m.canMove())) return;
         var shown = true; m.holder.traverseAncestors(function(a){ if (!a.visible) shown = false; }); if (!shown || !m.holder.visible) return;   // (not bought: hidden)
-        var mp2 = m.holder.getWorldPosition(V());
-        if (m.big) add({ pos: V(mp2.x, 0, mp2.z), reach: 2.4, key: m.liftWithE ? 'E' : 'HOLD', charge: 0.6, label: 'Move the ' + propName(m), use: function(){ startMoving(m); }, obj: m.holder, bias: 0.3 });
-        else add({ pos: V(mp2.x, 0, mp2.z), reach: RULES.itemReach, key: m.liftWithE ? 'E' : 'HOLD', charge: m.liftWithE ? 0.6 : 0, label: (m.liftWithE ? 'Move the ' : 'Pick up the ') + propName(m), use: function(){ grabProp(m); }, obj: m.holder, bias: 0.2 });
+        var mp2 = V(mw[12], 0, mw[14]);
+        if (!m.useMove){ m.useMove = function(){ startMoving(m); }; m.useGrab = function(){ grabProp(m); }; m.labelMove = 'Move the ' + propName(m); m.labelGrab = (m.liftWithE ? 'Move the ' : 'Pick up the ') + propName(m); }
+        if (m.big) add({ pos: mp2, reach: 2.4, key: m.liftWithE ? 'E' : 'HOLD', charge: 0.6, label: m.labelMove, use: m.useMove, obj: m.holder, bias: 0.3 });
+        else add({ pos: mp2, reach: RULES.itemReach, key: m.liftWithE ? 'E' : 'HOLD', charge: m.liftWithE ? 0.6 : 0, label: m.labelGrab, use: m.useGrab, obj: m.holder, bias: 0.2 });
       });
       // spills on the tables: wiped with the cloth
       if (it && it.kind === 'rag') state.spills.forEach(function(s){
@@ -2688,7 +2692,7 @@
     }
 
     // ---------- every frame: time passes, then everything shown follows the state -------------
-    var clock = 0;
+    var clock = 0, frameNo = 0;   // (frameNo: rises every frame, also while the clock stands still)
     // ---------- letting things fall ----------------------------------------------------------
     // Something held with the mouse button and let go (not over a place for it) falls: a box the
     // size of its model in a cannon-es world, against the floor and the furniture's boxes. Once it lies
@@ -2826,9 +2830,19 @@
     }
     var WALL_PICTURE = { fish: true, antlers: true, chalkboard: true };
     var heldProp = null, movingProp = null, movingTable = null;   // movingTable: { i, x, z, ok, half, from, boxes (what its boxes were) }
-    function seatBusy(k){ return state.guests.some(function(g){ return g.phase !== 'away' && g.seat === k; }) ||
-                                  Object.keys(state.items).some(function(id){ var o = state.items[id]; return o.at === 'table' && o.seat === k; }); }
-    function tableBusy(t){ return ctx.tables.chairs().some(function(c){ return c.table === t.i && seatBusy(c.k); }); }
+    var frameLists = { at: -1 };
+    function lists(){   // (this frame's tables, chairs and the seats in use)
+      if (frameLists.at !== frameNo){
+        var busy = {};
+        state.guests.forEach(function(g){ if (g.phase !== 'away' && num(g.seat)) busy[g.seat] = true; });
+        Object.keys(state.items).forEach(function(id){ var o = state.items[id]; if (o.at === 'table' && num(o.seat)) busy[o.seat] = true; });
+        frameLists = { at: frameNo, tables: ctx.tables ? ctx.tables.list() : [], chairs: ctx.tables && ctx.tables.chairs ? ctx.tables.chairs() : [], busy: busy };
+      }
+      return frameLists;
+    }
+    function listsChanged(){ frameLists.at = -1; }
+    function seatBusy(k){ return !!lists().busy[k]; }
+    function tableBusy(t){ return lists().chairs.some(function(c){ return c.table === t.i && seatBusy(c.k); }); }
     function startTable(t){
       if (carried() || heldProp || movingProp || movingTable) return;
       if (tableBusy(t)){ say('Not while guests are at this table'); return; }
@@ -2852,7 +2866,8 @@
                return ctx.boxFree(p.x - 0.15, p.x + 0.15, p.z - 0.15, p.z + 0.15) && p.x > -9.8 && p.x < 2.05 && p.z > -9.8 && p.z < 8.1 && (p.x < -5.9 || p.x > -4.75);
              });   // (in the dining room, not on the waiter's way along the bar or the guests' along the front wall)
       ctx.tables.preview(m.i, m.x, m.z, m.rot);   // (the table and its chairs where they would go)
-      var tl = ctx.tables.list()[m.i]; if (tl) showRoom(tl.obj, m.ok);
+      if (!m.obj){ var tl0 = lists().tables[m.i]; m.obj = tl0 && tl0.obj; }
+      if (m.obj) showRoom(m.obj, m.ok);
     }
     function putTable(cancel){
       var m = movingTable; if (!m || (!m.ok && !cancel)) return;
@@ -2874,6 +2889,7 @@
                                  return Math.abs(lx) < tl.info.halfX + 0.1 && Math.abs(lz) < tl.info.halfZ + 0.1; };   // (on the table top)
       var mine = ctx.tables.chairs().filter(function(c){ return c.table === i; }).map(function(c){ return c.k; });
       if (!ctx.tables.move(i, x, z, rot)) return false;
+      listsChanged();
       state.tables[i] = { x: +x.toFixed(3), z: +z.toFixed(3), rot: +rot.toFixed(4) };
       if (along) mine.forEach(function(k){ var s = state.chairs[k]; if (s){ var p = moved(s.x, s.z); s.x = +p.x.toFixed(3); s.z = +p.z.toFixed(3); s.rot = +(s.rot + dr).toFixed(4); } });
       tableViews();
@@ -2910,7 +2926,7 @@
       m.boxes.forEach(function(w){ w.b.minX = w.minX; w.b.maxX = w.maxX; w.b.minZ = w.minZ; w.b.maxZ = w.maxZ; });
       m.obj.position.set(m.from.x, 0, m.from.z); m.obj.rotation.y = m.from.rot; showRoom(m.obj, true);
       if (cancel || !m.ok) return;
-      if (ctx.tables.moveChair(m.k, m.x, m.z, m.rot)){ state.chairs[m.k] = { x: +m.x.toFixed(3), z: +m.z.toFixed(3), rot: +m.rot.toFixed(4) }; tableViews(); }
+      if (ctx.tables.moveChair(m.k, m.x, m.z, m.rot)){ listsChanged(); state.chairs[m.k] = { x: +m.x.toFixed(3), z: +m.z.toFixed(3), rot: +m.rot.toFixed(4) }; tableViews(); }
       else say('A guest is on the way to it \u2013 the chair stays where it was');
     }
     function tableViews(){   // (where a guest's bowl goes: at the table where his chair is now)
@@ -2920,6 +2936,8 @@
     function showTables(){
       if (!ctx.tables || tablesShown === state.tables || !ctx.tables.list().length || movingTable || movingChair) return;
       if (state.guests.some(function(g){ return g.phase !== 'away'; }) && tablesShown !== null) return;
+      if (frameNo - (showTables.tried || -99) < 30) return;   // (a try every half second or so)
+      showTables.tried = frameNo;
       var allThere = true;
       Object.keys(state.tables).forEach(function(i){ var s = state.tables[i]; if (!tableTo(+i, s.x, s.z, false, s.rot || 0)) allThere = false; });
       Object.keys(state.chairs).forEach(function(k){ var s = state.chairs[k]; if (!ctx.tables.moveChair(+k, s.x, s.z, s.rot)) allThere = false; });
@@ -2930,11 +2948,14 @@
     // he looks at it (a little in front of the eyes, at least above the floor); jump: put there at once (just picked up)
     var FLOAT = { dist: 0.95, ease: 16 }, floatDir = V(), floatTo = V();
     // how far along a ray from the eye the first furniture box (or the floor) is
+    var SH = { p: [0, 0, 0], dv: [0, 0, 0], lo: [0, 0, 0], hi: [0, 0, 0] };
     function sightHit(o, dir){
       var best = dir.y < -1e-4 ? -o.y / dir.y : dir.y > 1e-4 ? (3.85 - o.y) / dir.y : 1e9;   // (the floor, the ceiling)
       if (dir.z > 1e-4) best = Math.min(best, (9.9 - o.z) / dir.z);   // (the front wall has no box)
+      var p = SH.p, dv = SH.dv, lo = SH.lo, hi = SH.hi;
+      p[0] = o.x; p[1] = o.y; p[2] = o.z; dv[0] = dir.x; dv[1] = dir.y; dv[2] = dir.z;
       (ctx.getObstacles ? ctx.getObstacles() : []).forEach(function(b){
-        var t0 = 0, t1 = best, lo = [b.minX, 0, b.minZ], hi = [b.maxX, b.top || 0, b.maxZ], p = [o.x, o.y, o.z], dv = [dir.x, dir.y, dir.z];
+        var t0 = 0, t1 = best; lo[0] = b.minX; lo[1] = 0; lo[2] = b.minZ; hi[0] = b.maxX; hi[1] = b.top || 0; hi[2] = b.maxZ;
         for (var k = 0; k < 3; k++){
           if (Math.abs(dv[k]) < 1e-6){ if (p[k] < lo[k] || p[k] > hi[k]) return; continue; }
           var a = (lo[k] - p[k]) / dv[k], c = (hi[k] - p[k]) / dv[k]; if (a > c){ var s = a; a = c; c = s; }
@@ -2996,7 +3017,8 @@
     // a carried big thing shows red where it cannot stand (its materials copied once, so nothing else turns red)
     var BAD = new T.Color(0.55, 0.06, 0.03);
     function showRoom(obj, ok){
-      if (!obj) return;
+      if (!obj || (obj.userData.roomOk !== false) === ok) return;   // (never tinted counts as fine: nothing to copy then)
+      obj.userData.roomOk = ok;
       obj.traverse(function(o){
         if (!o.isMesh || !o.material || o.userData.hull) return;
         if (!o.userData.ownMat){ o.material = Array.isArray(o.material) ? o.material.map(function(mm){ return mm.clone(); }) : o.material.clone(); o.userData.ownMat = true; }
@@ -3085,7 +3107,7 @@
       wheelTurn(e.deltaY > 0 ? 1 : -1);
     }, { passive: true });
     function wheelTurn(s){
-      var it1 = carried(); hpLog('wheelTurn', s, 'carried', it1 && it1.kind, 'heldProp', heldProp && heldProp.key, 'movingProp', movingProp && movingProp.key, 'ghost', !!ghost);
+      var it1 = carried(), now1 = performance.now(); if (now1 - (wheelTurn.logged || 0) > 250){ wheelTurn.logged = now1; hpLog('wheelTurn', s, 'carried', it1 && it1.kind, 'heldProp', heldProp && heldProp.key, 'movingProp', movingProp && movingProp.key, 'ghost', !!ghost); }
       var it = carried(), v = it && !HOME[it.kind] && objs[it.id];
       if (movingTable) movingTable.rot = (movingTable.rot + s * Math.PI / 2 + Math.PI * 2) % (Math.PI * 2);
       else if (movingChair) movingChair.rot = (movingChair.rot + s * Math.PI / 8 + Math.PI * 2) % (Math.PI * 2);
@@ -3231,7 +3253,7 @@
       }
     }
     function update(dt){
-      clock += dt;
+      clock += dt; frameNo++;
       buildPlaces();
       showSpills();
       if (!hold){ refall(); stepFalling(dt); stepPropFalling(dt); }
@@ -4048,7 +4070,7 @@
       if (movingChair) putChair(true);
       if (movingProp) cancelMoving();
       furnWas = null;
-      tablesShown = null;
+      tablesShown = null; showTables.tried = -99; listsChanged();
       if (ctx.tables){ var keepTables = state.tables; ctx.tables.list().forEach(function(t, i){ if (t.home && (t.x !== t.home.x || t.z !== t.home.z || t.rot)) tableTo(i, t.home.x, t.home.z, false, 0); }); state.tables = keepTables; }   // (showTables puts the loaded ones where they were)
       if (ctx.tables) ctx.tables.list().forEach(function(t){   // (chairs the loaded game did not move: at their table as at first)
         t.chairs.forEach(function(c){ if (c.off && (Math.abs(c.x - t.x - c.off.x) > 1e-3 || Math.abs(c.z - t.z - c.off.z) > 1e-3 || c.rot !== c.rot0)) ctx.tables.moveChair(c.k, t.x + c.off.x, t.z + c.off.z, c.rot0); });
