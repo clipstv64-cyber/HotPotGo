@@ -659,7 +659,11 @@
           var st0 = shopItem(arg);
           if (!st0 || st0.cat !== 'staff' || !state.owned[arg]) return false;
           delete state.owned[arg];
-          if (arg === 'waiter'){ dropWaiterBowl(); job = null; }
+          if (arg === 'waiter'){   // (what he carries and what stands on the bar for him: on the bar, for the chef to take)
+            dropWaiterBowl(); job = null;
+            if (ctx.getWaiter && ctx.getWaiter().ready()){ ctx.getWaiter().hold(null); var WP0 = ctx.getWaiter().place;
+              Object.keys(state.items).forEach(function(id){ var o = state.items[id]; if (o.at !== 'pass') return; var ps = WP0.pass[o.slot] || WP0.pass[0]; o.at = 'surface'; o.x = ps.x; o.y = WP0.barTop; o.z = ps.z; o.rot = 0; delete o.slot; if (objs[id]) objs[id].placed = false; }); }
+          }
           if (arg === 'cleaner') cjob = null;
           return true;
         case 'purchase':   // something from the shop: arg = its key
@@ -1053,6 +1057,7 @@
       // (a rubber stamp)
       '.hp-pc .pic img[src*="shop_waiter"],.hp-pc .pic img[src*="shop_cleaner"]{border-radius:50%}' +
       '.hp-pc .staff-act{display:flex;flex-direction:column;align-items:center;gap:7px}.hp-pc .staff-act .tag{margin-right:0}' +
+      '.hp-pc .staff-act button{background:transparent;color:#4a3626;border:2px solid #4a3626;border-radius:3px;font:italic 600 14px/1.3 Georgia,"Times New Roman",serif;padding:4px 12px}.hp-pc .staff-act button:hover{background:#4a3626;color:#f4ead2}' +
       '.hp-pc .tag{display:inline-block;padding:1px 7px;margin-right:8px;border:2px solid currentColor;border-radius:3px;transform:rotate(-2deg);opacity:.9;' +
       'font:700 12px/1.3 Georgia,"Times New Roman",serif;letter-spacing:1.2px;text-transform:uppercase;color:#a0591c}.hp-pc .tag.here{color:#3f8a2c}' +
       // the accounts
@@ -1356,10 +1361,10 @@
       });
     }
     // a guest's order: a bowl of the dish (in its colour) and a bar that runs out with the guest's patience
-    // a guest's way (GUEST_TYPE), as a small sign in the bubble's upper corner
+    // a guest's way (GUEST_TYPE), as a small sign in the bubble, left of the picture
     function typeSign(g, kind){
       if (kind !== 'hurry' && kind !== 'picky' && kind !== 'thrifty') return;
-      g.save(); g.translate(22, 47); g.scale(0.95, 0.95);   // (inside the bubble, left of the picture)
+      g.save(); g.translate(25, 46); g.scale(1.25, 1.25);   // (inside the bubble, left of the picture)
       g.fillStyle = '#efe2c2'; g.strokeStyle = 'rgba(74,54,38,.55)'; g.lineWidth = 2;
       g.beginPath(); g.arc(0, 0, 13, 0, Math.PI * 2); g.fill(); g.stroke();
       if (kind === 'hurry'){   // an hourglass
@@ -3123,7 +3128,7 @@
       if (/^k_(shelf|island)/.test(m.key)){   // (a kitchen shelf: in the kitchen, not in front of what is used there)
         var k = ctx.getKitchen() || {};
         m.ok = m.ok && x - hx > 4.0 && z - hz > -10 && z + hz < 10 &&
-               [k.sinkAt, k.fridgeAt, k.potAt, k.potAt2].every(function(p){ return !p || Math.hypot(p.x - x, p.z - z) > 1.4; });
+               [k.sinkAt, k.fridgeAt, k.potAt, k.potAt2].every(function(p){ return !p || Math.hypot(p.x - x, p.z - z) > (/^k_island/.test(m.key) ? 1.1 + Math.max(hx, hz) : 1.4); });   // (the table: by its size)
       } else if (/^k_/.test(m.key)) m.ok = m.ok && x - hx > 3.95;   // (the kitchen's things stay behind the bar: in the kitchen or the back rooms)
       else {   // (the dining room: the waiter's lane along the bar and the staff's places stay free)
         var Wp = ctx.getWaiter && ctx.getWaiter().place, Cp = ctx.getCleaner && ctx.getCleaner().place;
@@ -3353,7 +3358,7 @@
       var W = ctx.getWaiter && ctx.getWaiter();
       if (!W || !W.ready()) return;
       if (!state.owned.waiter){ if (W.shown()) W.show(false); return; }
-      if (!W.shown()){ W.show(true, W.place.home, Math.PI / 2); dropWaiterBowl(); job = null; }
+      if (!W.shown()){ W.show(true, W.place.home, Math.PI / 2); W.hold(null); dropWaiterBowl(); job = null; }
       if (!job && (movingTable || movingChair || movingProp)) return;   // (furniture being moved: he waits)
       if (!job){
         // a bowl on the bar for a guest who ordered that dish (the one waiting longest), else an order to take
