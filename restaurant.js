@@ -148,8 +148,8 @@
     { key: 'bigstore',   cat: 'expand', name: 'More storage',     price: 180, pic: 'crate', text: 'A second crate for each vegetable in the storeroom: 24 instead of 12.' },
     // recipes: a new dish on the menu (key: 'recipe_' + the dish)
     // staff: hired once, paid every day
-    { key: 'cleaner', cat: 'staff', name: 'A cleaner', price: 120, pic: '', text: 'He sweeps the stains off the dining room floor and wipes the spills off the tables where nobody sits. Wage: 25 \u20ac a day.' },
-    { key: 'waiter', cat: 'staff', name: 'A waiter', price: 150, pic: '', text: 'He takes the orders at the tables and carries the bowls you put on the bar to the guests who ordered them. Wage: 30 \u20ac a day.' },
+    { key: 'cleaner', cat: 'staff', name: 'A cleaner', price: 120, pic: 'textures/shop_cleaner.webp', text: 'He sweeps the stains off the dining room floor and wipes the spills off the tables where nobody sits. Wage: 25 \u20ac a day.' },
+    { key: 'waiter', cat: 'staff', name: 'A waiter', price: 150, pic: 'textures/shop_waiter.webp', text: 'He takes the orders at the tables and carries the bowls you put on the bar to the guests who ordered them. Wage: 30 \u20ac a day.' },
     { key: 'recipe_potato', cat: 'recipes', name: 'Potato soup', price: 70, pic: 'stew', text: 'Two potatoes and an onion. Cheap to cook, guests pay 8 \u20ac a bowl. Some guests will ask for it.' },
     { key: 'recipe_carrot', cat: 'recipes', name: 'Carrot soup', price: 120, pic: 'stew', text: 'Two carrots and an onion. Sweet and bright: guests pay 10 \u20ac a bowl. Some guests will ask for it.' },
     { key: 'recipe_sausage', cat: 'recipes', name: 'Sausage stew', price: 160, pic: 'sausage', text: 'A potato, an onion and a smoked sausage from the fridge. Hearty: guests pay 12 \u20ac a bowl. Order the sausages at the computer.' }
@@ -655,6 +655,13 @@
         case 'close':      // ... and end: nobody new comes in, who is inside finishes the meal
           if (day.phase !== 'open') return false;
           day.phase = 'closed'; state.open = false; return true;
+        case 'dismiss':    // staff let go: no more wages (hired again, the shop's price is paid again)
+          var st0 = shopItem(arg);
+          if (!st0 || st0.cat !== 'staff' || !state.owned[arg]) return false;
+          delete state.owned[arg];
+          if (arg === 'waiter'){ dropWaiterBowl(); job = null; }
+          if (arg === 'cleaner') cjob = null;
+          return true;
         case 'purchase':   // something from the shop: arg = its key
           var thing = shopItem(arg);
           if (arg === 'recipe_sausage' && !hasFridge()) return false;
@@ -1044,6 +1051,8 @@
       '.hp-pc .rev{padding:8px 15px}.hp-pc .quote{font-style:italic;font-size:16px;line-height:1.3;margin:2px 0}' +
       '.hp-pc .one .cut{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}' +
       // (a rubber stamp)
+      '.hp-pc .pic img[src*="shop_waiter"],.hp-pc .pic img[src*="shop_cleaner"]{border-radius:50%}' +
+      '.hp-pc .staff-act{display:flex;flex-direction:column;align-items:center;gap:7px}.hp-pc .staff-act .tag{margin-right:0}' +
       '.hp-pc .tag{display:inline-block;padding:1px 7px;margin-right:8px;border:2px solid currentColor;border-radius:3px;transform:rotate(-2deg);opacity:.9;' +
       'font:700 12px/1.3 Georgia,"Times New Roman",serif;letter-spacing:1.2px;text-transform:uppercase;color:#a0591c}.hp-pc .tag.here{color:#3f8a2c}' +
       // the accounts
@@ -1561,7 +1570,7 @@
                      broth: { pos: V(shelfX, SHELF_Y, shelfZ - 0.17), rot: Math.atan2(jt.up.z, jt.up.x) },   // its handle toward the aisle
                      spice: { pos: V(shelfX, SHELF_Y, shelfZ + 0.24), rot: 0.4 },
                      // in the storeroom, by its door: the roller leaning against the wall, the mallet on the floor below it
-                     rag: { pos: V(6.72, k.bowlsAt.y, 4.22), rot: 0.3 },   // (between the block and the stock pot on the second prep table)
+                     rag: { pos: k.ragAt || V(6.72, k.bowlsAt.y, 4.22), rot: 0.3 },   // (between the block and the stock pot on the second prep table)
                      roller: leaning('roller', V(9.02, 0.01, -12.62), V(0.12, 1, 0), V(0, 0, 1)), mallet: { pos: V(8.72, 0, -12.45), rot: 0.15 } };
       function leaning(kind, foot, dir, axis){   // a long tool standing on its end
         var t = MODELS[kind].tool; if (!t) return { pos: foot, rot: 0 };
@@ -2377,7 +2386,7 @@
       if (movingProp){   // a big decor thing is being moved: that is all he can do
         var me4 = ctx.getChef(), mp = movingProp;
         return [mp.ok ? { pos: me4.position, reach: 9, key: 'E', label: 'Put the ' + propName(mp) + ' here', use: putMoving } : { pos: me4.position, reach: 9, key: 'E', label: 'No room here' },
-                { pos: me4.position, reach: 9, key: 'F', label: 'Turn it (or the mouse wheel)', use: function(){ if (movingProp) movingProp.rot = (movingProp.rot + Math.PI / 4) % (Math.PI * 2); } }];
+                { pos: me4.position, reach: 9, key: 'F', label: 'Turn it (or the mouse wheel)', use: function(){ if (movingProp) movingProp.rot = (movingProp.rot + (movingProp.quarter ? Math.PI / 2 : Math.PI / 4)) % (Math.PI * 2); } }];
       }
       if (heldProp) return [];   // (a decor thing in his hands: let go of it first)
       if (ghost){   // a piece of furniture is being placed: that is all he can do
@@ -3064,6 +3073,7 @@
       if (carried() || heldProp || movingProp) return;
       if (!m.home) m.home = m.holder.parent;
       movingProp = m; movingProp.rot = new T.Euler().setFromQuaternion(m.holder.quaternion, 'YXZ').y; movingProp.ok = false;
+      if (m.quarter) movingProp.rot = Math.round(movingProp.rot / (Math.PI / 2)) * (Math.PI / 2);
       m.homePos = m.holder.position.clone(); m.homeQ = m.holder.quaternion.clone();   // (to go back to if there is no room where it is let go)
       if (m.box){ m.boxWas = { minX: m.box.minX, maxX: m.box.maxX, minZ: m.box.minZ, maxZ: m.box.maxZ }; if (!m.half) m.half = { x: (m.box.maxX - m.box.minX) / 2, z: (m.box.maxZ - m.box.minZ) / 2, yaw: 0 }; m.box.minX = m.box.maxX = m.box.minZ = m.box.maxZ = 999; }   // (not in its own way)
     }
@@ -3091,7 +3101,7 @@
       var bo = m.boxOff || { x: 0, z: 0 }, cr = Math.cos(m.rot), sr = Math.sin(m.rot), hx0 = x, hz0 = z;   // (where it is held; its box's middle below)
       x = hx0 + bo.x * cr + bo.z * sr; z = hz0 - bo.x * sr + bo.z * cr;
       m.ok = ctx.boxFree(x - hx, x + hx, z - hz, z + hz) && Math.hypot(x - me.position.x, z - me.position.z) > 0.4;
-      if (/^k_shelf/.test(m.key)){   // (a kitchen shelf: in the kitchen, not in front of what is used there)
+      if (/^k_(shelf|island)/.test(m.key)){   // (a kitchen shelf: in the kitchen, not in front of what is used there)
         var k = ctx.getKitchen() || {};
         m.ok = m.ok && x - hx > 4.0 && z - hz > -10 && z + hz < 10 &&
                [k.sinkAt, k.fridgeAt, k.potAt, k.potAt2].every(function(p){ return !p || Math.hypot(p.x - x, p.z - z) > 1.4; });
@@ -3179,7 +3189,7 @@
       var it = carried(), v = it && !HOME[it.kind] && objs[it.id];
       if (movingTable) movingTable.rot = (movingTable.rot + s * Math.PI / 2 + Math.PI * 2) % (Math.PI * 2);
       else if (movingChair) movingChair.rot = (movingChair.rot + s * Math.PI / 8 + Math.PI * 2) % (Math.PI * 2);
-      else if (movingProp) movingProp.rot = (movingProp.rot + s * Math.PI / 8 + Math.PI * 2) % (Math.PI * 2);
+      else if (movingProp) movingProp.rot = (movingProp.rot + s * (movingProp.quarter ? Math.PI / 2 : Math.PI / 8) + Math.PI * 2) % (Math.PI * 2);
       else if (ghost) ghost.rot = (ghost.rot + s * Math.PI / 8 + Math.PI * 2) % (Math.PI * 2);
       else if (heldProp) heldProp.holder.userData.wheelTurn = (heldProp.holder.userData.wheelTurn || 0) + s * Math.PI / 12;
       else if (v) v.obj.userData.wheelTurn = (v.obj.userData.wheelTurn || 0) + s * Math.PI / 12;
@@ -3391,8 +3401,11 @@
       clock += dt; frameNo++;
       if (escHint > 0 && !hold && place.pot){ escHint -= dt; if (escHint <= 0) say('Esc pauses the game and shows the controls', 6); }
       var wk = ctx.getKitchen && ctx.getKitchen(), wm = wk && wk.washer && wk.washer.children[0];
+      if (wk && wk.homesMoved){ wk.homesMoved = false; Object.keys(state.items).forEach(function(id){ if (state.items[id].at === 'home' && objs[id]) objs[id].placed = false; }); }   // (a tool's place moved)
       if (wk && !wk.surfaceBusy) wk.surfaceBusy = function(sf){   // (something of the chef's lying on a work surface: it is not moved)
-        return Object.keys(state.items).some(function(id){ var o = state.items[id]; return o.at === 'surface' && o.x > sf.minX - 0.15 && o.x < sf.maxX + 0.15 && o.z > sf.minZ - 0.15 && o.z < sf.maxZ + 0.15 && o.y > 0.3; });
+        function on(p){ return !!p && p.x > sf.minX - 0.15 && p.x < sf.maxX + 0.15 && p.z > sf.minZ - 0.15 && p.z < sf.maxZ + 0.15; }
+        return on(place.board && place.board.pos) || on(place.stacks && place.stacks.pos) ||
+               Object.keys(state.items).some(function(id){ var o = state.items[id]; return o.at === 'surface' && on(o) && o.y > 0.3; });
       };
       if (wm) wm.rotation.z = state.washer.left > 0 ? Math.sin(clock * 47) * 0.0025 : 0;
       buildPlaces();
@@ -3822,7 +3835,7 @@
         function buyBtn(cmd, price, label){ return '<button class="primary small-btn" data-do="' + cmd + '"' + (state.money < price ? ' disabled' : '') + '>' + (label || 'Buy') + '</button>'; }
         if (cat === 'kitchen' || cat === 'room' || cat === 'expand' || cat === 'recipes' || cat === 'staff') SHOP.forEach(function(t){
           if (t.cat !== cat || (t.key === 'waiter' && !(ctx.getWaiter && ctx.getWaiter().ready())) || (t.key === 'cleaner' && !ctx.getCleaner) || (t.key === 'recipe_sausage' && !hasFridge()) || (t.key === 'pot2' && !ctx.getKitchen().potAt2)) return;
-          items += card(img(t.pic), t.name, t.price, t.text, state.owned[t.key] ? '<span class="tag here">Bought</span>' : buyBtn('purchase:' + t.key, t.price));
+          items += card(img(t.pic), t.name, t.price, t.text, state.owned[t.key] ? (t.cat === 'staff' ? '<span class="staff-act"><span class="tag here">Hired</span><button class="small-btn" data-do="dismiss:' + t.key + '">Let him go</button></span>' : '<span class="tag here">Bought</span>') : buyBtn('purchase:' + t.key, t.price, t.cat === 'staff' ? 'Hire' : null));
         });
         else if (cat === 'furniture') FURNITURE.forEach(function(t){
           if (MODELS[t.key].failed) return;   // (its model is missing)
@@ -3919,6 +3932,11 @@
         var lid = k + ':' + p[2], lt = lookItem(k, p[2]);
         if (lt && act('buyLook', lid)){ pc.said = [lt.name + ' \u2013 ordered! It comes to the storeroom.', 'ok']; saveNow(false); }
         else pc.said = [lt && state.money >= lt.price ? 'No more room in the storeroom \u2013 use up what is there first.' : 'This is not possible.', 'warn'];
+      }
+      else if (p[0] === 'dismiss'){
+        var td = shopItem(k);
+        if (td && act('dismiss', k)){ pc.said = [td.name + ' – let go. No more wages.', 'ok']; saveNow(false); }
+        else pc.said = ['This is not possible.', 'warn'];
       }
       else if (p[0] === 'purchase'){
         var t = shopItem(k);
