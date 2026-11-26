@@ -2799,12 +2799,12 @@
       m.box.minX = cx - hx; m.box.maxX = cx + hx; m.box.minZ = cz - hz; m.box.maxZ = cz + hz;
     }
     // the saved places, put into effect once (and again after loading)
-    var propsShown = null;
+    var propsShown = null, propsCount = 0;
     function showProps(){
       var ms = ctx.getMovables ? ctx.getMovables() : [];
       ms.forEach(function(m){ if (!m.home && m.holder.parent && m.holder.parent !== play.root) m.home = m.holder.parent; });
-      if (propsShown === state.props) return;
-      propsShown = state.props;
+      if (propsShown === state.props && propsCount === ms.length) return;   // (also again when more things became movable: the kitchen's, once it is built)
+      propsShown = state.props; propsCount = ms.length;
       ms.forEach(function(m){
         var s = state.props[m.key]; if (!s || m === heldProp || m === movingProp) return;
         if (m.holder.parent !== m.home && m.home) m.home.add(m.holder);
