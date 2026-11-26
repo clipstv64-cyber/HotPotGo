@@ -93,7 +93,8 @@ Phase 1 ist vollständig (der Kühlschrank hat seit dem 25.11.2026 eine Aufgabe:
 - **Nicht vom Konzept abweichen** (Wunsch vom 20.11.2026). Wo das Konzept etwas offen
   lässt, wird die Entscheidung hier festgehalten.
 - **Tasten (geändert auf Wunsch vom 25.11.2026):** Kleine Dinge (Gemüse, Schüsseln, Pakete,
-  Eimer, kleine Deko wie Kasse, Kerzen, Gewürzständer) hält man mit gedrückter linker
+  Eimer, kleine Deko wie Kasse, Kerzen, Gewürzständer, die Bilder von der Wand – Fisch,
+  Geweih, Tafel –, der Schüsselstapel und das Hackbrett, wenn nichts darauf liegt) hält man mit gedrückter linker
   Maustaste vor sich; lässt man los, kommt es an die Stelle, auf die man schaut (Brett,
   Kiste, Schüsselstapel, Theke, Kühlschrank; mit dem Mausrad dreht man es), sonst fällt es mit echter Physik und bleibt
   liegen, wo es landet (in den Topf gefallenes geschnittenes Gemüse ist im Topf, eine Schüssel
@@ -101,7 +102,8 @@ Phase 1 ist vollständig (der Kühlschrank hat seit dem 25.11.2026 eine Aufgabe:
   der Maustaste. Werkzeuge (Messer, Krug, Streuer, Rolle, Hammer, Tuch, Besen) nimmt man mit
   E. Große Dinge (Pflanze, Garderobe, Spielautomat, Kisten, Regale und Möbel in den
   Hinterzimmern, die Regale mit Gläsern und Gemüse in der Küche, Tische, Stühle, gekaufte
-  Möbel) hebt man an, indem man die linke Maustaste gedrückt hält, bis sich ein kleiner Kreis
+  Möbel, Heizkörper, gekaufte Pflanzen, Gemüsekisten, Spüle und Kühlschrank der Küche – wo
+  abgewaschen und Wurst geholt wird, zieht mit um) hebt man an, indem man die linke Maustaste gedrückt hält, bis sich ein kleiner Kreis
   gefüllt hat; solange man hält, folgen sie dem Blick, das Mausrad (oder F) dreht, Loslassen stellt sie hin (oder
   zurück, wenn dort kein Platz ist). Aufheben und die weiße Umrandung gibt es nur für das, was
   man direkt anschaut. Tische werden mit ihren Stühlen getragen und mit dem Mausrad um eine
