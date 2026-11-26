@@ -116,7 +116,7 @@ Phase 1 ist vollständig (der Kühlschrank hat seit dem 25.11.2026 eine Aufgabe:
   und bleibt vor Wänden und Flächen stehen; so lässt man es zum Beispiel in den Topf fallen.
   Wo alles steht, bleibt im Spielstand. Dinge, aus denen man etwas nimmt (Gemüsekisten, Schüsselstapel, Spüle, Kühlschrank),
   verschiebt man mit gedrückter E-Taste (der Kreis füllt sich), damit ein Klick weiter etwas
-  herausnimmt. Anvisierte Gegenstände bekommen eine dünne Umrandung.
+  herausnimmt. Anvisierte Gegenstände bekommen eine dünne Umrandung. Alle Tasten stehen auf einem Zettel im Pausenmenü (Esc, „Controls“); ein neues Restaurant weist nach ein paar Sekunden darauf hin (26.11.2026).
 - **Zutaten liegen in der Küche** (Vorratsecke neben dem Herd). Das Konzept erlaubt
   Kühlschrank oder Lager; das Lager wird mit den Lieferungen in Phase 2 gebraucht.
 - **Kochen einfacher als im Konzept** (Wunsch vom 20.11.2026): Der Herd kennt nur an und
