@@ -3958,6 +3958,7 @@
           '<div class="row"><span>Furniture placed</span><b>' + placedN + '</b></div>' +
           '<div class="row"><span>Crates (kitchen / store)</span><b>' + kitchenCap() + ' / ' + storeCap() + '</b></div>' +
           '<div class="row"><span>Bowls</span><b>' + (RULES.bowls + (state.owned.bowls ? SHOP_EFFECT.bowls : 0)) + '</b></div>' +
+          (hasFridge() ? '<div class="row"><span>Sausages in the fridge</span><b>' + state.fridge + ' / ' + fridgeCap() + '</b></div>' : '') +
           '<div class="row"><span>Cooking time</span><b>' + Math.round(dishOf(potDish()).cookTime * (state.owned.stove ? SHOP_EFFECT.stove : 1)) + ' s</b></div>' +
           '<p class="muted small" style="margin-top:9px">' + (cat === 'furniture' ? 'When you get up, the new piece follows your view: E puts it down, F turns it. E at a piece moves it again.' : 'Everything is delivered at once and paid from the till.') + '</p>' +
           (pc.said ? '<p class="' + pc.said[1] + '" style="margin-top:6px">' + pc.said[0] + '</p>' : '') + '</div>';
