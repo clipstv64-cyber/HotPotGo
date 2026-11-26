@@ -35,13 +35,14 @@ function isSave(text) {
   try { return !!JSON.parse(text).state; } catch (e) { return false; }
 }
 // the input log: what the mouse and the keys did and what the game made of it (kept small)
+let logLines = 0;
 function serveLog() {
   ipcMain.on('debug:log', (event, text) => {
     if (process.env.HOTPOT_SELFTEST) return;
     try {
       const file = path.join(app.getPath('userData'), 'input-log.txt');
-      if (fs.existsSync(file) && fs.statSync(file).size > 1000000) fs.renameSync(file, file + '.old');
-      fs.appendFileSync(file, new Date().toISOString().slice(11, 23) + ' ' + String(text).slice(0, 400) + '\n');
+      if (++logLines % 500 === 1 && fs.existsSync(file) && fs.statSync(file).size > 1000000) fs.renameSync(file, file + '.old');   // (the size looked at now and then)
+      fs.appendFile(file, new Date().toISOString().slice(11, 23) + ' ' + String(text).slice(0, 400).replace(/[\r\n]+/g, ' ') + '\n', () => {});
     } catch (e) {}
   });
 }

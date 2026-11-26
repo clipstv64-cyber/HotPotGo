@@ -148,7 +148,6 @@
     function tableMoved(i, dx, dz){
       (tableLamps[i] || []).forEach(function(o){ o.position.x += dx; o.position.z += dz; });
       var mv = tableMoves[i] = tableMoves[i] || { x: 0, z: 0 }; mv.x += dx; mv.z += dz;
-      if (bought.candles) bought.candles.children.forEach(function(c){ if (c.userData.table === i){ c.position.x += dx; c.position.z += dz; } });
     }
     (function(){
       var g = new T.Group(); g.position.set(-3.2, H, 0.2); root.add(g);

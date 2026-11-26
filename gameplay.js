@@ -1066,9 +1066,12 @@
       return out;
     }
     function busy(){ return !!sweep || !!move || broomAt === 'falling'; }
-    function interact(){   // E: use something, take a tool or put it back
+    var eHeld = false;
+    window.addEventListener('keyup', function(e){ if (e.key && e.key.toLowerCase() === 'e') eHeld = false; });
+    function interact(){   // E: use something, take a tool or put it back (held down: a ring fills first)
       if (busy()) return;
       var it = findFocus().E;
+      if (it && it.use && it.charge){ eHeld = true; charging = { it: it, t: 0, key: 'E' }; return; }
       if (it && it.use) it.use();
       else if (holding) dropBroom();   // (the broom: dropped right here)
     }
@@ -1094,11 +1097,11 @@
     window.addEventListener('mouseup', function(e){ hpLog('mouseup', e.button, 'locked', document.pointerLockElement === canvas, 'pressed', pressed); }, true);
     window.addEventListener('wheel', function(e){ hpLog('wheel', e.deltaY, e.deltaX, e.deltaMode, 'locked', document.pointerLockElement === canvas); }, true);
     var releasers = [], holdInfo = function(){ return false; }, pressed = false, charging = null;   // charging: { it, t }
-    function letGo(){ charging = null; if (!pressed) return; pressed = false; releasers.forEach(function(fn){ fn(); }); }
+    function letGo(){ if (!charging || charging.key !== 'E') charging = null; if (!pressed) return; pressed = false; releasers.forEach(function(fn){ fn(); }); }
     function stepCharge(dt){
-      if (charging && pressed){
-        var f = findFocus();
-        if (!f.HOLD || f.HOLD.label !== charging.it.label || f.HOLD.obj !== charging.it.obj) charging = null;   // (looked away, or at another one)
+      if (charging && (charging.key === 'E' ? eHeld : pressed)){
+        var f = findFocus(), fk = f[charging.key === 'E' ? 'E' : 'HOLD'];
+        if (!fk || fk.label !== charging.it.label || fk.obj !== charging.it.obj) charging = null;   // (looked away, or at another one)
         else if ((charging.t += dt) >= charging.it.charge){ var u = charging.it; charging = null; hpLog('ring full:', u.label); if (u.use) u.use(); }
       } else charging = null;
       var p = charging ? Math.min(1, charging.t / charging.it.charge) : 0;
@@ -1189,7 +1192,7 @@
         if (k[0] === 'F' && holdingMouse){   // (let go: there, or it falls)
           parts.push(MOUSE_SVG + '<span>Let go: ' + (it && it.use ? it.label : 'drop it') + '</span>'); if (it && it.use) glow.push(it.obj); return;
         }
-        if (it && it.use){ parts.push(k[0] === 'LMB' ? MOUSE_SVG + '<span>' + it.label + '</span>' : k[0] === 'HOLD' ? MOUSE_SVG + '<span>Hold: ' + it.label + '</span>' : keyHint(k[0], it.label)); glow.push(it.obj); }
+        if (it && it.use){ parts.push(k[0] === 'LMB' ? MOUSE_SVG + '<span>' + it.label + '</span>' : k[0] === 'HOLD' ? MOUSE_SVG + '<span>Hold: ' + it.label + '</span>' : keyHint(k[0], (it.charge ? 'Hold: ' : '') + it.label)); glow.push(it.obj); }
         else if (it) notes.push(it.label);
       });
       if (aimed && holding && !tooClose) parts.push(MOUSE_SVG + '<span>Sweep</span>');
