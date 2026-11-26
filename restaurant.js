@@ -3200,8 +3200,10 @@
       } else if (/^k_/.test(m.key)) m.ok = m.ok && x - hx > 3.95;   // (the kitchen's things stay behind the bar: in the kitchen or the back rooms)
       else {   // (the dining room: the waiter's lane along the bar and the staff's places stay free)
         var Wp = ctx.getWaiter && ctx.getWaiter().place, Cp = ctx.getCleaner && ctx.getCleaner().place;
-        if (Wp && Math.abs(x - Wp.lane) < 0.15 + hx && z + hz > -7 && z - hz < 9.95) m.ok = false;
-        if (Wp && Wp.home && Math.hypot(x - Wp.home.x, z - Wp.home.z) < 0.8 + Math.max(hx, hz)) m.ok = false;
+        if (Wp && Math.abs(x - Wp.lane) < 0.05 + hx && z + hz > -7 && z - hz < 9.95) m.ok = false;
+        if (Wp && Wp.home && Math.hypot(x - Wp.home.x, z - Wp.home.z) < 0.45 + Math.max(hx, hz)) m.ok = false;
+        if (x + hx > -5.9 && x - hx < -4.75 && z + hz > -8.2 && z - hz < 8.4) m.ok = false;   // (the guests' aisle by the tables)
+        if (z + hz > 8.4 && z - hz < 9.3 && x - hx < 2.5 && x + hx > -6) m.ok = false;        // (their way along the front wall)
         if (Cp && Cp.home && Math.hypot(x - Cp.home.x, z - Cp.home.z) < 0.8 + Math.max(hx, hz)) m.ok = false;
       }
       if (m.ok && m.spotFor){   // (the sink, the fridge: one must be able to stand where they are used, away from the range)
@@ -3367,6 +3369,7 @@
       if (!state.owned.cleaner){ if (C.shown()) C.show(false); cjob = null; return; }
       if (!C.shown()){ C.show(true, C.place.home, 0); cjob = null; }
       var me = C.pos();
+      if (movingTable || movingChair || movingProp){ if (cjob && cjob.phase !== 'work'){ C.walk([]); cjob = null; } cLook = clock + 0.5; return; }
       if (cjob){
         if (cjob.phase === 'go' && C.replan && C.replan()){
           var again = ctx.findWay && ctx.findWay(me, V(cjob.x, 0, cjob.z), 0.32);
@@ -3393,7 +3396,7 @@
       }
       if (clock < cLook) return;
       cLook = clock + 1;
-      var edge = C.place.home.x + 1.0, best = null;
+      var Wl = ctx.getWaiter && ctx.getWaiter().place, edge = Wl ? Wl.lane + 0.75 : 3.0, best = null;   // (the dining room, up to the bar)
       (play.getStains ? play.getStains() : []).forEach(function(st){
         var key = 's' + st.x.toFixed(1) + ',' + st.z.toFixed(1);
         if (st.x > edge || (cSkip[key] || 0) > clock) return;

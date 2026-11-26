@@ -920,7 +920,7 @@
           boxOff: { x: 0, z: sz.z / 2 }, half: { x: sz.z / 2, z: sz.x / 2, yaw: h.rotation.y },   // (in the room's x and z, as it stands now)
           canMove: function(){ return h.visible; },
           spotFor: function(x, z, yw){ return { x: x + front * Math.sin(yw), z: z + front * Math.cos(yw) }; },
-          onPut: function(){ at.set(h.position.x + front * Math.sin(h.rotation.y), 0, h.position.z + front * Math.cos(h.rotation.y)); } });
+          onPut: function(){ var yw = new THREE.Euler().setFromQuaternion(h.quaternion, 'YXZ').y; at.set(h.position.x + front * Math.sin(yw), 0, h.position.z + front * Math.cos(yw)); } });
       } });
     }
     function buildKitchen8(){
@@ -962,7 +962,7 @@
           decor.movables.push({ key: key, name: key.replace(/[0-9]+$/, ''), holder: a.h, box: b, big: true, boxOff: { x: 0, z: 0 }, liftWithE: true,
                                 spotFor: function(x, z, yw){ if (!off) return null; var cc = Math.cos(yw), ss = Math.sin(yw); return { x: x + off.x * cc + off.z * ss, z: z - off.x * ss + off.z * cc }; },
                                 half: { x: (b.maxX - b.minX) / 2, z: (b.maxZ - b.minZ) / 2, yaw: yaw0 },
-                                onPut: function(){ if (!spotVec || !off) return; var yw = a.h.rotation.y, cc = Math.cos(yw), ss = Math.sin(yw);
+                                onPut: function(){ if (!spotVec || !off) return; var yw = new THREE.Euler().setFromQuaternion(a.h.quaternion, 'YXZ').y, cc = Math.cos(yw), ss = Math.sin(yw);
                                                    spotVec.set(a.h.position.x + off.x * cc + off.z * ss, spotVec.y, a.h.position.z - off.x * ss + off.z * cc); } });
         }
         usedAt(sk, 'k_sink', kitchen.sinkAt); usedAt(fr, 'k_fridge', kitchen.fridgeAt);
@@ -2480,7 +2480,7 @@
         if (o.still){   // (the waiter standing, or waiting for us to pass: round him; on the last steps to a chair, wait for him)
           if (!inWay) continue;
           if (!last){ bear = side < 0.05 ? -0.9 : 0.9; continue; }
-          pace = Math.min(pace, Math.max(0, (od - 0.5) / 0.5)); continue;
+          continue;   // (on the last steps to the chair: past him)
         }
         if (inWay && theirs && ofx * fx + ofz * fz < -0.3 && od > 0.35){ bear = side < 0.05 ? -0.6 : 0.6; continue; }
         if (od > GUEST_GAP + 0.25) continue;
@@ -3287,7 +3287,7 @@
       if (od > 1 || od < 1e-4 || (ox * wfx + oz * wfz) / od < 0.35) return;
       var facing = Math.sin(o.group.rotation.y) * wfx + Math.cos(o.group.rotation.y) * wfz;
       if (facing > 0.3) pace = Math.min(pace, Math.max(0.05, (od - 0.45) / 0.55));   // (ahead of him, the same way)
-      else pace = 0.05;   // (coming his way or crossing: he waits and they go round him)
+      else pace = 0;   // (coming his way or crossing: he waits and they go round him)
     });
     // the chef in the way, just ahead: he stops in front of him (not for long: then he goes on)
     if (!waiter.path.length) waiter.chefWait = 0;
