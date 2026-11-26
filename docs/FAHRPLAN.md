@@ -112,7 +112,9 @@ Phase 1 ist vollständig (der Kühlschrank hat seit dem 25.11.2026 eine Aufgabe:
   niemand daran sitzt oder auf dem Weg dahin ist, und nicht auf die Wege der Gäste und des
   Kellners. Was man mit der Maus hält, schwebt vor dem Blick (hoch und runter mit dem Blick)
   und bleibt vor Wänden und Flächen stehen; so lässt man es zum Beispiel in den Topf fallen.
-  Wo alles steht, bleibt im Spielstand. Anvisierte Gegenstände bekommen eine dünne Umrandung.
+  Wo alles steht, bleibt im Spielstand. Dinge, aus denen man etwas nimmt (Gemüsekisten, Schüsselstapel, Spüle, Kühlschrank),
+  verschiebt man mit gedrückter E-Taste (der Kreis füllt sich), damit ein Klick weiter etwas
+  herausnimmt. Anvisierte Gegenstände bekommen eine dünne Umrandung.
 - **Zutaten liegen in der Küche** (Vorratsecke neben dem Herd). Das Konzept erlaubt
   Kühlschrank oder Lager; das Lager wird mit den Lieferungen in Phase 2 gebraucht.
 - **Kochen einfacher als im Konzept** (Wunsch vom 20.11.2026): Der Herd kennt nur an und
