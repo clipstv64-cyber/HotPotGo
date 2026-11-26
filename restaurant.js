@@ -3268,6 +3268,7 @@
         say('Spilt \u2013 that bowl needs washing now');
         return;
       }
+      if (it.kind === 'bowl' && it.y < 0.15){ it.kind = 'dirty'; say('It fell on the floor – that bowl needs washing'); return; }   // (a clean bowl off the floor: not for a guest)
       // in a pot: as if put in (cut food); in front of a guest waiting for it: served
       for (var i = 0; i < state.pots.length && place.pots && place.pots[i]; i++){
         var PP = place.pots[i];
