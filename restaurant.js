@@ -744,9 +744,9 @@
           it.at = 'dock'; it.slot = it.kind === 'parcel' ? 0 : freeSlot(); state.carry = null; return true;
         case 'endDay':     // everybody has gone: the day's accounts
           if (day.phase !== 'closed' || inside()) return false;
-          if (state.owned.waiter && waiterHere()){ state.money -= RULES.staff.wage; day.spent += RULES.staff.wage; }   // (the waiter's wage)
-          if (state.owned.cleaner && cleanerHere()){ state.money -= RULES.cleaner.wage; day.spent += RULES.cleaner.wage; }   // (the cleaner's)
-          day.report = { n: day.n, served: day.served, lost: day.lost, sales: day.sales, tips: day.tips, cost: day.spent,
+          var wages = (state.owned.waiter && waiterHere() ? RULES.staff.wage : 0) + (state.owned.cleaner && cleanerHere() ? RULES.cleaner.wage : 0);   // (the waiter's and the cleaner's)
+          state.money -= wages; day.spent += wages;
+          day.report = { n: day.n, served: day.served, lost: day.lost, sales: day.sales, tips: day.tips, cost: day.spent, wages: wages,
                          reviews: day.reviewed, stars: day.reviewed ? day.stars / day.reviewed : 0,
                          profit: day.sales + day.tips - day.spent, money: state.money };
           state.history.push(day.report);
@@ -1069,7 +1069,7 @@
       dayEl.innerHTML = '<h2>Day ' + r.n + '</h2><div class="sub">The day\u2019s accounts</div>' +
         row('Guests served', r.served) + row('Guests who left hungry', r.lost, r.lost ? 'minus' : '') +
         row('Reviews', r.reviews ? r.stars.toFixed(1) + ' \u2605 (' + r.reviews + ')' : 'none') +
-        row('Food sold', euro(r.sales)) + row('Tips', euro(r.tips)) + row('Bought', signed(-r.cost), r.cost ? 'minus' : '') +
+        row('Food sold', euro(r.sales)) + row('Tips', euro(r.tips)) + row('Bought', signed(-(r.cost - (r.wages || 0))), r.cost - (r.wages || 0) ? 'minus' : '') + (r.wages ? row('Wages', signed(-r.wages), 'minus') : '') +
         row('Profit today', signed(r.profit), 'sum ' + (r.profit < 0 ? 'minus' : 'plus')) + row('In the till', signed(r.money)) +
         '<div class="go"><kbd>E</kbd>Start day ' + (r.n + 1) + '</div>';
     }
@@ -3096,6 +3096,12 @@
         m.ok = m.ok && x - hx > 4.0 && z - hz > -10 && z + hz < 10 &&
                [k.sinkAt, k.fridgeAt, k.potAt, k.potAt2].every(function(p){ return !p || Math.hypot(p.x - x, p.z - z) > 1.4; });
       } else if (/^k_/.test(m.key)) m.ok = m.ok && x - hx > 3.95;   // (the kitchen's things stay behind the bar: in the kitchen or the back rooms)
+      else {   // (the dining room: the waiter's lane along the bar and the staff's places stay free)
+        var Wp = ctx.getWaiter && ctx.getWaiter().place, Cp = ctx.getCleaner && ctx.getCleaner().place;
+        if (Wp && Math.abs(x - Wp.lane) < 0.15 + hx && z + hz > -7 && z - hz < 9.95) m.ok = false;
+        if (Wp && Wp.home && Math.hypot(x - Wp.home.x, z - Wp.home.z) < 0.8 + Math.max(hx, hz)) m.ok = false;
+        if (Cp && Cp.home && Math.hypot(x - Cp.home.x, z - Cp.home.z) < 0.8 + Math.max(hx, hz)) m.ok = false;
+      }
       if (m.ok && m.spotFor){   // (the sink, the fridge: one must be able to stand where they are used, away from the range)
         var sp = m.spotFor(hx0, hz0, m.rot), k2 = ctx.getKitchen() || {};
         m.ok = !!sp && ctx.floorFree(sp.x, sp.z, 0.3) && [k2.potAt, k2.potAt2].every(function(p){ return !p || Math.hypot(p.x - x, p.z - z) > 1.3; });
@@ -3259,6 +3265,10 @@
       if (!C.shown()){ C.show(true, C.place.home, 0); cjob = null; }
       var me = C.pos();
       if (cjob){
+        if (cjob.phase === 'go' && C.replan && C.replan()){
+          var again = ctx.findWay && ctx.findWay(me, V(cjob.x, 0, cjob.z), 0.32);
+          if (again && again.length) C.walk(again); else { C.walk([]); cSkip[cjob.key] = clock + 30; cjob = null; return; }
+        }
         if (cjob.phase === 'go'){
           if (C.walking() && clock < cjob.until) return;
           if (C.walking()){ C.walk([]); cSkip[cjob.key] = clock + 30; cjob = null; return; }   // (too long on the way: something in it; later)
@@ -3315,7 +3325,7 @@
       if (!W || !W.ready()) return;
       if (!state.owned.waiter){ if (W.shown()) W.show(false); return; }
       if (!W.shown()){ W.show(true, W.place.home, Math.PI / 2); dropWaiterBowl(); job = null; }
-      if (!job && (movingTable || movingChair)) return;   // (furniture being moved: he waits)
+      if (!job && (movingTable || movingChair || movingProp)) return;   // (furniture being moved: he waits)
       if (!job){
         // a bowl on the bar for a guest who ordered that dish (the one waiting longest), else an order to take
         var best = null;
@@ -4144,7 +4154,7 @@
         return !!r && num(r.id) && num(r.day) && num(r.stars) && r.stars >= 1 && r.stars <= 5 && typeof r.text === 'string' && typeof r.who === 'string';
       }).slice(-60);
       st.reviews.forEach(function(r){ r.stars = Math.round(r.stars); r.text = r.text.slice(0, 200); r.who = r.who.slice(0, 40); });
-      var FIGURES = ['n', 'served', 'lost', 'sales', 'tips', 'cost', 'profit', 'money', 'reviews', 'stars'];
+      var FIGURES = ['n', 'served', 'lost', 'sales', 'tips', 'cost', 'wages', 'profit', 'money', 'reviews', 'stars'];
       function figures(r){ FIGURES.forEach(function(k){ if (!num(r[k])) r[k] = 0; }); }
       if (st.day.report) figures(st.day.report);
       st.history.forEach(figures);

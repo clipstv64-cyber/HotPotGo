@@ -3185,14 +3185,30 @@
     walk: function(points, done){ if (!cleaner) return; cleaner.path = points.map(function(p){ return new THREE.Vector3(p.x, 0, p.z); }); cleaner.done = done || null; cleaner.face = null; },
     walking: function(){ return !!cleaner && cleaner.path.length > 0; },
     face: function(yaw){ if (cleaner) cleaner.face = yaw; },
-    work: function(kind){ if (cleaner){ cleaner.work = kind || null; cleaner.workT = 0; } },   // 'sweep', 'wipe' or nothing
+    work: function(kind){ if (cleaner){ cleaner.work = kind || null; cleaner.workT = 0; } },
+    replan: function(){ var r0 = !!(cleaner && cleaner.replan); if (cleaner) cleaner.replan = false; return r0; },   // (true once after he stepped aside on his way)   // 'sweep', 'wipe' or nothing
     freeze: function(on){ if (cleaner) cleaner.frozen = !!on; }
   };
   window.__hotpotCleanerCurl = function(fs, ts, axis){ if (!cleaner) return 0; cleaner.fingers.forEach(function(f){ var th = /Thumb/.test(f.b.name); f.angle = Math.abs(f.angle) * (th ? ts : fs); if (axis && !th) f.axis.set(axis[0], axis[1], axis[2]); }); return cleaner.fingers.length; };   // (for tests: which way the fingers bend)
+  window.__hotpotCleanerApi = function(){ return cleanerApi; };   // (for tests)
   window.__hotpotCleaner = function(){ return cleaner ? { pos: cleaner.group.position.toArray().map(function(v){ return +v.toFixed(2); }), shown: cleaner.group.visible, path: cleaner.path.length, work: cleaner.work } : null; };   // (for tests)
   function stepCleaner(dt){
     if (!cleaner || !cleaner.group.visible || cleaner.frozen) return;
-    var g = cleaner.group, moving = walkStaff(cleaner, CLEANER, dt);
+    var g = cleaner.group;
+    // the waiter coming his way: he steps off the waiter's line (the waiter goes first)
+    if (waiter && waiter.group.visible && waiter.path.length){
+      var wg = waiter.group.position, hx = Math.sin(waiter.group.rotation.y), hz = Math.cos(waiter.group.rotation.y);
+      var ox = g.position.x - wg.x, oz = g.position.z - wg.z, ahead = ox * hx + oz * hz, side = ox * hz - oz * hx;
+      if (ahead > 0 && ahead < 1.8 && Math.abs(side) < 0.65){
+        var sg = side >= 0 ? 1 : -1, nx = g.position.x + hz * sg * dt * 1.4, nz = g.position.z - hx * sg * dt * 1.4;
+        var inRoom = nx > mapBounds.x0 + 0.45 && nx < PARTITION.x - 0.5 && Math.abs(nz) < GROUND_HALF - 0.35;
+        if (inRoom && !obstacles.some(function(b){ return nx > b.minX - 0.32 && nx < b.maxX + 0.32 && nz > b.minZ - 0.32 && nz < b.maxZ + 0.32; })){
+          g.position.x = nx; g.position.z = nz;
+          if (cleaner.path.length) cleaner.replan = true;   // (off his way: restaurant.js plans it again from here)
+        }
+      }
+    }
+    var moving = walkStaff(cleaner, CLEANER, dt);
     // (the arm was reached forward last frame: back as the walk cycle has it, before the mixer)
     cleaner.saved.forEach(function(e){ e[0].quaternion.copy(e[1]); }); cleaner.saved.length = 0;
     if (cleaner.walk){
@@ -3252,6 +3268,14 @@
       if (facing > 0.3) pace = Math.min(pace, Math.max(0.05, (od - 0.45) / 0.55));   // (ahead of him, the same way)
       else pace = 0.05;   // (coming his way or crossing: he waits and they go round him)
     });
+    // the chef in the way, just ahead: he stops in front of him (not for long: then he goes on)
+    if (!waiter.path.length) waiter.chefWait = 0;
+    if (model && waiter.path.length){
+      var cx = model.position.x - g.position.x, cz = model.position.z - g.position.z, cd = Math.hypot(cx, cz);
+      var inWay = cd < 1.1 && cd > 1e-4 && (cx * wfx + cz * wfz) / cd > 0.55;
+      waiter.chefWait = inWay ? (waiter.chefWait || 0) + dt : 0;
+      if (inWay && waiter.chefWait < 4) pace = Math.min(pace, Math.max(0, (cd - 0.75) / 0.35));
+    }
     waiter.pace = (waiter.pace === undefined ? 1 : waiter.pace) + (pace - (waiter.pace === undefined ? 1 : waiter.pace)) * Math.min(1, dt * 5);
     var step = cfg.speed * dt * waiter.pace;
     while (waiter.path.length && step > 1e-6){
