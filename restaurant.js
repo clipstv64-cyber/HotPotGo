@@ -175,6 +175,16 @@
   function lookItem(part, key){ var l = LOOK[part] || []; for (var i = 0; i < l.length; i++) if (l[i].key === key) return l[i]; return null; }
   // the guests' names, for their reviews
   var GUEST_NAMES = { woman: 'Greta', sailor: 'Hein', biker: 'Bruno', nerd: 'Milo', oldman: 'Walter', glamour: 'Lola', butcher: 'Otto', goth: 'Raven' };
+  // Guest types: every regular has a way of their own. patience: how long they wait (times the usual);
+  // weigh: what counts more (or less) in their review; tip: how freely they tip.
+  var GUEST_TYPES = {
+    hurry:   { label: 'always in a hurry', patience: 0.75, weigh: { wait: 1.8 }, tip: 1 },
+    patient: { label: 'takes their time',  patience: 1.4,  weigh: { wait: 0.5 }, tip: 1 },
+    picky:   { label: 'a picky eater',     patience: 1,    weigh: { food: 1.5 }, tip: 1.35 },
+    thrifty: { label: 'counts every euro', patience: 1,    weigh: { value: 2.2 }, tip: 0.6 }
+  };
+  var GUEST_TYPE = { biker: 'hurry', nerd: 'hurry', oldman: 'patient', woman: 'patient', glamour: 'picky', goth: 'picky', butcher: 'thrifty', sailor: 'thrifty' };
+  function guestType(id){ return GUEST_TYPES[GUEST_TYPE[id]] || { label: '', patience: 1, weigh: {}, tip: 1 }; }
   // What a guest writes. It follows from the visit: f = how the food, the wait and the
   // cleanliness were (0 .. 1), and the weakest of them is what the guest complains about.
   var REVIEW_TEXT = {
@@ -437,8 +447,9 @@
       var f = { food: served ? clamp(num(g.q) ? g.q : 1) : 0, wait: served ? clamp((num(g.patience) ? g.patience : 1) * 1.15) : 0,
                 clean: clamp(1 - W.dirt * stains - W.dishes * dirtyOnTables() - W.spills * state.spills.length), value: 0, mood: mood() };
       f.value = served ? clamp(0.5 + 0.5 * f.food - PRICE_VALUE * ((num(g.price) ? g.price : dishOf(g.got).price) - dishOf(g.got).price)) : 0;   // a fair price for good food (dearer: worth less)
-      var score = 0;
-      Object.keys(W.weights).forEach(function(k){ score += W.weights[k] * f[k]; });
+      var score = 0, weigh = guestType(g.id).weigh, sum = 0;   // (what matters more to this guest counts more)
+      Object.keys(W.weights).forEach(function(k){ var w = W.weights[k] * (weigh[k] || 1); sum += w; score += w * f[k]; });
+      score /= sum;
       var stars = served ? clamp(Math.round(1 + 4 * score), 1, 5) : 1;
       if (served && Math.random() > W.writes) return null;
       var r = { id: state.nextId++, day: state.day.n, who: g.id, stars: stars, text: '', food: +f.food.toFixed(2), wait: +f.wait.toFixed(2), clean: +f.clean.toFixed(2) };
@@ -770,7 +781,7 @@
       var got = o.dish || 'stew', right = got === (g.want || 'stew');
       g.q = (o.q === undefined ? 1 : o.q) * (right ? 1 : 0.75);   // (the review will be about this, and about the patience that was left; not what he ordered: worth less)
       g.got = got; g.price = dishPrice(got);
-      g.pay = g.price + Math.round(RULES.tip * g.patience * (0.4 + 0.6 * g.q));   // quick service and a well made dish tip better
+      g.pay = g.price + Math.round(RULES.tip * guestType(g.id).tip * g.patience * (0.4 + 0.6 * g.q));   // quick service and a well made dish tip better (some tip more freely)
     }
     var PASS_SLOTS = 3, DIRTY_SLOTS = [3, 4];   // full bowls on the bar for the waiter; where he puts the dirty ones he cleared
     function passTaken(k){ return Object.keys(state.items).some(function(id){ var o = state.items[id]; return o.at === 'pass' && o.slot === k; }); }
@@ -826,10 +837,10 @@
           g.t -= dt;
           if (g.t <= 0) act('ready', g.id);
         } else if (g.phase === 'ready'){
-          g.patience -= dt / RULES.orderPatience;
+          g.patience -= dt / (RULES.orderPatience * guestType(g.id).patience);
           if (g.patience <= 0){ g.phase = 'angry'; g.t = 0; state.lost++; day.lost++; review(g, false); }
         } else if (g.phase === 'waiting'){
-          g.patience -= dt / RULES.patience;
+          g.patience -= dt / (RULES.patience * guestType(g.id).patience);
           if (g.patience <= 0){ g.phase = 'angry'; g.t = 0; state.lost++; day.lost++; review(g, false); }
         } else if (g.phase === 'eating'){
           g.t += dt;
@@ -3722,7 +3733,7 @@
         sum += '<p class="muted small" style="margin-top:9px">Good food, quick service and a clean floor make good reviews. More stars bring more guests.</p></div>';
         var said = '';
         latest.slice(-4).reverse().forEach(function(r){
-          said += '<div class="card rev">' + starRow(r.stars) + '<p class="quote">\u201c' + esc(r.text) + '\u201d</p><p class="muted small">\u2013 ' + esc(GUEST_NAMES.hasOwnProperty(r.who) ? GUEST_NAMES[r.who] : 'A guest') + ', day ' + r.day + '</p></div>';
+          said += '<div class="card rev">' + starRow(r.stars) + '<p class="quote">\u201c' + esc(r.text) + '\u201d</p><p class="muted small">\u2013 ' + esc(GUEST_NAMES.hasOwnProperty(r.who) ? GUEST_NAMES[r.who] + (guestType(r.who).label ? ' (' + guestType(r.who).label + ')' : '') : 'A guest') + ', day ' + r.day + '</p></div>';
         });
         html = '<div class="col" style="width:278px;flex:none">' + sum + '</div><div class="col" style="flex:1">' + said + '</div>';
       } else {
