@@ -942,6 +942,8 @@
       '.hp-paper .row.plus b{color:#3f8a2c}' +
       '.hp-paper .small{font-size:13.5px;font-style:italic;color:#b3321f;padding:2px 0}' +
       '.hp-paper .go{margin-top:16px;text-align:center;font:600 14px/1.3 system-ui,"Segoe UI",sans-serif;letter-spacing:.3px;color:#6b513a}' +
+      '.hp-paper.keys{width:470px}.hp-paper .keyrow{display:flex;gap:12px;align-items:baseline;border-bottom:1px dotted rgba(74,54,38,.35);padding:4px 0;font-size:15px;line-height:1.35}' +
+      '.hp-paper .keyrow span{text-align:left}.hp-paper .keyrow span:first-child{flex:none;width:132px;font:700 12.5px/1.5 system-ui,"Segoe UI",sans-serif;color:#4a3626}' +
       '.hp-paper kbd{display:inline-block;min-width:22px;padding:2px 6px;margin-right:7px;border-radius:5px;background:#4a3626;color:#f4ead2;font:700 13px/1.3 system-ui,"Segoe UI",sans-serif}' +
       '.hp-day{position:fixed;left:50%;top:45%;transform:translate(-50%,-50%) rotate(-1.2deg) scale(.94);opacity:0;transition:opacity .35s,transform .35s;' +
       'pointer-events:none;user-select:none;z-index:15}' +
@@ -4222,14 +4224,31 @@
       if (ctx.releaseKeys) ctx.releaseKeys();
       var el = pauseEl = document.createElement('div'), st = state; pauseAt = Date.now();
       el.className = 'hp-start';
+      // the controls, as they are now (mouse and keys)
+      var KEYS = [['W A S D', 'Walk (Shift: run, Space: jump), the mouse looks around'],
+                  ['Left mouse, held', 'Hold a small thing in front of you; let go to put it where you look \u2013 or it drops'],
+                  ['Left mouse', 'Cut, stir, pour, season, wipe, sweep \u2013 the cooking and cleaning work'],
+                  ['Left mouse, held long', 'On furniture: when the ring is full, carry it; let go to put it down'],
+                  ['Mouse wheel', 'Turn what you hold or carry'],
+                  ['E', 'Use what you look at; take and put back tools (knife, jug, shaker, broom, cloth\u2026)'],
+                  ['E, held', 'Move crates, the bowl stack, the sink, the fridge and the dishwasher'],
+                  ['F', 'Pick up or put down where it says so; leave carried furniture where it was'],
+                  ['Esc', 'Pause']];
+      function keysCard(){
+        el.innerHTML = '<div class="hp-paper keys"><h2>Controls</h2><p class="sub">What the keys and the mouse do</p>' +
+          KEYS.map(function(k){ return '<div class="keyrow"><span>' + k[0] + '</span><span>' + k[1] + '</span></div>'; }).join('') +
+          '<button data-do="back">Back</button></div>';
+      }
       function card(note){
         el.innerHTML = '<div class="hp-paper"><h2>Paused</h2><p>Day ' + st.day.n + ' \u00b7 ' + signed(Math.round(st.money)) + ' in the till</p>' +
           (note ? '<p class="sub">' + note + '</p>' : '') +
-          '<button data-do="resume">Back to the game</button>' + (store ? '<button class="quiet" data-do="save">Save now</button><button class="quiet" data-do="quit">Save and quit</button>' : '') + '</div>';
+          '<button data-do="resume">Back to the game</button><button class="quiet" data-do="keys">Controls</button>' + (store ? '<button class="quiet" data-do="save">Save now</button><button class="quiet" data-do="quit">Save and quit</button>' : '') + '</div>';
       }
       el.addEventListener('click', function(e){
         var what = e.target && e.target.getAttribute && e.target.getAttribute('data-do');
         if (what === 'resume') resume();
+        else if (what === 'keys') keysCard();
+        else if (what === 'back') card('');
         else if (what === 'save') card(savePaused() ? 'Saved.' : 'It could not be saved.');
         else if (what === 'quit'){ if (savePaused()) window.close(); else card('It could not be saved.'); }
       });
