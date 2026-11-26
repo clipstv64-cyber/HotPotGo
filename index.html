@@ -866,6 +866,17 @@
         if (fr) kitchen.fridgeAt = new THREE.Vector3(fr.h.position.x - fr.s.z / 2 - 0.1, 0, fr.h.position.z);   // the sausages are kept in it (restaurant.js)
         if (wall(sk, 0.15) && ws){ ws.h.position.set(e - ws.s.z / 2, 1.95, sk.h.position.z); ws.h.rotation.y = -Math.PI / 2; scene.add(ws.h); }
         if (sk) kitchen.sinkAt = new THREE.Vector3(sk.h.position.x, 0, sk.h.position.z);   // the washing up is done here (restaurant.js)
+        // the sink and the fridge can be moved: where the washing up / the sausages are goes along (the same vectors restaurant.js reads)
+        function usedAt(a, key, spotVec, front){
+          if (!a || !a.h.userData.box || !decor || !decor.movables) return;
+          var b = a.h.userData.box, yaw0 = a.h.rotation.y, c = Math.cos(-yaw0), s = Math.sin(-yaw0);
+          var off = spotVec ? { x: (spotVec.x - a.h.position.x) * c + (spotVec.z - a.h.position.z) * s, z: -(spotVec.x - a.h.position.x) * s + (spotVec.z - a.h.position.z) * c } : null;
+          decor.movables.push({ key: key, name: key.replace(/[0-9]+$/, ''), holder: a.h, box: b, big: true, boxOff: { x: 0, z: 0 },
+                                half: { x: (b.maxX - b.minX) / 2, z: (b.maxZ - b.minZ) / 2, yaw: yaw0 },
+                                onPut: function(){ if (!spotVec || !off) return; var yw = a.h.rotation.y, cc = Math.cos(yw), ss = Math.sin(yw);
+                                                   spotVec.set(a.h.position.x + off.x * cc + off.z * ss, spotVec.y, a.h.position.z - off.x * ss + off.z * cc); } });
+        }
+        usedAt(sk, 'k_sink', kitchen.sinkAt); usedAt(fr, 'k_fridge', kitchen.fridgeAt);
         wall(sv, 0.15);
         var sj2 = sj && copy(sj);
         if (sj2) wall(sj2, 0.1);

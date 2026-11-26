@@ -1491,6 +1491,9 @@
       k.board.obj.visible = false;
       var bo = instance('board'); bo.position.copy(k.board.pos); bo.rotation.y = 0.6; root.add(bo);
       place.board = { obj: bo, r: MODELS.board.size.x / 2, pos: V(k.board.pos.x, k.board.pos.y + MODELS.board.size.y, k.board.pos.z) };
+      if (ctx.getMovables) ctx.getMovables().push({ key: 'k_board', name: 'k_board', holder: bo, box: null, big: false, upright: true,
+        canMove: function(){ return !state.board; },   // (not with something on it)
+        onPut: function(){ place.board.pos.set(bo.position.x, bo.position.y + MODELS.board.size.y, bo.position.z); } });
       place.knifeHome = V(k.board.pos.x, k.board.pos.y, k.board.pos.z - place.board.r - 0.17);
       // the wall behind the range (x = WALL): a shelf to the right of the pot for jug and
       // shaker, and the recipe above the pot
@@ -1534,7 +1537,8 @@
         var grp = new T.Group(), model = instance('crate');
         grp.position.set(7.62 + i * 0.52, 0, wallZ + 0.06 + cs.x / 2); grp.rotation.y = Math.PI / 2;   // short side to the wall
         grp.add(model); root.add(grp);
-        if (ctx.addBox) ctx.addBox(grp.position.x, grp.position.z, cs.z, cs.x, cs.y);
+        var crateBox = ctx.addBox ? ctx.addBox(grp.position.x, grp.position.z, cs.z, cs.x, cs.y) : null;
+        if (crateBox && ctx.getMovables) ctx.getMovables().push({ key: 'k_crate' + i, name: 'k_crate', holder: grp, box: crateBox, big: true, boxOff: { x: 0, z: 0 }, half: { x: cs.z / 2, z: cs.x / 2, yaw: grp.rotation.y } });
         var inside = STORE_GRID.map(function(g){   // (a second layer once the crates are bigger)
           var v = instance(kind);
           v.position.set(g[0] + rnd(-0.015, 0.015), g[2] ? 0.13 : 0.045, g[1] + rnd(-0.01, 0.01));
@@ -1550,7 +1554,8 @@
         var grp = new T.Group(), model = instance('crate');
         grp.position.set(STORE_X[i], 0, STORE_Z); grp.rotation.y = Math.PI / 2;
         grp.add(model); root.add(grp);
-        if (ctx.addBox) ctx.addBox(grp.position.x, grp.position.z, cs.z, cs.x, cs.y);
+        var storeBox = ctx.addBox ? ctx.addBox(grp.position.x, grp.position.z, cs.z, cs.x, cs.y) : null;
+        if (storeBox && ctx.getMovables) ctx.getMovables().push({ key: 'k_storecrate' + i, name: 'k_storecrate', holder: grp, box: storeBox, big: true, boxOff: { x: 0, z: 0 }, half: { x: cs.z / 2, z: cs.x / 2, yaw: grp.rotation.y } });
         var inside = STORE_GRID.map(function(g){
           var v = instance(kind);
           v.position.set(g[0] + rnd(-0.015, 0.015), g[2] ? 0.13 : 0.045, g[1] + rnd(-0.01, 0.01));
@@ -1571,6 +1576,7 @@
       });
       // the clean bowls: two stacks side by side
       var st = new T.Group(); st.position.copy(k.bowlsAt); root.add(st);
+      if (ctx.getMovables) ctx.getMovables().push({ key: 'k_bowls', name: 'k_bowls', holder: st, box: null, big: false, upright: true });   // (held like a small thing; it lands the right way up)
       place.stacks = { grp: st, pos: st.position, bowls: [] };
       for (var n = 0; n < RULES.bowls + SHOP_EFFECT.bowls; n++){   // (room for the bowls from the shop)
         var b = instance('bowl');
@@ -2478,7 +2484,7 @@
       });
       // the decor's movable things: small ones held with the mouse button, big ones moved with E
       if (free && ctx.getMovables) ctx.getMovables().forEach(function(m){
-        if (propFalling[m.key] || !m.holder.parent) return;
+        if (propFalling[m.key] || !m.holder.parent || (m.canMove && !m.canMove())) return;
         var mp2 = m.holder.getWorldPosition(V());
         if (m.big) add({ pos: V(mp2.x, 0, mp2.z), reach: 2.4, key: 'HOLD', charge: 0.6, label: 'Move the ' + propName(m), use: function(){ startMoving(m); }, obj: m.holder, bias: 0.3 });
         else add({ pos: V(mp2.x, 0, mp2.z), reach: RULES.itemReach, key: 'HOLD', label: 'Pick up the ' + propName(m), use: function(){ grabProp(m); }, obj: m.holder, bias: 0.2 });
@@ -2757,7 +2763,7 @@
       if (!P){ putProp(m, V(wp.x, 0, wp.z), new T.Quaternion()); return; }
       syncStatics();
       var box = new T.Box3().setFromObject(obj), size = box.getSize(V()), mid = box.getCenter(V()), C = P.C;
-      var body = new C.Body({ mass: 1, shape: new C.Box(new C.Vec3(Math.max(0.02, size.x / 2), Math.max(0.02, size.y / 2), Math.max(0.02, size.z / 2))), linearDamping: 0.05, angularDamping: 0.25 });
+      var body = new C.Body({ mass: 1, shape: new C.Box(new C.Vec3(Math.max(0.02, size.x / 2), Math.max(0.02, size.y / 2), Math.max(0.02, size.z / 2))), linearDamping: 0.05, angularDamping: 0.25, fixedRotation: !!m.upright });
       body.position.set(mid.x, mid.y, mid.z); body.sleepSpeedLimit = 0.12; body.sleepTimeLimit = 0.35;
       P.world.addBody(body);
       propFalling[m.key] = { m: m, body: body, off: wp.clone().sub(mid), q: wq.clone(), t: 0 };
@@ -2781,6 +2787,7 @@
       m.holder.position.copy(p); m.holder.quaternion.copy(q);
       state.props[m.key] = { x: +p.x.toFixed(3), y: +p.y.toFixed(3), z: +p.z.toFixed(3), q: [q.x, q.y, q.z, q.w].map(function(n){ return +n.toFixed(4); }) };
       boxAlong(m);
+      if (m.onPut) m.onPut();   // (what it is used for: there now)
     }
     function boxAlong(m){
       if (!m.box) return;
@@ -2802,8 +2809,10 @@
         var s = state.props[m.key]; if (!s || m === heldProp || m === movingProp) return;
         if (m.holder.parent !== m.home && m.home) m.home.add(m.holder);
         m.holder.position.set(s.x, s.y, s.z); m.holder.quaternion.fromArray(s.q); boxAlong(m);
+        if (m.onPut) m.onPut();
       });
     }
+    var WALL_PICTURE = { fish: true, antlers: true, chalkboard: true };
     var heldProp = null, movingProp = null, movingTable = null;   // movingTable: { i, x, z, ok, half, from, boxes (what its boxes were) }
     function seatBusy(k){ return state.guests.some(function(g){ return g.phase !== 'away' && g.seat === k; }) ||
                                   Object.keys(state.items).some(function(id){ var o = state.items[id]; return o.at === 'table' && o.seat === k; }); }
@@ -2939,13 +2948,14 @@
       var yaw = Math.atan2(floatDir.x, floatDir.z) + (obj.userData.wheelTurn || 0);   // (turned further with the mouse wheel)
       obj.quaternion.setFromEuler(new T.Euler(0, yaw, 0));
     }
-    var PROP_NAME = { k_shelfjars: 'shelf with jars', k_shelfveg: 'vegetable shelf', filing_cabinet: 'filing cabinet', office_shelf: 'office shelf', storage_rack: 'storage rack', boxes: 'boxes', sacks: 'sacks', cleaning_shelf: 'cleaning shelf', mop_bucket: 'mop bucket', brooms: 'brooms', umbrellastand: 'umbrella stand', slotmachine: 'slot machine', fridge: 'old fridge', plant: 'plant', coatrack: 'coat rack', wetsign: 'wet floor sign', crates: 'beer crates',
+    var PROP_NAME = { radiator: 'radiator', fish: 'mounted fish', antlers: 'antlers', chalkboard: 'chalkboard', boughtcandle: 'candle', boughtplant: 'plant',
+                      k_crate: 'crate', k_storecrate: 'crate', k_bowls: 'stack of bowls', k_board: 'chopping block', k_sink: 'sink', k_fridge: 'fridge', k_shelfjars: 'shelf with jars', k_shelfveg: 'vegetable shelf', filing_cabinet: 'filing cabinet', office_shelf: 'office shelf', storage_rack: 'storage rack', boxes: 'boxes', sacks: 'sacks', cleaning_shelf: 'cleaning shelf', mop_bucket: 'mop bucket', brooms: 'brooms', umbrellastand: 'umbrella stand', slotmachine: 'slot machine', fridge: 'old fridge', plant: 'plant', coatrack: 'coat rack', wetsign: 'wet floor sign', crates: 'beer crates',
                       register: 'cash register', trophies: 'trophy', dogfigure: 'china dog', condiments: 'condiments', candlebottle: 'candle' };
     function propName(m){ return PROP_NAME[m.name] || m.name; }
     function grabProp(m){
       if (carried() || heldProp || movingProp) return;
       if (!m.home) m.home = m.holder.parent;
-      heldProp = m; m.floatJump = true; m.holder.userData.floatR = 0; m.holder.userData.wheelTurn = 0;
+      heldProp = m; m.floatJump = true; m.holder.userData.floatR = 0; m.holder.userData.wheelTurn = WALL_PICTURE[m.name] ? Math.PI : 0;   // (a picture off the wall: its front toward him)
       if (m.box){ if (!m.half) m.half = { x: (m.box.maxX - m.box.minX) / 2, z: (m.box.maxZ - m.box.minZ) / 2, yaw: 0 }; m.boxWas = { minX: m.box.minX, maxX: m.box.maxX, minZ: m.box.minZ, maxZ: m.box.maxZ }; m.box.minX = m.box.maxX = m.box.minZ = m.box.maxZ = 999; }   // (boxAlong puts it where it lands)
       m.holder.visible = true;   // (it floats in front of the view: showProps / floatAt)
     }
@@ -2987,11 +2997,11 @@
       var dist = 0.6 + Math.max(hx, hz) + 0.35, x = me.position.x + f.x * dist, z = me.position.z + f.z * dist;
       m.holder.position.set(x, 0, z); m.holder.quaternion.setFromEuler(new T.Euler(0, m.rot, 0));
       m.ok = ctx.boxFree(x - hx, x + hx, z - hz, z + hz) && Math.hypot(x - me.position.x, z - me.position.z) > 0.4;
-      if (/^k_/.test(m.key)){   // (a kitchen shelf: in the kitchen, not in front of what is used there)
+      if (/^k_shelf/.test(m.key)){   // (a kitchen shelf: in the kitchen, not in front of what is used there)
         var k = ctx.getKitchen() || {};
         m.ok = m.ok && x - hx > 4.0 && z - hz > -10 && z + hz < 10 &&
                [k.sinkAt, k.fridgeAt, k.potAt, k.potAt2].every(function(p){ return !p || Math.hypot(p.x - x, p.z - z) > 1.4; });
-      }
+      } else if (/^k_/.test(m.key)) m.ok = m.ok && x - hx > 3.95;   // (the kitchen's things stay behind the bar: in the kitchen or the back rooms)
       showRoom(m.holder, m.ok);
     }
     function cancelMoving(){   // back where it stood

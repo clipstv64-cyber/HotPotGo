@@ -42,7 +42,8 @@
     // (for things against a wall). opts.done(holder, size) runs once it is loaded.
     // things that can be moved: { key, name, holder, box (or null), big, size }
     var movables = [];
-    function movable(key, holder, box, big){
+    function movable(key, holder, box, big, onWallGroup){
+      if (onWallGroup && holder.parent && holder.parent !== root){ holder.parent.updateMatrixWorld(true); root.attach(holder); }   // (off its wall's own group: moved as a thing of the room)
       var m = { key: key, name: key.replace(/[0-9]+$/, ''), holder: holder, box: box || null, big: !!big };
       if (box){   // where its box's middle is from the holder, in the holder's own turn (a thing against a wall stands on its back edge)
         var dx = (box.minX + box.maxX) / 2 - holder.position.x, dz = (box.minZ + box.maxZ) / 2 - holder.position.z, a = -holder.rotation.y;
@@ -110,17 +111,17 @@
       var way = new T.Mesh(new T.PlaneGeometry(size.x * 0.84, size.y * 0.94), new T.MeshBasicMaterial({ map: tex }));
       way.position.set(0, size.y * 0.47, 0.006); doorWall.add(way);
     } }).scale.z = 0.35;   // flatter against the wall
-    place('radiator', { w: 1.3 }, onWall('front', X1 + 6.0, 0.06), 0, 0, 0.02, 0, { back: true });
-    place('radiator', { w: 1.3 }, onWall('front', X1 - 1.6, 0.06), 0, 0, 0.02, 0, { back: true });
-    addBox(-6, 9.85, 1.4, 0.25, 0.85); addBox(1.6, 9.85, 1.4, 0.25, 0.85);
+    movable('radiator1', place('radiator', { w: 1.3 }, onWall('front', X1 + 6.0, 0.06), 0, 0, 0.02, 0, { back: true }), addBox(-6, 9.85, 1.4, 0.25, 0.85), true, true);
+    movable('radiator2', place('radiator', { w: 1.3 }, onWall('front', X1 - 1.6, 0.06), 0, 0, 0.02, 0, { back: true }), addBox(1.6, 9.85, 1.4, 0.25, 0.85), true, true);
     movable('umbrellastand', place('umbrellastand', { h: 0.85 }, null, -2.55, 0, 9.65, Math.PI, { cast: true }), addBox(-2.55, 9.65, 0.35, 0.35, 0.6), true);
 
     // ---------- left wall: mounted pike and deer antlers -------------------------
-    place('fish', { w: 1.05 }, onWall('left', 10 + 4.66, 2.4), 0, 0, 0, 0, { back: true, anchor: 'center' }).rotation.z = -0.03;
-    place('antlers', { w: 0.8 }, onWall('left', 10 - 7.9, 2.7), 0, 0, 0, 0, { back: true, anchor: 'center' });
+    var fishH = place('fish', { w: 1.05 }, onWall('left', 10 + 4.66, 2.4), 0, 0, 0, 0, { back: true, anchor: 'center' }); fishH.rotation.z = -0.03;
+    movable('fish', fishH, null, false, true);   // (taken off the wall, they fall where they are let go)
+    movable('antlers', place('antlers', { w: 0.8 }, onWall('left', 10 - 7.9, 2.7), 0, 0, 0, 0, { back: true, anchor: 'center' }), null, false, true);
 
     // ---------- back wall: chalkboard, slot machine, fridge with the TV on top, plant, coat rack ----
-    place('chalkboard', { w: 1.9 }, onWall('back', 10 - 3.5, 2.25), 0, 0, 0, 0, { back: true, anchor: 'center' });
+    movable('chalkboard', place('chalkboard', { w: 1.9 }, onWall('back', 10 - 3.5, 2.25), 0, 0, 0, 0, { back: true, anchor: 'center' }), null, false, true);
     movable('slotmachine', place('slotmachine', { h: 1.75 }, null, -0.85, 0, -10 + 0.03, 0, { back: true, cast: true }), addBox(-0.85, -9.65, 0.75, 0.6, 1.75), true);
     movable('fridge', place('fridge', { h: 1.95 }, null, 1.65, 0, -10 + 0.03, 0, { back: true, cast: true, done: function(h, s){
       place('crttv', { w: 0.62 }, h, 0, s.y, s.z / 2, -0.15, { cast: true });   // old TV standing on the fridge (it goes along)
@@ -371,7 +372,7 @@
     function dressTable(table, spot, size, i){
       var y = size.y;
       tables.push({ spot: spot, y: y, i: i });
-      if (bought.candles && i !== 0 && i !== 2) place('candlebottle', { h: 0.4 }, bought.candles, spot[0] + 0.28, y, spot[1] + 0.01, 0, {});   // (the candles were bought before this table was there)
+      if (bought.candles && i !== 0 && i !== 2) movable('boughtcandle' + i, place('candlebottle', { h: 0.4 }, bought.candles, spot[0] + 0.28, y, spot[1] + 0.01, 0, {}));   // (the candles were bought before this table was there)
       movable('condiments' + i, place('condiments', { w: 0.3 }, null, spot[0] - 0.12, y, spot[1], [0.2, -0.3, 1.4, 3.0][i % 4], { cast: true }));
       if (i === 0 || i === 2) movable('candlebottle' + i, place('candlebottle', { h: 0.4 }, null, spot[0] + 0.28, y, spot[1] + 0.01, 0, {}));
     }
@@ -388,18 +389,19 @@
     function showBought(key, on){
       if (bought[key]){ bought[key].visible = on; return; }
       if (!on || (key !== 'candles' && key !== 'plants')) return;
-      var g = bought[key] = new T.Group(); root.add(g);
+      var g = bought[key] = new T.Group(); root.add(g);   // (at the origin, unturned: its things' places are the room's)
       if (key === 'candles') tables.forEach(function(t){
         if (t.i === 0 || t.i === 2) return;   // (these have one from the start)
         var mv = tableMoves[t.i] || { x: 0, z: 0 };
-        place('candlebottle', { h: 0.4 }, g, t.spot[0] + 0.28 + mv.x, t.y, t.spot[1] + 0.01 + mv.z, 0, {}).userData.table = t.i;
+        var cb = place('candlebottle', { h: 0.4 }, g, t.spot[0] + 0.28 + mv.x, t.y, t.spot[1] + 0.01 + mv.z, 0, {}); cb.userData.table = t.i;
+        movable('boughtcandle' + t.i, cb);
       });
       else [[-9.42, -4.66], [-3.7, -9.42], [-2.5, -9.42]].forEach(function(p, n){   // at the left wall between two tables, and at the back wall
-        place('plant', { h: 1.6 }, g, p[0], 0, p[1], [0.3, 2.1, 4.0][n], { cast: true });
-        ctx.addBox(p[0], p[1], 0.55, 0.55, 1.4);
+        movable('boughtplant' + n, place('plant', { h: 1.6 }, g, p[0], 0, p[1], [0.3, 2.1, 4.0][n], { cast: true }), ctx.addBox(p[0], p[1], 0.55, 0.55, 1.4), true);
       });
     }
     return { dressTable: dressTable, showBought: showBought, movables: movables, tableMoved: tableMoved,
+             // (the bought candles' group, the bought plants: their things are moved as in the room)
              // the skirting board along the part of the left wall that opens when the dining room is enlarged
              openLeftWall: function(open){ if (leftSkirt) leftSkirt.visible = !open; }, update: update, root: root, entrance: entrance, office: office };
   }
