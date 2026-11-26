@@ -593,7 +593,7 @@
                                                                                     rot: s.info.rot || 0, info: s.info,
                                                                                     chairs: s.chairs.map(function(c){ var sp = chairSpots[c.k]; return { k: c.k, x: sp.x, z: sp.z, rot: sp.rot, obj: c.obj, boxes: c.boxes, size: sp.size, off: c.off, rot0: c.rot0, at: sp.table === s.info }; }), boxes: [s.box].concat(s.chairs.reduce(function(a, c){ return a.concat(c.boxes); }, [])) }; }); },
                     move: moveTableSet, moveChair: moveChair, preview: previewTable, unpreview: unpreviewTable, halfAlong: halfAlong,
-                    usable: function(k){ return !!(chairSpots[k] && chairSpots[k].table); },
+                    usable: chairRoom,
                     // every chair (wherever it stands now), and the table each is at (-1: none)
                     chairs: function(){ return chairSpots.map(function(sp, k){ var c = chairOf(k), ti = -1; tableSets.forEach(function(s, i){ if (s.info === sp.table) ti = i; }); return { k: k, x: sp.x, z: sp.z, rot: sp.rot, obj: c && c.obj, boxes: c && c.boxes, size: sp.size, table: ti }; }); } },
           showBought: function(key, on){ if (decor && decor.showBought) decor.showBought(key, on); },
@@ -1986,6 +1986,16 @@
       if (along > 0 && edge > -0.4 && edge < 0.55 && across < acrossHalf - 0.15 && edge < bestD){ best = T; bestD = edge; }
     });
     return best;
+  }
+  // can a guest use this chair: at a table, not jammed into another chair or furniture, room beside and behind it to step in
+  function chairRoom(k){
+    var sp = chairSpots[k], c = chairOf(k); if (!sp || !sp.table || !c) return false;
+    var own = c.boxes, tbox = null; tableSets.forEach(function(s){ if (s.info === sp.table) tbox = s.box; });
+    var r = entranceRoute(sp);
+    function freeAt(p, rad){ return !obstacles.some(function(b){ if (own.indexOf(b) >= 0 || !(b.top > 0.05)) return false; return p.x > b.minX - rad && p.x < b.maxX + rad && p.z > b.minZ - rad && p.z < b.maxZ + rad; }); }
+    if (!freeAt(r[4], 0.15) || !freeAt(r[3], 0.15)) return false;
+    var cb = own[0];
+    return !obstacles.some(function(b){ if (own.indexOf(b) >= 0 || b === tbox || !(b.top > 0.05)) return false; return cb.minX + 0.06 < b.maxX && cb.maxX - 0.06 > b.minX && cb.minZ + 0.06 < b.maxZ && cb.maxZ - 0.06 > b.minZ; });
   }
   function chairOf(k){ var c = null; tableSets.forEach(function(s){ s.chairs.forEach(function(e){ if (e.k === k) c = e; }); }); return c; }
   // where a table and the chairs at it go when it is put at (x, z) turned by rot (only the looks: for carrying)
