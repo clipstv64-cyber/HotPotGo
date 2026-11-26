@@ -3506,10 +3506,15 @@
         });
       }
     }
-    var escHint = 0;   // (a new restaurant: seconds until the hint where the controls are)
+    var escHint = 0, tipDay = 0, tipLook = 0;   // (a new restaurant: seconds until the hint where the controls are)
     function update(dt){
       clock += dt; frameNo++;
       machineSounds(dt);
+      // a dirty floor and no cleaner yet: once a day, a word about him (looked at every few seconds)
+      if (!hold && state.day.phase === 'open' && !state.owned.cleaner && tipDay !== state.day.n && clock > tipLook && !(note.t > 0)){   // (not over another message)
+        tipLook = clock + 4;
+        if (play.getStains && play.getStains().length >= 4){ tipDay = state.day.n; say('The floor is getting dirty – sweep it, or hire a cleaner (computer: Shop, Staff)', 6); }
+      }
       if (escHint > 0 && !hold && place.pot){ escHint -= dt; if (escHint <= 0) say('Esc pauses the game and shows the controls', 6); }
       var wk = ctx.getKitchen && ctx.getKitchen(), wm = wk && wk.washer && wk.washer.children[0];
       if (wk && wk.ragFollow && wk.ragFollow()) wk.homesMoved = true;   // (the table with the cloth's place moved)
