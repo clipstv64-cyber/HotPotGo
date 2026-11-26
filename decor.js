@@ -404,7 +404,7 @@
         movable('boughtplant' + n, place('plant', { h: 1.6 }, g, p[0], 0, p[1], [0.3, 2.1, 4.0][n], { cast: true }), ctx.addBox(p[0], p[1], 0.55, 0.55, 1.4), true);
       });
     }
-    return { dressTable: dressTable, showBought: showBought, movables: movables, tableMoved: tableMoved,
+    return { dressTable: dressTable, showBought: showBought, movables: movables, tableMoved: tableMoved, place: place,
              // (the bought candles' group, the bought plants: their things are moved as in the room)
              // the skirting board along the part of the left wall that opens when the dining room is enlarged
              openLeftWall: function(open){ if (leftSkirt) leftSkirt.visible = !open; }, update: update, root: root, entrance: entrance, office: office };

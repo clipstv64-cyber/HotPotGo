@@ -599,7 +599,7 @@
                     usable: chairRoom,
                     // every chair (wherever it stands now), and the table each is at (-1: none)
                     chairs: function(){ return chairSpots.map(function(sp, k){ var c = chairOf(k), ti = -1; tableSets.forEach(function(s, i){ if (s.info === sp.table) ti = i; }); return { k: k, x: sp.x, z: sp.z, rot: sp.rot, obj: c && c.obj, boxes: c && c.boxes, size: sp.size, table: ti }; }); } },
-          showBought: function(key, on){ if (decor && decor.showBought) decor.showBought(key, on); },
+          showBought: function(key, on){ if (key === 'dishwasher') showWasher(on); else if (decor && decor.showBought) decor.showBought(key, on); },
           removeBox: removeBox, floorFree: floorFree, boxFree: boxFree,
           // the chef moved a little while he works on his knees (laying the floor); false where he cannot be
           nudgeChef: function(x, z){ if (!model || chefSit || !floorFree(x, z, 0.22)) return false; model.position.x = x; model.position.z = z; return true; },
@@ -837,6 +837,30 @@
       }
       [-8, -4, 0, 4, 8].forEach(function(z){ beam(len, 0.32, 0.28, cx, WALL_HEIGHT - 0.16, z, len); });
       beam(0.34, 0.32, 20, 7.0, WALL_HEIGHT - 0.32 - 0.16, 0, 20);
+    }
+    // the dishwasher (bought in the shop): in the corner at the back wall, its front to the kitchen;
+    // kitchen.washerAt: where the chef stands to fill it (moves with it)
+    function showWasher(on){
+      var w = kitchen.washer;
+      if (w){
+        w.visible = on;
+        if (w.userData.box){ removeBox(w.userData.box); if (on) obstacles.push(w.userData.box); }
+        kitchen.washerAt = on ? w.userData.at || null : null;
+        return;
+      }
+      if (!on || !decor || !decor.place) return;
+      var wx = 10 - 0.03, wz = 7.45;
+      kitchen.washer = decor.place('dishwasher', { h: 1.6 }, null, wx, 0, wz, -Math.PI / 2, { back: true, cast: true, done: function(h, sz){
+        var b = h.userData.box = addBox(wx - sz.z / 2, wz, sz.z, sz.x, sz.y);
+        if (!h.visible) removeBox(b);
+        var front = sz.z + 0.35, at = h.userData.at = new THREE.Vector3(wx - front, 0, wz);   // (in front of it: where the chef fills it)
+        if (h.visible) kitchen.washerAt = at;
+        if (decor.movables) decor.movables.push({ key: 'k_dishwasher', name: 'dishwasher', holder: h, box: b, big: true, liftWithE: true,
+          boxOff: { x: 0, z: sz.z / 2 }, half: { x: sz.z / 2, z: sz.x / 2, yaw: h.rotation.y },   // (in the room's x and z, as it stands now)
+          canMove: function(){ return h.visible; },
+          spotFor: function(x, z, yw){ return { x: x + front * Math.sin(yw), z: z + front * Math.cos(yw) }; },
+          onPut: function(){ at.set(h.position.x + front * Math.sin(h.rotation.y), 0, h.position.z + front * Math.cos(h.rotation.y)); } });
+      } });
     }
     function buildKitchen8(){
       kitchenSurfaces();

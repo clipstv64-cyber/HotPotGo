@@ -924,6 +924,12 @@
       stains.push(st);
       return st;
     }
+    // something spilt on the floor (restaurant.js: a bowl of stew dropped): a stain there to sweep up
+    function spill(x, z){
+      for (var i = 0; i < stains.length; i++) if (stains[i].clean < 1 && Math.hypot(stains[i].x - x, stains[i].z - z) < 0.5) return false;
+      addStain(x, z, 0.75, Math.floor(Math.random() * 4), Math.random() * Math.PI * 2);
+      return true;
+    }
     // for the saved game: the stains as plain data, and putting them back
     function getStains(){
       return stains.filter(function(st){ return st.clean < 1; })
@@ -1213,7 +1219,7 @@
     return {
       interact: interact, grab: grab, click: click,
       // holding with the mouse button: what happens when it is let go, whether something is held that way, what is in focus
-      onLetGo: function(fn){ releasers.push(fn); }, holdInfo: function(fn){ holdInfo = fn; }, focusNow: function(){ return findFocus(); }, debugLetGo: function(){ pressed = true; letGo(); }, root: root, update: update, getStains: getStains, setStains: setStains, afterAnimation: afterAnimation,
+      onLetGo: function(fn){ releasers.push(fn); }, holdInfo: function(fn){ holdInfo = fn; }, focusNow: function(){ return findFocus(); }, debugLetGo: function(){ pressed = true; letGo(); }, root: root, update: update, getStains: getStains, setStains: setStains, spill: spill, afterAnimation: afterAnimation,
       isHolding: function(){ return holding; },
       // for the other parts of the game (restaurant.js)
       addInteractables: function(fn){ moreInteractables.push(fn); },

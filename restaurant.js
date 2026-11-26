@@ -53,6 +53,7 @@
     startMoney: 250,          // euros in the till at the start
     crateStock: 6,            // vegetables in each crate at the start (and what a kitchen crate holds)
     fridgeStock: 8,           // sausages the kitchen's fridge holds (it is empty at the start)
+    washer: { holds: 6, time: 25 },   // the dishwasher (shop): bowls it takes at once, seconds a wash takes
     storeStock: 12,           // what each of the storeroom's crates holds (they are empty at the start)
     bowls: 10,                // clean bowls on the stack at the start
     firstGuest: 3,            // seconds after opening until the first guest comes in
@@ -134,6 +135,9 @@
     { key: 'bowls',   cat: 'kitchen', name: 'More bowls',    price: 45,  pic: 'bowl',   text: 'Ten more bowls on the stack, so you run out less often.' },
     { key: 'stove',   cat: 'kitchen', name: 'Strong burner', price: 220, pic: 'pot',    text: 'A stronger flame under the pot: every dish is done in less time.' },
     { key: 'pot2',    cat: 'kitchen', name: 'Second pot',    price: 180, pic: 'pot',    text: 'A second pot on the other burner: cook two dishes at once.' },
+    { key: 'bigfridge', cat: 'kitchen', name: 'Bigger fridge shelves', price: 90, pic: 'sausage', text: 'More shelves in the kitchen’s fridge: it keeps 16 sausages instead of 8.' },
+    { key: 'dishwasher', cat: 'kitchen', name: 'Dishwasher', price: 160, pic: 'dishwasher', text: 'An old dish machine in the corner of the kitchen. Put up to six dirty bowls in it (E), then start it with empty hands; after a short wash they are back on the stack by themselves.' },
+    { key: 'cleaver', cat: 'kitchen', name: 'Sharp cleaver',  price: 120, pic: 'knife',  text: 'A freshly ground cleaver: every cut comes out cleaner, and evenly cut vegetables make a better dish.' },
     { key: 'candles', cat: 'room',    name: 'Table candles', price: 60,  pic: 'candle', text: 'A candle on every table. Guests like the room better.' },
     { key: 'plants',  cat: 'room',    name: 'Potted plants', price: 110, pic: 'plant',  text: 'Three big plants for the dining room. Guests like the room better.' },
     { key: 'bigroom',    cat: 'expand', name: 'Bigger dining room', price: 450, pic: 'table',  text: 'The left wall moves back: more room for furniture, and more guests come.' },
@@ -146,7 +150,7 @@
     { key: 'recipe_carrot', cat: 'recipes', name: 'Carrot soup', price: 120, pic: 'stew', text: 'Two carrots and an onion. Sweet and bright: guests pay 10 \u20ac a bowl. Some guests will ask for it.' },
     { key: 'recipe_sausage', cat: 'recipes', name: 'Sausage stew', price: 160, pic: 'sausage', text: 'A potato, an onion and a smoked sausage from the fridge. Hearty: guests pay 12 \u20ac a bowl. Order the sausages at the computer.' }
   ];
-  var SHOP_EFFECT = { bowls: 10, candles: 0.15, plants: 0.2, stove: 0.7, bigroom: 0.08, guests: 1.2 };   // more bowls; mood added; cooking time (share)
+  var SHOP_EFFECT = { bigfridge: 2, cleaver: 0.35, bowls: 10, candles: 0.15, plants: 0.2, stove: 0.7, bigroom: 0.08, guests: 1.2 };   // more bowls; mood added; cooking time (share)
   // furniture: placed freely; size: its footprint is measured on the model; mood: what each piece adds
   var FURNITURE = [
     { key: 'sofa',     name: 'Leather sofa',  price: 140, mood: 0.06, text: 'An old leather sofa. Somewhere to wait in comfort.' },
@@ -262,6 +266,7 @@
     mallet: { file: 'models/d_mallet.glb', width: 0.4, align: true },    // a rubber mallet (its head at +X)
     boards: { file: 'models/d_floorboards.glb', width: 0.9 },                 // a bundle of planks tied with rope
     rag:    { file: 'models/d_rag.glb', width: 0.26 },                   // a folded cleaning cloth
+    dishwasher: { file: 'models/d_dishwasher.glb', height: 1.6 },       // (only for the shop's picture)                   // a folded cleaning cloth
     candle: { file: 'models/d_candlebottle.glb', height: 0.4 },           // (the shop's pictures)
     plant:  { file: 'models/d_plant.glb', height: 1.75 },
     table:  { file: 'models/table.glb', width: 1.4 },
@@ -351,6 +356,7 @@
         chairs: {},                                   // single chairs moved somewhere else: chair number -> { x, z, rot }
         props: {},                                    // the decor moved somewhere else: key -> { x, y, z, q } (decor.js movables)
         spills: [],                                   // on the tables: { id, x, y, z, kind, size, rot, left (1 fresh .. 0 wiped off) }
+        washer: { bowls: 0, left: 0 },                // the dishwasher (shop): dirty bowls in it, seconds left of the wash (0: not washing)
         day: newDay(1)
       };
       ['knife', 'broth', 'spice', 'roller', 'mallet', 'rag'].forEach(function(kind){
@@ -379,7 +385,8 @@
     function stockOf(kind){ return kind === 'broth' ? state.broth + state.items[state.tools.broth].left : kind === 'sausage' ? state.fridge + loose(kind) : state.crates[kind] + state.store[kind] + loose(kind); }
     function kitchenCap(){ return RULES.crateStock * (state.owned.bigkitchen ? 2 : 1); }
     function storeCap(){ return RULES.storeStock * (state.owned.bigstore ? 2 : 1); }
-    function holds(kind){ return kind === 'broth' ? COOK.stock : kind === 'sausage' ? RULES.fridgeStock : kitchenCap() + storeCap(); }
+    function fridgeCap(){ return RULES.fridgeStock * (state.owned.bigfridge ? SHOP_EFFECT.bigfridge : 1); }
+    function holds(kind){ return kind === 'broth' ? COOK.stock : kind === 'sausage' ? fridgeCap() : kitchenCap() + storeCap(); }
     function coming(kind){   // ordered or delivered, but not unpacked yet
       var n = 0;
       state.orders.forEach(function(o){ n += o.goods[kind] || 0; });
@@ -546,7 +553,7 @@
           if (it || state.fridge <= 0) return false;
           state.fridge--; newItem('sausage'); return true;
         case 'putFridge':  // ... and back into it
-          if (!it || it.kind !== 'sausage' || it.cut || state.fridge >= RULES.fridgeStock) return false;
+          if (!it || it.kind !== 'sausage' || it.cut || state.fridge >= fridgeCap()) return false;
           state.fridge++; dropItem(it); return true;
         case 'wipe':       // the cloth over a spill: arg = { id, amount } (share of it wiped off)
           var sp = null, si = -1;
@@ -554,6 +561,14 @@
           if (!it || it.kind !== 'rag' || !sp || !(arg.amount > 0)) return false;
           sp.left -= arg.amount; if (sp.left <= 0) state.spills.splice(si, 1);
           return true;
+        case 'startWasher':   // the bowls in it are washed (no more go in until it is done)
+          if (!state.owned.dishwasher || !state.washer.bowls || state.washer.left > 0) return false;
+          state.washer.left = RULES.washer.time; return true;
+        case 'loadWasher':   // the dirty bowl in his hands into the dishwasher (while it is not washing)
+          var wsh = state.washer;
+          if (!it || it.kind !== 'dirty' || !state.owned.dishwasher || wsh.bowls >= RULES.washer.holds || wsh.left > 0) return false;
+          wsh.bowls++;
+          dropItem(it); return true;
         case 'wash':       // the dirty bowl in his hands, at the sink: clean again
           if (!it || it.kind !== 'dirty') return false;
           it.kind = 'bowl'; return true;
@@ -605,6 +620,7 @@
             cut.done = true;
             var qa = evenness(cut.a, md.range.a, plan.dropEnd);
             cut.q = plan.b ? (qa + evenness(cut.b, md.range.b, false)) / 2 : qa;
+            if (state.owned.cleaver) cut.q += (1 - cut.q) * SHOP_EFFECT.cleaver;   // (a sharp blade: cleaner cuts)
           }
           return true;
         case 'addToPot':
@@ -702,7 +718,7 @@
           return true;
         case 'unpack':     // out of the delivery box in his hands into the kitchen's stock: arg = which goods
           if (!it || it.kind !== 'parcel' || !(it.goods[arg] > 0)) return false;
-          var put = arg === 'broth' ? it.goods.broth : arg === 'sausage' ? Math.min(it.goods.sausage, RULES.fridgeStock - state.fridge) : Math.min(it.goods[arg], kitchenCap() - state.crates[arg]);
+          var put = arg === 'broth' ? it.goods.broth : arg === 'sausage' ? Math.min(it.goods.sausage, fridgeCap() - state.fridge) : Math.min(it.goods[arg], kitchenCap() - state.crates[arg]);
           if (put <= 0) return false;
           if (arg === 'broth'){
             var jug2 = state.items[state.tools.broth];
@@ -815,6 +831,11 @@
       if (day.phase === 'open'){
         day.time += dt * (RULES.day.closes - RULES.day.opens) / RULES.day.length;
         if (day.time >= RULES.day.closes){ day.time = RULES.day.closes; act('close'); }
+      }
+      // the dishwasher: when the wash is over, its bowls are back on the stack
+      if (state.washer.left > 0){
+        state.washer.left -= dt;
+        if (state.washer.left <= 0){ state.washer.left = 0; state.bowls += state.washer.bowls; state.washer.bowls = 0; }
       }
       // orders arrive in the storeroom: a box (what comes while a box still stands there goes into that one)
       for (var oi = state.orders.length - 1; oi >= 0; oi--){
@@ -2410,12 +2431,12 @@
         if (it && it.kind === 'parcel'){
           if (it.goods.sausage > 0){
             fe.key = 'E';
-            if (state.fridge >= RULES.fridgeStock) fe.label = 'The fridge is full';
+            if (state.fridge >= fridgeCap()) fe.label = 'The fridge is full';
             else { fe.label = 'Put the sausages in the fridge (' + it.goods.sausage + ')'; fe.use = function(){ act('unpack', 'sausage'); }; }
             add(fe);
           }
         } else if (it && it.kind === 'sausage' && !it.cut){
-          if (state.fridge >= RULES.fridgeStock) fe.label = 'The fridge is full';
+          if (state.fridge >= fridgeCap()) fe.label = 'The fridge is full';
           else { fe.label = 'Put the sausage back in the fridge'; fe.use = function(){ act('putFridge'); }; }
           add(fe);
         } else if (!it){
@@ -2430,7 +2451,7 @@
       if (it && (it.kind === 'bowl' || (it.kind === 'dirty' && !ctx.getKitchen().sinkAt))){ sb.label = 'Put the bowl back'; sb.use = function(){ act('returnBowl'); }; sb.obj = place.stacks.grp; add(sb); }
       else if (!it){
         if (!free) sb.label = 'Hands full';
-        else if (state.bowls <= 0) sb.label = 'No clean bowls left \u2013 clear the tables and wash up';
+        else if (state.bowls <= 0) sb.label = state.washer.bowls ? 'No clean bowls left \u2013 they are in the dishwasher' : 'No clean bowls left \u2013 clear the tables and wash up';
         else { sb.key = 'HOLD'; sb.label = 'Take a bowl'; sb.use = function(){ act('takeBowl'); }; sb.obj = place.stacks.grp; }
         add(sb);
       }
@@ -2582,6 +2603,15 @@
         if (free) add({ pos: V(o.x, 0, o.z), reach: RULES.serveReach, key: 'HOLD', label: 'Clear away the dirty bowl', use: function(){ act('pickUp', o.id); }, obj: objs[o.id] && objs[o.id].obj });
       });
       var k2 = ctx.getKitchen();
+      if (k2.washerAt && state.owned.dishwasher){   // (the dishwasher: dirty bowls in; while it runs, how long it still takes)
+        var wsh2 = state.washer, full = wsh2.bowls >= RULES.washer.holds, many = wsh2.bowls + (wsh2.bowls === 1 ? ' bowl' : ' bowls');
+        if (wsh2.left > 0) add({ pos: k2.washerAt, reach: RULES.reach, key: 'E', label: 'Dishwasher: washing ' + many + ', ' + Math.ceil(wsh2.left) + ' s',
+                                 use: function(){ say('Washing \u2013 the bowls go back on the stack by themselves'); } });
+        else if (it && it.kind === 'dirty') add({ pos: k2.washerAt, reach: RULES.reach, key: 'E', label: full ? 'The dishwasher is full \u2013 start it' : 'Put it in the dishwasher (' + wsh2.bowls + ' of ' + RULES.washer.holds + ')',
+                                             use: function(){ if (full){ if (act('startWasher')) say('Washing ' + many); } else if (act('loadWasher')) say('In the dishwasher \u2013 E with empty hands starts it'); } });
+        else if (!it && wsh2.bowls > 0) add({ pos: k2.washerAt, reach: RULES.reach, key: 'E', label: 'Start the dishwasher (' + many + ')',
+                                              use: function(){ if (act('startWasher')) say('Washing ' + many + ' \u2013 they go back on the stack by themselves'); } });
+      }
       if (it && it.kind === 'dirty' && k2.sinkAt) add({ pos: k2.sinkAt, reach: RULES.reach, key: 'E', label: 'Wash the bowl', use: function(){ if (act('wash')) say('Clean again \u2013 put it back on the stack'); } });
       // guests who want to order
       state.guests.forEach(function(g){
@@ -3046,6 +3076,8 @@
       var half = m.half || { x: 0.3, z: 0.3 }, turned = Math.abs(Math.sin(m.rot - (half.yaw || 0))) > 0.7, hx = turned ? half.z : half.x, hz = turned ? half.x : half.z;
       var dist = 0.6 + Math.max(hx, hz) + 0.35, x = me.position.x + f.x * dist, z = me.position.z + f.z * dist;
       m.holder.position.set(x, 0, z); m.holder.quaternion.setFromEuler(new T.Euler(0, m.rot, 0));
+      var bo = m.boxOff || { x: 0, z: 0 }, cr = Math.cos(m.rot), sr = Math.sin(m.rot), hx0 = x, hz0 = z;   // (where it is held; its box's middle below)
+      x = hx0 + bo.x * cr + bo.z * sr; z = hz0 - bo.x * sr + bo.z * cr;
       m.ok = ctx.boxFree(x - hx, x + hx, z - hz, z + hz) && Math.hypot(x - me.position.x, z - me.position.z) > 0.4;
       if (/^k_shelf/.test(m.key)){   // (a kitchen shelf: in the kitchen, not in front of what is used there)
         var k = ctx.getKitchen() || {};
@@ -3053,7 +3085,7 @@
                [k.sinkAt, k.fridgeAt, k.potAt, k.potAt2].every(function(p){ return !p || Math.hypot(p.x - x, p.z - z) > 1.4; });
       } else if (/^k_/.test(m.key)) m.ok = m.ok && x - hx > 3.95;   // (the kitchen's things stay behind the bar: in the kitchen or the back rooms)
       if (m.ok && m.spotFor){   // (the sink, the fridge: one must be able to stand where they are used, away from the range)
-        var sp = m.spotFor(x, z, m.rot), k2 = ctx.getKitchen() || {};
+        var sp = m.spotFor(hx0, hz0, m.rot), k2 = ctx.getKitchen() || {};
         m.ok = !!sp && ctx.floorFree(sp.x, sp.z, 0.3) && [k2.potAt, k2.potAt2].every(function(p){ return !p || Math.hypot(p.x - x, p.z - z) > 1.3; });
       }
       showRoom(m.holder, m.ok);
@@ -3096,6 +3128,13 @@
       it.rot = +Math.atan2(2 * (q.w * q.y + q.x * q.z), 1 - 2 * (q.y * q.y + q.x * q.x)).toFixed(3);
       it.tilt = [q.x, q.y, q.z, q.w].map(function(n){ return +n.toFixed(4); });
       if (objs[it.id]) objs[it.id].placed = false;
+      // a full bowl on the floor or on its side: spilt (an empty dirty bowl; on the floor a stain to sweep up)
+      if (it.kind === 'stew' && (it.y < 0.15 || 1 - 2 * (q.x * q.x + q.z * q.z) < 0.6)){
+        it.kind = 'dirty'; delete it.dish; delete it.q; delete it.batch;
+        if (it.y < 0.15 && play.spill) play.spill(it.x, it.z);
+        say('Spilt \u2013 that bowl needs washing now');
+        return;
+      }
       // in a pot: as if put in (cut food); in front of a guest waiting for it: served
       for (var i = 0; i < state.pots.length && place.pots && place.pots[i]; i++){
         var PP = place.pots[i];
@@ -3265,6 +3304,8 @@
     }
     function update(dt){
       clock += dt; frameNo++;
+      var wk = ctx.getKitchen && ctx.getKitchen(), wm = wk && wk.washer && wk.washer.children[0];
+      if (wm) wm.rotation.z = state.washer.left > 0 ? Math.sin(clock * 47) * 0.0025 : 0;
       buildPlaces();
       showSpills();
       if (!hold){ refall(); stepFalling(dt); stepPropFalling(dt); }
@@ -3916,7 +3957,10 @@
         var seen = {}; st.spills = st.spills.filter(function(s){ if (seen[s.id] || s.id >= st.nextId) return false; seen[s.id] = true; return true; });   // (each its own id)
       }
       if (ok){   // (an older save has no fridge and no sausage in the pot)
-        st.fridge = num(st.fridge) ? Math.max(0, Math.min(RULES.fridgeStock, Math.floor(st.fridge))) : 0;
+        var ws0 = st.washer && typeof st.washer === 'object' ? st.washer : {};
+        st.washer = { bowls: num(ws0.bowls) ? Math.max(0, Math.min(RULES.washer.holds, Math.floor(ws0.bowls))) : 0, left: num(ws0.left) ? Math.max(0, Math.min(RULES.washer.time, ws0.left)) : 0 };
+        if (!st.washer.bowls) st.washer.left = 0;
+        st.fridge = num(st.fridge) ? Math.max(0, Math.min(RULES.fridgeStock * (st.owned && st.owned.bigfridge === true ? SHOP_EFFECT.bigfridge : 1), Math.floor(st.fridge))) : 0;
         if (!num(st.pot.has.sausage)) st.pot.has.sausage = 0;
         [st.orders || []].concat([Object.keys(st.items).map(function(id){ return st.items[id]; })]).forEach(function(list){
           (Array.isArray(list) ? list : []).forEach(function(o){ if (o && o.goods && typeof o.goods === 'object' && o.goods.sausage === undefined) o.goods.sausage = 0; });
