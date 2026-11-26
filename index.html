@@ -586,7 +586,7 @@
             });
           },
           getEntrance: function(){ return decor && decor.entrance; },
-          getWaiter: function(){ return waiterApi; },
+          getWaiter: function(){ return waiterApi; }, getCleaner: function(){ return cleanerApi; },
           getObstacles: function(){ return obstacles; },   // (the furniture's boxes: what falling things land on)
           getMovables: function(){ return decor && decor.movables ? decor.movables : []; },   // (decor.js: what can be moved)
           // the tables with their chairs: where each stands, how much room it takes, moving it
@@ -600,7 +600,7 @@
                     // every chair (wherever it stands now), and the table each is at (-1: none)
                     chairs: function(){ return chairSpots.map(function(sp, k){ var c = chairOf(k), ti = -1; tableSets.forEach(function(s, i){ if (s.info === sp.table) ti = i; }); return { k: k, x: sp.x, z: sp.z, rot: sp.rot, obj: c && c.obj, boxes: c && c.boxes, size: sp.size, table: ti }; }); } },
           showBought: function(key, on){ if (key === 'dishwasher') showWasher(on); else if (decor && decor.showBought) decor.showBought(key, on); },
-          removeBox: removeBox, floorFree: floorFree, boxFree: boxFree,
+          removeBox: removeBox, floorFree: floorFree, boxFree: boxFree, findWay: function(a, b, r){ return findWay(a, b, r); },
           // the chef moved a little while he works on his knees (laying the floor); false where he cannot be
           nudgeChef: function(x, z){ if (!model || chefSit || !floorFree(x, z, 0.22)) return false; model.position.x = x; model.position.z = z; return true; },
           // the dining room's extension: where it is, opening it and (for a loaded game without it) closing it again
@@ -645,6 +645,67 @@
     // is this spot of the floor (a circle of radius r) free of furniture and walls?
     // is this rectangle of the floor free of every obstacle?
     function boxFree(x0, x1, z0, z1){ return !obstacles.some(function(b){ return x0 < b.maxX && x1 > b.minX && z0 < b.maxZ && z1 > b.minZ; }); }
+    // findWay(from, to, r): a way from one point to another, around everything that stands, keeping r from
+    // it; a grid of 0.2 m (A*), then straightened (a point is left out where the straight line is free).
+    // Only within the guest room (and its extension); null when there is no way. The end itself may be
+    // blocked (a stain under a table's edge): the way then goes to the free cell nearest to it.
+    var WAY_CELL = 0.2, wayGrid = null;
+    function wayKey(r){   // (what the grid depends on: the boxes where they are now, the margin, the room's size)
+      var k = obstacles.length * 7919 + r * 1000 + mapBounds.x0 * 31;
+      for (var i = 0; i < obstacles.length; i++){ var b = obstacles[i]; k += (b.minX * 3 + b.maxX * 5 + b.minZ * 7 + b.maxZ * 11) * (i + 1); }
+      return k.toFixed(3);
+    }
+    function findWay(from, to, r){
+      var x0 = mapBounds.x0 + 0.1, x1 = PARTITION.x - 0.35, z0 = -GROUND_HALF + 0.1, z1 = GROUND_HALF - 0.1;
+      var nx = Math.ceil((x1 - x0) / WAY_CELL), nz = Math.ceil((z1 - z0) / WAY_CELL), n = nx * nz, key = wayKey(r);
+      if (!wayGrid || wayGrid.key !== key || wayGrid.n !== n){
+        var fr = new Uint8Array(n);
+        for (var i = 0; i < nx; i++) for (var j = 0; j < nz; j++){ var cx = x0 + (i + 0.5) * WAY_CELL, cz = z0 + (j + 0.5) * WAY_CELL; fr[i * nz + j] = floorFree(cx, cz, r) ? 1 : 0; }
+        wayGrid = { key: key, n: n, free: fr, g: new Float32Array(n), came: new Int32Array(n), shut: new Uint8Array(n) };
+      }
+      var free = wayGrid.free;
+      function cell(p){ return [Math.max(0, Math.min(nx - 1, Math.floor((p.x - x0) / WAY_CELL))), Math.max(0, Math.min(nz - 1, Math.floor((p.z - z0) / WAY_CELL)))]; }
+      function nearestFree(c){
+        for (var rad = 0; rad < 12; rad++) for (var a = -rad; a <= rad; a++) for (var b = -rad; b <= rad; b++){
+          if (Math.max(Math.abs(a), Math.abs(b)) !== rad) continue;
+          var i = c[0] + a, j = c[1] + b; if (i >= 0 && j >= 0 && i < nx && j < nz && free[i * nz + j]) return [i, j];
+        }
+        return null;
+      }
+      var s0 = nearestFree(cell(from)), t0 = nearestFree(cell(to));
+      if (!s0 || !t0) return null;
+      var start = s0[0] * nz + s0[1], goal = t0[0] * nz + t0[1];
+      var g = wayGrid.g.fill(Infinity), came = wayGrid.came.fill(-1), shut = wayGrid.shut.fill(0);
+      g[start] = 0;
+      function h(k){ return Math.hypot(Math.floor(k / nz) - t0[0], k % nz - t0[1]); }
+      // the open cells: a binary heap on g + h
+      var hk = [], hf = [];
+      function push(k){ var f = g[k] + h(k), i = hk.length; hk.push(k); hf.push(f); while (i > 0){ var p = (i - 1) >> 1; if (hf[p] <= f) break; hk[i] = hk[p]; hf[i] = hf[p]; i = p; } hk[i] = k; hf[i] = f; }
+      function pop(){ var top = hk[0], lk = hk.pop(), lf = hf.pop(), i = 0, m = hk.length; if (m){ while (true){ var c = 2 * i + 1; if (c >= m) break; if (c + 1 < m && hf[c + 1] < hf[c]) c++; if (hf[c] >= lf) break; hk[i] = hk[c]; hf[i] = hf[c]; i = c; } hk[i] = lk; hf[i] = lf; } return top; }
+      push(start);
+      var D = [[1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1], [1, 1, 1.414], [1, -1, 1.414], [-1, 1, 1.414], [-1, -1, 1.414]], found = false, guard = 0;
+      while (hk.length && guard++ < 12000){
+        var k = pop();
+        if (k === goal){ found = true; break; }
+        if (shut[k]) continue; shut[k] = 1;
+        var ki = Math.floor(k / nz), kj = k % nz;
+        for (var d = 0; d < 8; d++){
+          var ni = ki + D[d][0], nj = kj + D[d][1]; if (ni < 0 || nj < 0 || ni >= nx || nj >= nz) continue;
+          var nk = ni * nz + nj; if (!free[nk] || shut[nk]) continue;
+          if (D[d][2] > 1 && (!free[ki * nz + nj] || !free[ni * nz + kj])) continue;   // (no cutting a corner)
+          var ng = g[k] + D[d][2]; if (ng < g[nk]){ g[nk] = ng; came[nk] = k; push(nk); }
+        }
+      }
+      if (!found) return null;
+      var cells = []; for (var c = goal; c >= 0; c = came[c]) cells.push(c); cells.reverse();
+      var pts = cells.map(function(c){ return new THREE.Vector3(x0 + (Math.floor(c / nz) + 0.5) * WAY_CELL, 0, z0 + (c % nz + 0.5) * WAY_CELL); });
+      function clear(a, b){ var L = a.distanceTo(b), m = Math.ceil(L / (WAY_CELL * 0.5)); for (var t = 1; t < m; t++){ var u = t / m; if (!floorFree(a.x + (b.x - a.x) * u, a.z + (b.z - a.z) * u, r)) return false; } return true; }
+      var out = [pts[0]], at = 0;
+      while (at < pts.length - 1){ var far = pts.length - 1; while (far > at + 1 && !clear(pts[at], pts[far])) far--; out.push(pts[far]); at = far; }
+      out.shift();   // (he stands on the first)
+      return out;
+    }
+    window.__hotpotFindWay = function(a, b, r){ var w = findWay(a, b, r); return w && w.map(function(p){ return [+p.x.toFixed(2), +p.z.toFixed(2)]; }); };   // (for tests)
     function floorFree(x, z, r){ return !obstacles.some(function(b){ return x > b.minX - r && x < b.maxX + r && z > b.minZ - r && z < b.maxZ + r; }); }
     function loadFurniture(url, height, done){
       loadGLB(furnLoader, url, function(g){
@@ -1156,7 +1217,7 @@
       console.error('Could not load the chef model:', err);
     });
     if (window.MeshoptDecoder) loader.setMeshoptDecoder(MeshoptDecoder);   // (the waiter is meshopt-compressed)
-    loadWaiter(loader);
+    loadWaiter(loader); staffLoader = loader;   // (the cleaner is loaded once he is hired)
 
     window.addEventListener('resize', onResize);
     animate();
@@ -2383,8 +2444,8 @@
       // stop: steps and feet slow together); someone coming the other way: each bears off a little, away
       // from the other, and they pass; right on top of each other or crossing: the one who came first goes
       var pace = 1, bear = 0, onTop = false, fx = Math.sin(g.rotation.y), fz = Math.cos(g.rotation.y), me = characters.indexOf(ch);
-      for (var oi = -1; oi < characters.length; oi++){
-        var o = oi < 0 ? waiterAsWalker() : characters[oi]; if (!o || o === ch || o.state !== 'walk' || (!o.group.visible && !(o.queued && ch.goal === 'sit'))) continue;
+      for (var oi = -2; oi < characters.length; oi++){
+        var o = oi === -1 ? waiterAsWalker() : oi === -2 ? cleanerAsWalker() : characters[oi]; if (!o || o === ch || o.state !== 'walk' || (!o.group.visible && !(o.queued && ch.goal === 'sit'))) continue;
         var ox = o.group.position.x - g.position.x, oz = o.group.position.z - g.position.z, od = Math.hypot(ox, oz);
         if (od > 2.2) continue;
         var ofx = Math.sin(o.group.rotation.y), ofz = Math.cos(o.group.rotation.y);
@@ -2993,15 +3054,17 @@
                  pass: [-0.3, 0, 0.3, -0.85, 0.85].map(function(z){ return new THREE.Vector3(PARTITION.x - 0.2, 0, z); }),   // on the bar: full bowls (0-2), dirty ones (3-4) (y: the bar top)
                  lane: PARTITION.x - 1.25,                                       // (he walks along the bar to the front wall: no furniture there)
                  barTop: K.barH };
-  function loadWaiter(loader){
-    loadGLB(loader, WAITER_GLB_URL, function(gltf){
+  // a member of staff: loaded, measured on the skeleton and standing (cfg.height: how tall); prep: done to
+  // the model first (the waiter's apron); ready(w) once it can be shown
+  function loadStaff(loader, url, cfg, prep, ready){
+    loadGLB(loader, url, function(gltf){
       var m = gltf.scene;
       m.traverse(function(o){
         if (!o.isMesh) return;
         o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false;
-        if (o.material){ o.material.metalnessMap = null; o.material.roughnessMap = null; o.material.metalness = 0; o.material.roughness = 0.85; o.material.needsUpdate = true; }
+        if (o.material){ [o.material.metalnessMap, o.material.roughnessMap].forEach(function(t){ if (t && t !== o.material.map) t.dispose(); }); o.material.metalnessMap = null; o.material.roughnessMap = null; o.material.metalness = 0; o.material.roughness = 0.85; o.material.needsUpdate = true; }
       });
-      try { relaxSkirt(m, 0.42, 0.98, 0.5, 'mixamorig', { near: 0.45, far: 0.6 }); } catch (e){ console.error('Loosening the apron failed:', e); }
+      if (prep) prep(m);
       var g = new THREE.Group(); g.add(m); g.visible = false; scene.add(g);
       var mixer = new THREE.AnimationMixer(m), clip = (gltf.animations || []).filter(function(a){ return /walk/i.test(a.name); })[0] || (gltf.animations || [])[0], walk = clip ? mixer.clipAction(clip) : null;
       var bone = function(n){ var b = null; m.traverse(function(o){ if (!b && o.isBone && o.name.replace(/^mixamorig:?/, '') === n) b = o; }); return b; };
@@ -3028,13 +3091,17 @@
       if (top && feet.length && hips){
         m.updateMatrixWorld(true);
         var tall = (top.getWorldPosition(new THREE.Vector3()).y - lowest()) * 1.06;   // (the hair is above the head's end bone)
-        if (tall > 0) m.scale.multiplyScalar(WAITER.height / tall);
+        if (tall > 0) m.scale.multiplyScalar(cfg.height / tall);
         m.updateMatrixWorld(true);
         var hp = hips.getWorldPosition(new THREE.Vector3());
         m.position.x -= hp.x; m.position.z -= hp.z; m.position.y -= lowest() - 0.06;
       }
-      waiter = w;   // (only now: measured and standing)
-    }, function(err){ console.error('Could not load the waiter:', err); });
+      w.bone = bone; ready(w);   // (only now: measured and standing)
+    }, function(err){ console.error('Could not load ' + url + ':', err); });
+  }
+  function loadWaiter(loader){
+    loadStaff(loader, WAITER_GLB_URL, WAITER, function(m){ try { relaxSkirt(m, 0.42, 0.98, 0.5, 'mixamorig', { near: 0.45, far: 0.6 }); } catch (e){ console.error('Loosening the apron failed:', e); } },
+              function(w){ waiter = w; });
   }
   window.__hotpotWaiter = function(){ return waiter ? { pos: waiter.group.position.toArray().map(function(v){ return +v.toFixed(2); }), shown: waiter.group.visible, path: waiter.path.length, carry: !!waiter.carry } : null; };   // (for tests)
   window.__hotpotWaiterApi = function(){ return waiterApi; };   // (for tests)
@@ -3073,16 +3140,96 @@
     b.quaternion.copy(waiterQ.invert().multiply(turn.multiply(now)));
     b.updateMatrixWorld(true);
   }
-  // the waiter as the guests see him: someone walking (who goes first), or standing in the way
+  // The cleaner (staff, hired in the shop): walks anywhere in the guest room (findWay) with a broom in
+  // his right hand; while he works (cleaner.work: 'sweep' or 'wipe') he stands and sways the broom.
+  var CLEANER_GLB_URL = 'models/cleaner.glb';
+  var CLEANER = { height: 2.2, speed: 1.25, turn: 8, stride: 1.5,
+                  home: new THREE.Vector3(0.35, 0, -9.1) };   // (at the back wall between the slot machine and the old fridge: off the guests' and the waiter's ways)
+  var cleaner = null, staffLoader = null, cleanerLoading = false;
+  function loadCleaner(loader){
+    loadStaff(loader, CLEANER_GLB_URL, CLEANER, null, function(w){
+      w.work = null; w.workT = 0;
+      var hand = w.bone('RightHand');
+      // his broom: the one from the cleaning closet, in his right hand, bristles down by his feet
+      // his broom: a copy of the chef's (its origin the bristles' lower end, its Y axis up the handle)
+      if (gameplay && gameplay.broomCopy) gameplay.broomCopy(function(b){
+        b.traverse(function(o){ if (o.isMesh){ o.castShadow = false; o.receiveShadow = true; o.frustumCulled = false; } });
+        var holder = new THREE.Group(); holder.add(b);   // (the copy keeps its own offset: the holder is what moves)
+        w.broom = holder; scene.add(holder); holder.visible = w.group.visible;
+      });
+      w.hand = hand;
+      cleaner = w;
+    });
+  }
+  var cleanerApi = {
+    ready: function(){ return !!cleaner; },
+    load: function(){ if (!cleaner && !cleanerLoading && staffLoader){ cleanerLoading = true; loadCleaner(staffLoader); } },
+    place: CLEANER,
+    show: function(on, at, yaw){
+      if (!cleaner) return;
+      cleaner.group.visible = !!on;
+      if (at) cleaner.group.position.set(at.x, 0, at.z);
+      if (yaw !== undefined && yaw !== null){ cleaner.group.rotation.y = yaw; cleaner.face = yaw; }
+      if (!on){ cleaner.path = []; cleaner.done = null; cleaner.work = null; }
+      if (cleaner.broom) cleaner.broom.visible = !!on;
+    },
+    shown: function(){ return !!cleaner && cleaner.group.visible; },
+    pos: function(){ return cleaner ? cleaner.group.position : null; },
+    walk: function(points, done){ if (!cleaner) return; cleaner.path = points.map(function(p){ return new THREE.Vector3(p.x, 0, p.z); }); cleaner.done = done || null; cleaner.face = null; },
+    walking: function(){ return !!cleaner && cleaner.path.length > 0; },
+    face: function(yaw){ if (cleaner) cleaner.face = yaw; },
+    work: function(kind){ if (cleaner){ cleaner.work = kind || null; cleaner.workT = 0; } },   // 'sweep', 'wipe' or nothing
+    freeze: function(on){ if (cleaner) cleaner.frozen = !!on; }
+  };
+  window.__hotpotCleaner = function(){ return cleaner ? { pos: cleaner.group.position.toArray().map(function(v){ return +v.toFixed(2); }), shown: cleaner.group.visible, path: cleaner.path.length, work: cleaner.work } : null; };   // (for tests)
+  function stepCleaner(dt){
+    if (!cleaner || !cleaner.group.visible || cleaner.frozen) return;
+    var g = cleaner.group, moving = walkStaff(cleaner, CLEANER, dt);
+    // (the arm was reached forward last frame: back as the walk cycle has it, before the mixer)
+    cleaner.saved.forEach(function(e){ e[0].quaternion.copy(e[1]); }); cleaner.saved.length = 0;
+    if (cleaner.walk){
+      cleaner.walk.paused = !moving; cleaner.walk.timeScale = CLEANER.speed * (cleaner.pace || 1) / CLEANER.stride;
+      if (!moving) cleaner.walk.time = cleaner.stand;
+    }
+    cleaner.mixer.update(moving ? dt : 0);
+    var working = !moving && !!cleaner.work;
+    cleaner.workT += dt;
+    g.updateMatrixWorld(true);
+    var fwd = cv1.set(0, 0, 1).applyQuaternion(g.quaternion), right = cv2.set(-1, 0, 0).applyQuaternion(g.quaternion), a = cleaner.arms[1];
+    var sweep = working ? Math.sin(cleaner.workT * (cleaner.work === 'wipe' ? 9 : 6)) : 0;
+    if (working && a[0] && a[1] && a[2]){   // the right arm forward and down, the hand round the handle
+      cleaner.saved.push([a[0], a[0].quaternion.clone()], [a[1], a[1].quaternion.clone()]);
+      aimWaiterBone(a[0], a[1], cv3.set(0, -0.45, 0).addScaledVector(fwd, 0.9 + 0.12 * sweep).addScaledVector(right, 0.1).normalize());
+      aimWaiterBone(a[1], a[2], cv3.set(0, -0.3, 0).addScaledVector(fwd, 0.9).addScaledVector(right, -0.1 + 0.18 * sweep).normalize());
+    }
+    if (cleaner.broom){
+      var b = cleaner.broom; b.visible = g.visible;
+      var hand = cleaner.hand ? cleaner.hand.getWorldPosition(cv4) : cv4.copy(g.position).addScaledVector(right, 0.35).setY(1.0);
+      // the bristles: on the floor in front of the hand (to and fro while he sweeps)
+      var bx = hand.x + fwd.x * 0.45 + right.x * (0.1 + 0.3 * sweep), bz = hand.z + fwd.z * 0.45 + right.z * (0.1 + 0.3 * sweep);
+      var by = moving ? 0.15 : 0.01;   // (walking: carried, its bristles off the floor)
+      b.position.set(bx, by, bz);
+      b.quaternion.setFromUnitVectors(cv5.set(0, 1, 0), cv3.set(hand.x - bx, hand.y - by, hand.z - bz).normalize()).multiply(cq1.setFromAxisAngle(cv5, g.rotation.y));
+    }
+  }
+  var cv1 = new THREE.Vector3(), cv2 = new THREE.Vector3(), cv3 = new THREE.Vector3(), cv4 = new THREE.Vector3(), cv5 = new THREE.Vector3(), cq1 = new THREE.Quaternion();
+  // the waiter (and the cleaner) as the guests see them: someone walking (who goes first), or standing in the way
+  var cleanerWalker = { state: 'walk', group: null, still: false };
+  function cleanerAsWalker(){
+    if (!cleaner || !cleaner.group.visible) return null;
+    cleanerWalker.group = cleaner.group; cleanerWalker.still = cleaner.frozen || !cleaner.path.length || cleaner.pace < 0.4;
+    return cleanerWalker;
+  }
   var waiterWalker = { state: 'walk', group: null, still: false };
   function waiterAsWalker(){
     if (!waiter || !waiter.group.visible) return null;
     waiterWalker.group = waiter.group; waiterWalker.still = waiter.frozen || !waiter.path.length || waiter.pace < 0.4;
     return waiterWalker;
   }
-  function stepWaiter(dt){
-    if (!waiter || !waiter.group.visible || waiter.frozen) return;
-    // a guest just ahead going the same way: he follows, slower the closer (steps and feet together)
+  // a member of staff walks his path (cfg: speed, turn); a guest just ahead going the same way: he
+  // follows, slower the closer (steps and feet together); coming his way or crossing: he waits.
+  // Returns whether he is walking.
+  function walkStaff(waiter, cfg, dt){
     var g = waiter.group, moving = false, pace = 1, wfx = Math.sin(g.rotation.y), wfz = Math.cos(g.rotation.y);
     if (waiter.path.length) characters.forEach(function(o){
       if (o.state !== 'walk' || !o.group.visible) return;
@@ -3093,7 +3240,7 @@
       else pace = 0.05;   // (coming his way or crossing: he waits and they go round him)
     });
     waiter.pace = (waiter.pace === undefined ? 1 : waiter.pace) + (pace - (waiter.pace === undefined ? 1 : waiter.pace)) * Math.min(1, dt * 5);
-    var step = WAITER.speed * dt * waiter.pace;
+    var step = cfg.speed * dt * waiter.pace;
     while (waiter.path.length && step > 1e-6){
       var t = waiter.path[0], dx = t.x - g.position.x, dz = t.z - g.position.z, d = Math.hypot(dx, dz);
       if (d <= step){
@@ -3102,10 +3249,15 @@
         moving = waiter.path.length > 0;
       } else {
         g.position.x += dx / d * step; g.position.z += dz / d * step; step = 0; moving = true;
-        g.rotation.y += shortestAngle(Math.atan2(dx, dz) - g.rotation.y) * Math.min(1, dt * WAITER.turn);
+        g.rotation.y += shortestAngle(Math.atan2(dx, dz) - g.rotation.y) * Math.min(1, dt * cfg.turn);
       }
     }
     if (!moving && waiter.face !== null) g.rotation.y += shortestAngle(waiter.face - g.rotation.y) * Math.min(1, dt * 6);
+    return moving;
+  }
+  function stepWaiter(dt){
+    if (!waiter || !waiter.group.visible || waiter.frozen) return;
+    var g = waiter.group, moving = walkStaff(waiter, WAITER, dt);
     // (the arms were bent for carrying last frame: back as the walk cycle had them, the mixer
     // does not set a bone again while its value stays the same)
     waiter.saved.forEach(function(e){ e[0].quaternion.copy(e[1]); }); waiter.saved.length = 0;
@@ -3520,7 +3672,7 @@
     if (window.kitchenDoors && kitchenDoors.kitchenDoor && kitchenDoors.kitchenDoor.tick) kitchenDoors.kitchenDoor.tick(delta);
     if (decor) decor.update(delta, clock.elapsedTime);
     if (gameplay) gameplay.update(delta, clock.elapsedTime);
-    stepWaiter(delta);
+    stepWaiter(delta); stepCleaner(delta);
     if (restaurant) restaurant.update(delta);
 
     if (model && chefSit) animRate = stepChefSit(delta);   // sitting down, seated, getting up

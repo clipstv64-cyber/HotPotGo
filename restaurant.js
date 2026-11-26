@@ -83,6 +83,9 @@
               mood: 0.45,            // the room as it is: shabby (better furniture will raise it)
               draw: [0.8, 1.25] },   // guests come this much less / more often at 1 star and at 5 stars
     autosave: 20,             // seconds between two automatic saves
+    cleaner: { wage: 25,      // what the cleaner is paid at the end of each day
+               sweep: 5,      // seconds he sweeps a stain away
+               wipe: 4 },     // seconds he wipes a spill off a table
     staff: { wage: 30,        // what the waiter is paid at the end of each day
              wait: 0.8 },     // seconds he stays at a table to take an order or put a bowl down
     spill: { chance: 0.5,     // how often a guest leaves a spill on the table
@@ -136,7 +139,7 @@
     { key: 'stove',   cat: 'kitchen', name: 'Strong burner', price: 220, pic: 'pot',    text: 'A stronger flame under the pot: every dish is done in less time.' },
     { key: 'pot2',    cat: 'kitchen', name: 'Second pot',    price: 180, pic: 'pot',    text: 'A second pot on the other burner: cook two dishes at once.' },
     { key: 'bigfridge', cat: 'kitchen', name: 'Bigger fridge shelves', price: 90, pic: 'sausage', text: 'More shelves in the kitchen’s fridge: it keeps 16 sausages instead of 8.' },
-    { key: 'dishwasher', cat: 'kitchen', name: 'Dishwasher', price: 160, pic: 'dishwasher', text: 'An old dish machine in the corner of the kitchen. Put up to six dirty bowls in it (E), then start it with empty hands; after a short wash they are back on the stack by themselves.' },
+    { key: 'dishwasher', cat: 'kitchen', name: 'Dishwasher', price: 160, pic: 'textures/shop_dishwasher.webp', text: 'An old dish machine in the corner of the kitchen. Put up to six dirty bowls in it (E), then start it with empty hands; after a short wash they are back on the stack by themselves.' },
     { key: 'cleaver', cat: 'kitchen', name: 'Sharp cleaver',  price: 120, pic: 'knife',  text: 'A freshly ground cleaver: every cut comes out cleaner, and evenly cut vegetables make a better dish.' },
     { key: 'candles', cat: 'room',    name: 'Table candles', price: 60,  pic: 'candle', text: 'A candle on every table. Guests like the room better.' },
     { key: 'plants',  cat: 'room',    name: 'Potted plants', price: 110, pic: 'plant',  text: 'Three big plants for the dining room. Guests like the room better.' },
@@ -145,6 +148,7 @@
     { key: 'bigstore',   cat: 'expand', name: 'More storage',     price: 180, pic: 'crate', text: 'A second crate for each vegetable in the storeroom: 24 instead of 12.' },
     // recipes: a new dish on the menu (key: 'recipe_' + the dish)
     // staff: hired once, paid every day
+    { key: 'cleaner', cat: 'staff', name: 'A cleaner', price: 120, pic: '', text: 'He sweeps the stains off the dining room floor and wipes the spills off the tables where nobody sits. Wage: 25 \u20ac a day.' },
     { key: 'waiter', cat: 'staff', name: 'A waiter', price: 150, pic: '', text: 'He takes the orders at the tables and carries the bowls you put on the bar to the guests who ordered them. Wage: 30 \u20ac a day.' },
     { key: 'recipe_potato', cat: 'recipes', name: 'Potato soup', price: 70, pic: 'stew', text: 'Two potatoes and an onion. Cheap to cook, guests pay 8 \u20ac a bowl. Some guests will ask for it.' },
     { key: 'recipe_carrot', cat: 'recipes', name: 'Carrot soup', price: 120, pic: 'stew', text: 'Two carrots and an onion. Sweet and bright: guests pay 10 \u20ac a bowl. Some guests will ask for it.' },
@@ -265,8 +269,7 @@
     roller: { file: 'models/d_roller.glb', width: 2.05, align: true },   // a paint roller on a long pole (its roller at +X)
     mallet: { file: 'models/d_mallet.glb', width: 0.4, align: true },    // a rubber mallet (its head at +X)
     boards: { file: 'models/d_floorboards.glb', width: 0.9 },                 // a bundle of planks tied with rope
-    rag:    { file: 'models/d_rag.glb', width: 0.26 },                   // a folded cleaning cloth
-    dishwasher: { file: 'models/d_dishwasher.glb', height: 1.6 },       // (only for the shop's picture)                   // a folded cleaning cloth
+    rag:    { file: 'models/d_rag.glb', width: 0.26 },                   // a folded cleaning cloth                   // a folded cleaning cloth
     candle: { file: 'models/d_candlebottle.glb', height: 0.4 },           // (the shop's pictures)
     plant:  { file: 'models/d_plant.glb', height: 1.75 },
     table:  { file: 'models/table.glb', width: 1.4 },
@@ -555,6 +558,12 @@
         case 'putFridge':  // ... and back into it
           if (!it || it.kind !== 'sausage' || it.cut || state.fridge >= fridgeCap()) return false;
           state.fridge++; dropItem(it); return true;
+        case 'staffWipe':  // the cleaner wipes a spill: arg = { id, amount }
+          var sp2 = null, si2 = -1;
+          state.spills.forEach(function(s, i){ if (arg && s.id === arg.id){ sp2 = s; si2 = i; } });
+          if (!state.owned.cleaner || !sp2 || !(arg.amount > 0)) return false;
+          sp2.left -= arg.amount; if (sp2.left <= 0) state.spills.splice(si2, 1);
+          return true;
         case 'wipe':       // the cloth over a spill: arg = { id, amount } (share of it wiped off)
           var sp = null, si = -1;
           state.spills.forEach(function(s, i){ if (arg && s.id === arg.id){ sp = s; si = i; } });
@@ -736,6 +745,7 @@
         case 'endDay':     // everybody has gone: the day's accounts
           if (day.phase !== 'closed' || inside()) return false;
           if (state.owned.waiter && waiterHere()){ state.money -= RULES.staff.wage; day.spent += RULES.staff.wage; }   // (the waiter's wage)
+          if (state.owned.cleaner && cleanerHere()){ state.money -= RULES.cleaner.wage; day.spent += RULES.cleaner.wage; }   // (the cleaner's)
           day.report = { n: day.n, served: day.served, lost: day.lost, sales: day.sales, tips: day.tips, cost: day.spent,
                          reviews: day.reviewed, stars: day.reviewed ? day.stars / day.reviewed : 0,
                          profit: day.sales + day.tips - day.spent, money: state.money };
@@ -3236,6 +3246,68 @@
         else { o.at = 'surface'; o.x = W.place.pass[1].x; o.y = W.place.barTop; o.z = W.place.pass[0].z - 1.1; o.rot = 0; }   // (on the bar, clear of its places)
       });
     }
+    // ---------- the cleaner ----------------------------------------------------------------
+    var cjob = null, cLook = 0, cSkip = {};
+    function cleanerHere(){ return !!(ctx.getCleaner && ctx.getCleaner().ready()); }
+    function cleanerStep(dt){
+      var C = ctx.getCleaner && ctx.getCleaner();
+      if (!C) return;
+      if (!C.ready()){ if (state.owned.cleaner && C.load) C.load(); return; }
+      if (!state.owned.cleaner){ if (C.shown()) C.show(false); cjob = null; return; }
+      if (!C.shown()){ C.show(true, C.place.home, 0); cjob = null; }
+      var me = C.pos();
+      if (cjob){
+        if (cjob.phase === 'go'){
+          if (C.walking() && clock < cjob.until) return;
+          if (C.walking()){ C.walk([]); cSkip[cjob.key] = clock + 30; cjob = null; return; }   // (too long on the way: something in it; later)
+          if (Math.hypot(me.x - cjob.x, me.z - cjob.z) > (cjob.kind === 'wipe' ? 1.65 : 0.9)){ cSkip[cjob.key] = clock + 30; cjob = null; return; }   // (could not get there)
+          cjob.phase = 'work'; C.work(cjob.kind); C.face(Math.atan2(cjob.x - me.x, cjob.z - me.z));
+          return;
+        }
+        if (cjob.phase === 'work'){
+          var left = cjob.kind === 'sweep' ? !!(play.cleanStain && play.cleanStain(cjob.x, cjob.z, dt / RULES.cleaner.sweep))
+                                           : act('staffWipe', { id: cjob.id, amount: dt / RULES.cleaner.wipe }) && state.spills.some(function(s){ return s.id === cjob.id; });
+          if (cjob.kind === 'wipe' && guestNear(cjob.x, cjob.z)) left = false;   // (somebody sat down there: later)
+          if (!left){ C.work(null); cjob = null; }
+          return;
+        }
+        if (cjob.phase === 'home'){ if (!C.walking()){ C.face(0); cjob = null; } else if (clock < cLook) return; }
+      }
+      if (clock < cLook) return;
+      cLook = clock + 1;
+      var edge = C.place.home.x + 1.0, best = null;
+      (play.getStains ? play.getStains() : []).forEach(function(st){
+        var key = 's' + st.x.toFixed(1) + ',' + st.z.toFixed(1);
+        if (st.x > edge || (cSkip[key] || 0) > clock) return;
+        var d = Math.hypot(st.x - me.x, st.z - me.z);
+        if (!best || d < best.d) best = { kind: 'sweep', x: st.x, z: st.z, d: d, key: key };
+      });
+      if (!best) state.spills.forEach(function(sp){
+        var key = 'w' + sp.id;
+        if ((cSkip[key] || 0) > clock || guestNear(sp.x, sp.z)) return;
+        var d = Math.hypot(sp.x - me.x, sp.z - me.z);
+        if (!best || d < best.d) best = { kind: 'wipe', x: sp.x, z: sp.z, id: sp.id, d: d, key: key };
+      });
+      if (best){
+        var way = ctx.findWay && ctx.findWay(me, V(best.x, 0, best.z), 0.32);
+        if (!way){ cSkip[best.key] = clock + 30; return; }
+        best.phase = 'go'; cjob = best;
+        var wl = 0, wp = me; way.forEach(function(p){ wl += Math.hypot(p.x - wp.x, p.z - wp.z); wp = p; });
+        best.until = clock + 8 + wl / 0.6;   // (about twice as long as the way takes him)
+        if (way.length && best.kind === 'sweep'){   // (he stops half a metre short: the broom is over the stain)
+          var end = way[way.length - 1], prev = way.length > 1 ? way[way.length - 2] : me, sl = Math.hypot(end.x - prev.x, end.z - prev.z);
+          if (sl > 0.7){ end.x -= (end.x - prev.x) / sl * 0.5; end.z -= (end.z - prev.z) / sl * 0.5; }
+        }
+        if (way.length) C.walk(way);
+        return;
+      }
+      if (!cjob && Math.hypot(me.x - C.place.home.x, me.z - C.place.home.z) > 0.3 && (cSkip.home || 0) <= clock){   // (nothing to do: back by the bar)
+        var home = ctx.findWay && ctx.findWay(me, C.place.home, 0.32);
+        if (home && home.length){ C.walk(home.concat([C.place.home])); cjob = { phase: 'home' }; }
+        else cSkip.home = clock + 30;
+      }
+    }
+    function guestNear(x, z){ return state.guests.some(function(g){ var v = views[g.id]; if (g.phase === 'away' || !v || !v.info.group) return false; var p = v.info.group.position; return Math.hypot(p.x - x, p.z - z) < 1.6; }); }
     function waiterStep(dt){
       var W = ctx.getWaiter && ctx.getWaiter();
       if (!W || !W.ready()) return;
@@ -3313,7 +3385,8 @@
       if (heldProp){ var hp0 = heldProp; if (hp0.home && hp0.holder.parent !== hp0.home) hp0.home.add(hp0.holder); floatAt(hp0.holder, dt, hp0.floatJump); hp0.floatJump = false; }
       if (!phys && window.CANNON && place.pot && clock > 3){ physics(); syncStatics(); }   // (ready before anything is first let go)
       if (ctx.getWaiter && ctx.getWaiter().ready()) ctx.getWaiter().freeze(!!hold);
-      if (!hold) waiterStep(dt);
+      if (ctx.getCleaner && ctx.getCleaner().ready()) ctx.getCleaner().freeze(!!hold);
+      if (!hold){ waiterStep(dt); cleanerStep(dt); }
       if (wiping && (ctx.isMoving() || !carried() || carried().kind !== 'rag' || !spillOf(wiping.id))) stopWipe();
       ctx.getGuests().forEach(view);
       if (!hold){
@@ -3728,10 +3801,10 @@
           return '<div class="card good">' + '<div class="pic">' + picHtml + '</div>' +
             '<div class="what"><b>' + name + '</b>' + (price !== null ? '<span class="price">' + euro(price) + '</span>' : '') + '<br><small>' + text + '</small></div>' + action + '</div>';
         }
-        function img(k){ var p = thumb(k); return p ? '<img src="' + p + '" alt="">' : ''; }
+        function img(k){ var p = /\//.test(k) ? k : thumb(k); return p ? '<img src="' + p + '" alt="">' : ''; }   // (a picture's path, or a model drawn)
         function buyBtn(cmd, price, label){ return '<button class="primary small-btn" data-do="' + cmd + '"' + (state.money < price ? ' disabled' : '') + '>' + (label || 'Buy') + '</button>'; }
         if (cat === 'kitchen' || cat === 'room' || cat === 'expand' || cat === 'recipes' || cat === 'staff') SHOP.forEach(function(t){
-          if (t.cat !== cat || (t.key === 'waiter' && !(ctx.getWaiter && ctx.getWaiter().ready())) || (t.key === 'recipe_sausage' && !hasFridge()) || (t.key === 'pot2' && !ctx.getKitchen().potAt2)) return;
+          if (t.cat !== cat || (t.key === 'waiter' && !(ctx.getWaiter && ctx.getWaiter().ready())) || (t.key === 'cleaner' && !ctx.getCleaner) || (t.key === 'recipe_sausage' && !hasFridge()) || (t.key === 'pot2' && !ctx.getKitchen().potAt2)) return;
           items += card(img(t.pic), t.name, t.price, t.text, state.owned[t.key] ? '<span class="tag here">Bought</span>' : buyBtn('purchase:' + t.key, t.price));
         });
         else if (cat === 'furniture') FURNITURE.forEach(function(t){
@@ -4131,6 +4204,7 @@
         t.chairs.forEach(function(c){ if (c.off && (Math.abs(c.x - t.x - c.off.x) > 1e-3 || Math.abs(c.z - t.z - c.off.z) > 1e-3 || c.rot !== c.rot0)) ctx.tables.moveChair(c.k, t.x + c.off.x, t.z + c.off.z, c.rot0); });
       });   // (a table the loaded game did not move: where it stood at first)
       job = null; if (ctx.getWaiter && ctx.getWaiter().ready()){ ctx.getWaiter().hold(null); ctx.getWaiter().show(false); }   // (he starts at the bar again)
+      cjob = null; cSkip = {}; cLook = 0; if (ctx.getCleaner && ctx.getCleaner().ready()) ctx.getCleaner().show(false);   // (the cleaner at his place again)
       Object.keys(spillMeshes).forEach(function(id){ var m = spillMeshes[id]; root.remove(m); m.geometry.dispose(); m.material.dispose(); delete spillMeshes[id]; });   // (the loaded game's spills are drawn anew)
       closePC(); shown.delivered = undefined; shown.stars = null; shownSurf = { walls: {}, floor: {} };
       rolling = null; dipping = null; if (laying) stopLaying(); Object.keys(partial).forEach(function(id){ ctx.surfaces.strokes(id, null, []); }); partial = {};

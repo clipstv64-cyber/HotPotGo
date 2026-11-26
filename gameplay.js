@@ -192,7 +192,10 @@
     // the broom anywhere else (in the hands, on its way, falling, lying on the floor);
     // its origin is the lower end of the bristles, its Y axis runs up the handle
     var held = new T.Group(); held.visible = false; root.add(held);
+    var broomSrc = null, broomWait = [];
+    function broomCopy(cb){ if (broomSrc) cb(fit(broomSrc.clone(true), BROOM_LEN)); else broomWait.push(cb); }
     loadBroom(function(src){
+      broomSrc = src; broomWait.splice(0).forEach(function(cb){ cb(fit(src.clone(true), BROOM_LEN)); });
       var a = fit(src.clone(true), BROOM_LEN); a.traverse(function(m){ if (m.isMesh){ m.castShadow = true; m.receiveShadow = true; } });
       standing.add(a);
       var b = fit(src.clone(true), BROOM_LEN); b.traverse(function(m){ if (m.isMesh){ m.castShadow = true; m.receiveShadow = true; m.frustumCulled = false; } });
@@ -924,6 +927,13 @@
       stains.push(st);
       return st;
     }
+    function cleanStain(x, z, amount){
+      var best = null, bd = 0.45;
+      stains.forEach(function(st){ if (st.clean >= 1) return; var d = Math.hypot(st.x - x, st.z - z); if (d < bd){ bd = d; best = st; } });
+      if (!best) return false;
+      if (!best.busy) best.clean = Math.min(1, best.clean + amount);
+      return best.clean < 1;
+    }
     // something spilt on the floor (restaurant.js: a bowl of stew dropped): a stain there to sweep up
     function spill(x, z){
       for (var i = 0; i < stains.length; i++) if (stains[i].clean < 1 && Math.hypot(stains[i].x - x, stains[i].z - z) < 0.5) return false;
@@ -1219,7 +1229,7 @@
     return {
       interact: interact, grab: grab, click: click,
       // holding with the mouse button: what happens when it is let go, whether something is held that way, what is in focus
-      onLetGo: function(fn){ releasers.push(fn); }, holdInfo: function(fn){ holdInfo = fn; }, focusNow: function(){ return findFocus(); }, debugLetGo: function(){ pressed = true; letGo(); }, root: root, update: update, getStains: getStains, setStains: setStains, spill: spill, afterAnimation: afterAnimation,
+      onLetGo: function(fn){ releasers.push(fn); }, holdInfo: function(fn){ holdInfo = fn; }, focusNow: function(){ return findFocus(); }, debugLetGo: function(){ pressed = true; letGo(); }, root: root, update: update, getStains: getStains, setStains: setStains, spill: spill, cleanStain: cleanStain, broomCopy: broomCopy, afterAnimation: afterAnimation,
       isHolding: function(){ return holding; },
       // for the other parts of the game (restaurant.js)
       addInteractables: function(fn){ moreInteractables.push(fn); },
