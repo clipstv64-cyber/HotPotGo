@@ -2040,12 +2040,21 @@
     }
     // where furniture may stand: the middle of the dining room (clear of the guests' way in from the door and
     // of the tables) and its extension once it is bought; not on anything, not on the chef
+    // the waiter's and the cleaner's places (where they wait), and where the cleaner is now: kept free of furniture
+    function onStaffPlace(x, z, hx, hz){
+      var W = ctx.getWaiter && ctx.getWaiter().place, C = ctx.getCleaner && ctx.getCleaner(), pts = [];
+      if (W && W.home) pts.push(W.home);
+      if (C && C.place && C.place.home) pts.push(C.place.home);
+      if (C && C.ready() && C.shown()) pts.push(C.pos());
+      return pts.some(function(p){ return Math.abs(p.x - x) < hx + 0.35 && Math.abs(p.z - z) < hz + 0.35; });
+    }
     function placeOk(key, x, z, rot){
       var fp = footprint(key, rot), r = Math.max(fp.hx, fp.hz), L = ctx.extension, chef = ctx.getChef();
       var inExtension = state.owned.bigroom && L && x - fp.hx > L.x0 + 0.05 && x + fp.hx < L.x1 - 0.1 && z - fp.hz > L.z0 + 0.05 && z + fp.hz < L.z1 - 0.05;
       var inRoom = x - fp.hx > -4.75 && x + fp.hx < 2.05 && z - fp.hz > -9.7 && z + fp.hz < 8.1;   // (the guests walk along the front wall and the aisle by the tables)
       if (!inExtension && !inRoom) return false;
       if (chef && Math.abs(chef.position.x - x) < fp.hx + 0.4 && Math.abs(chef.position.z - z) < fp.hz + 0.4) return false;
+      if (onStaffPlace(x, z, fp.hx, fp.hz)) return false;
       if (Object.keys(state.items).some(function(id){ var o = state.items[id]; return o.at === 'surface' && o.y < 0.05 && Math.abs(o.x - x) < fp.hx + 0.35 && Math.abs(o.z - z) < fp.hz + 0.35; })) return false;
       return ctx.boxFree ? ctx.boxFree(x - fp.hx, x + fp.hx, z - fp.hz, z + fp.hz) : true;
     }
@@ -3012,7 +3021,7 @@
       var dist = 0.8 + Math.max(hx, hz) + 0.2;
       m.x = me.position.x + f.x * dist; m.z = me.position.z + f.z * dist;
       var wx = hx + 0.15, wz = hz + 0.15;   // (a little room around it)
-      m.ok = ctx.boxFree(m.x - wx, m.x + wx, m.z - wz, m.z + wz) &&
+      m.ok = ctx.boxFree(m.x - wx, m.x + wx, m.z - wz, m.z + wz) && !onStaffPlace(m.x, m.z, hx, hz) &&
              !Object.keys(state.items).some(function(id){ var o = state.items[id]; return o.at === 'surface' && o.y < 0.3 && Math.abs(o.x - m.x) < hx && Math.abs(o.z - m.z) < hz; }) &&
              m.x - hx > -10 && m.x + hx < 2.05 && m.z - hz > -9.9 && m.z + hz < 8.1 &&
              (m.x + wx < -5.9 || m.x - wx > -4.75) &&   // (the guests' aisle by the tables stays free)
@@ -3070,7 +3079,7 @@
       var me = ctx.getChef(), f = V(Math.sin(me.rotation.y), 0, Math.cos(me.rotation.y));
       m.x = me.position.x + f.x * 1.0; m.z = me.position.z + f.z * 1.0;
       var r0 = Math.max(m.size.x, m.size.z) / 2 - 0.12;   // (its middle part: a chair may be pushed in under a table)
-      m.ok = ctx.boxFree(m.x - r0, m.x + r0, m.z - r0, m.z + r0) && m.x > -9.9 && m.x < 2.05 && m.z > -9.8 && m.z < 8.1 && (m.x + r0 < -5.9 || m.x - r0 > -4.75);   // (not on the guests' ways)
+      m.ok = ctx.boxFree(m.x - r0, m.x + r0, m.z - r0, m.z + r0) && !onStaffPlace(m.x, m.z, r0, r0) && m.x > -9.9 && m.x < 2.05 && m.z > -9.8 && m.z < 8.1 && (m.x + r0 < -5.9 || m.x - r0 > -4.75);   // (not on the guests' ways)
       m.obj.position.set(m.x, 0, m.z); m.obj.rotation.y = m.rot; showRoom(m.obj, m.ok);
     }
     function putChair(cancel){
@@ -3205,6 +3214,7 @@
         if (x + hx > -5.9 && x - hx < -4.75 && z + hz > -8.2 && z - hz < 8.4) m.ok = false;   // (the guests' aisle by the tables)
         if (z + hz > 8.4 && z - hz < 9.3 && x - hx < 2.5 && x + hx > -6) m.ok = false;        // (their way along the front wall)
         if (Cp && Cp.home && Math.hypot(x - Cp.home.x, z - Cp.home.z) < 0.8 + Math.max(hx, hz)) m.ok = false;
+        if (ctx.getCleaner && ctx.getCleaner().ready() && ctx.getCleaner().shown()){ var cpos = ctx.getCleaner().pos(); if (Math.abs(cpos.x - x) < hx + 0.35 && Math.abs(cpos.z - z) < hz + 0.35) m.ok = false; }   // (not onto the cleaner)
       }
       if (m.ok && m.spotFor){   // (the sink, the fridge: one must be able to stand where they are used, away from the range)
         var sp = m.spotFor(hx0, hz0, m.rot), k2 = ctx.getKitchen() || {};
