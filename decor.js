@@ -396,6 +396,11 @@
         movable('boughtcandle' + t.i, cb);
       });
       else [[-9.42, -4.66], [-3.7, -9.42], [-2.5, -9.42]].forEach(function(p, n){   // at the left wall between two tables, and at the back wall
+        // (a table or something else moved there since: the plant goes along the wall to the nearest free place)
+        if (ctx.freeAt && !ctx.freeAt(p[0], p[1], 0.3)) for (var k = 1; k <= 12; k++){
+          var off = Math.ceil(k / 2) * 0.4 * (k % 2 ? 1 : -1), q = n === 0 ? [p[0], p[1] + off] : [p[0] + off, p[1]];
+          if (q[0] > -9.5 && q[1] > -9.5 && q[1] < 9.5 && ctx.freeAt(q[0], q[1], 0.3)){ p = q; break; }
+        }
         movable('boughtplant' + n, place('plant', { h: 1.6 }, g, p[0], 0, p[1], [0.3, 2.1, 4.0][n], { cast: true }), ctx.addBox(p[0], p[1], 0.55, 0.55, 1.4), true);
       });
     }

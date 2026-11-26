@@ -539,7 +539,8 @@
 
     // furnishing of the guest room (wallpaper, pictures, lamps, odds and ends ...)
     if (window.HotPotDecor){
-      try { decor = HotPotDecor.build({ scene: scene, renderer: renderer, addBox: addBox, WALL_HEIGHT: WALL_HEIGHT, PARTITION: PARTITION, BACKROOMS: BACKROOMS }); }
+      try { decor = HotPotDecor.build({ scene: scene, renderer: renderer, addBox: addBox,
+        freeAt: function(x, z, r){ return !obstacles.some(function(b){ return x > b.minX - r && x < b.maxX + r && z > b.minZ - r && z < b.maxZ + r; }); }, WALL_HEIGHT: WALL_HEIGHT, PARTITION: PARTITION, BACKROOMS: BACKROOMS }); }
       catch (e){ console.error('Furnishing the guest room failed:', e); }
     }
     if (window.HotPotGameplay){
@@ -2101,7 +2102,7 @@
     var g = ch.group;
     g.position.set(ENTRANCE[0], 0, ENTRANCE[1] + 0.9); g.rotation.y = Math.PI;   // outside, facing in
     g.visible = true;
-    ch.route = ch.sit.route; ch.leg = 0; ch.goal = 'sit'; ch.state = 'walk'; ch.pace = 1; ch.bear = 0; ch.waitT = 0;
+    ch.route = ch.sit.route; ch.leg = 0; ch.goal = 'sit'; ch.state = 'walk'; ch.pace = 1; ch.bear = 0; ch.waitT = 0; ch.queued = false;
   }
   // ... gets up again and walks out the way they came
   function guestLeave(ch){
@@ -2355,20 +2356,33 @@
       var dx = target.x - g.position.x, dz = target.z - g.position.z, dist = Math.hypot(dx, dz);
       // turn smoothly toward the next point (limited turning speed); a sharp turn is made on the spot
       // not through each other: someone walking just ahead is followed (slower the closer, down to a
-      // stop: steps and feet slow together); someone coming the other way: each bears a little to
-      // their right and they pass; right on top of each other or crossing: the one who came first goes
-      var pace = 1, bear = 0, fx = Math.sin(g.rotation.y), fz = Math.cos(g.rotation.y), me = characters.indexOf(ch);
-      for (var oi = 0; oi < characters.length; oi++){
-        var o = characters[oi]; if (o === ch || o.state !== 'walk' || !o.group.visible) continue;
+      // stop: steps and feet slow together); someone coming the other way: each bears off a little, away
+      // from the other, and they pass; right on top of each other or crossing: the one who came first goes
+      var pace = 1, bear = 0, onTop = false, fx = Math.sin(g.rotation.y), fz = Math.cos(g.rotation.y), me = characters.indexOf(ch);
+      for (var oi = -1; oi < characters.length; oi++){
+        var o = oi < 0 ? waiterAsWalker() : characters[oi]; if (!o || o === ch || o.state !== 'walk' || (!o.group.visible && !(o.queued && ch.goal === 'sit'))) continue;
         var ox = o.group.position.x - g.position.x, oz = o.group.position.z - g.position.z, od = Math.hypot(ox, oz);
-        if (od > GUEST_GAP + 0.25) continue;
+        if (od > 2.2) continue;
         var ofx = Math.sin(o.group.rotation.y), ofz = Math.cos(o.group.rotation.y);
         var mine = od > 1e-4 && (ox * fx + oz * fz) / od > 0.35, theirs = od > 1e-4 && -(ox * ofx + oz * ofz) / od > 0.35;   // (in front of me / I in front of them)
-        if (mine && theirs && ofx * fx + ofz * fz < -0.3 && od > 0.35){ bear = -0.5; continue; }   // (coming the other way)
+        // in the way (seen from up to two metres): someone standing, or coming the other way - bear off
+        // to the side away from them; someone walking just ahead the same way is followed (below)
+        var side = fx * oz - fz * ox, inWay = mine && Math.abs(side) < 0.75;
+        if (o.still){   // (the waiter standing, or waiting for us to pass: round him; on the last steps to a chair, wait for him)
+          if (!inWay) continue;
+          if (!last){ bear = side < 0.05 ? -0.9 : 0.9; continue; }
+          pace = Math.min(pace, Math.max(0, (od - 0.5) / 0.5)); continue;
+        }
+        if (inWay && theirs && ofx * fx + ofz * fz < -0.3 && od > 0.35){ bear = side < 0.05 ? -0.6 : 0.6; continue; }
+        if (od > GUEST_GAP + 0.25) continue;
         var iGo = mine !== theirs ? theirs : oi > me;   // (the one in front goes on; else the one who came first)
         if (iGo || (!mine && od >= 0.35)) continue;
         pace = Math.min(pace, od < 0.35 ? 0 : Math.max(0, (od - 0.45) / (GUEST_GAP + 0.25 - 0.45)));
+        if (od < 0.35) onTop = true;
       }
+      // two coming in at once: the second waits outside the door (out of sight) until the first is in
+      if (ch.leg === 0 && ch.goal === 'sit' && onTop && g.position.z > ENTRANCE[1] && (ch.waitT || 0) <= 10){ g.visible = false; ch.queued = true; }
+      else if (ch.queued){ g.visible = true; ch.queued = false; }
       ch.waitT = pace < 0.5 ? (ch.waitT || 0) + delta : Math.max(0, (ch.waitT || 0) - delta * 2);
       if (ch.waitT > 10) pace = 1;   // (not for ever: then they walk on; a queue at the door can take a while)
       var ease = Math.min(1, delta * 5);
@@ -2441,7 +2455,7 @@
       g.updateMatrixWorld(true);
       if (t2 >= 1){
         if (ch.walkingWeights) loadWeights(ch.obj, ch.walkingWeights);
-        ch.route = exitRoute(ch); ch.leg = 0; ch.state = 'walk'; ch.pace = 1; ch.bear = 0; ch.waitT = 0;
+        ch.route = exitRoute(ch); ch.leg = 0; ch.state = 'walk'; ch.pace = 1; ch.bear = 0; ch.waitT = 0; ch.queued = false;
       }
     }
   }
@@ -3035,9 +3049,27 @@
     b.quaternion.copy(waiterQ.invert().multiply(turn.multiply(now)));
     b.updateMatrixWorld(true);
   }
+  // the waiter as the guests see him: someone walking (who goes first), or standing in the way
+  var waiterWalker = { state: 'walk', group: null, still: false };
+  function waiterAsWalker(){
+    if (!waiter || !waiter.group.visible) return null;
+    waiterWalker.group = waiter.group; waiterWalker.still = waiter.frozen || !waiter.path.length || waiter.pace < 0.4;
+    return waiterWalker;
+  }
   function stepWaiter(dt){
     if (!waiter || !waiter.group.visible || waiter.frozen) return;
-    var g = waiter.group, moving = false, step = WAITER.speed * dt;
+    // a guest just ahead going the same way: he follows, slower the closer (steps and feet together)
+    var g = waiter.group, moving = false, pace = 1, wfx = Math.sin(g.rotation.y), wfz = Math.cos(g.rotation.y);
+    if (waiter.path.length) characters.forEach(function(o){
+      if (o.state !== 'walk' || !o.group.visible) return;
+      var ox = o.group.position.x - g.position.x, oz = o.group.position.z - g.position.z, od = Math.hypot(ox, oz);
+      if (od > 1 || od < 1e-4 || (ox * wfx + oz * wfz) / od < 0.35) return;
+      var facing = Math.sin(o.group.rotation.y) * wfx + Math.cos(o.group.rotation.y) * wfz;
+      if (facing > 0.3) pace = Math.min(pace, Math.max(0.05, (od - 0.45) / 0.55));   // (ahead of him, the same way)
+      else pace = 0.05;   // (coming his way or crossing: he waits and they go round him)
+    });
+    waiter.pace = (waiter.pace === undefined ? 1 : waiter.pace) + (pace - (waiter.pace === undefined ? 1 : waiter.pace)) * Math.min(1, dt * 5);
+    var step = WAITER.speed * dt * waiter.pace;
     while (waiter.path.length && step > 1e-6){
       var t = waiter.path[0], dx = t.x - g.position.x, dz = t.z - g.position.z, d = Math.hypot(dx, dz);
       if (d <= step){
@@ -3054,7 +3086,7 @@
     // does not set a bone again while its value stays the same)
     waiter.saved.forEach(function(e){ e[0].quaternion.copy(e[1]); }); waiter.saved.length = 0;
     if (waiter.walk){
-      waiter.walk.paused = !moving; waiter.walk.timeScale = WAITER.speed / WAITER.stride;
+      waiter.walk.paused = !moving; waiter.walk.timeScale = WAITER.speed * (waiter.pace || 1) / WAITER.stride;
       if (!moving) waiter.walk.time = waiter.stand;
     }
     waiter.mixer.update(moving ? dt : 0);
