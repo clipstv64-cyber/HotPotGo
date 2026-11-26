@@ -2264,10 +2264,12 @@
       } catch (e) { /* no sound then */ }
     }
     // the dishwasher's hum: a looped low noise, as loud as the chef is near while it washes
-    var hum = null, brushT = 0;
+    var hum = null, humFailed = false, brushT = 0;
+    document.addEventListener('visibilitychange', function(){ if (document.hidden && hum){ try { hum.src.stop(); } catch (e){} hum = null; } });
     function machineSounds(dt){
       var wk = ctx.getKitchen && ctx.getKitchen(), loud = state.washer.left > 0 && wk && wk.washerAt && !hold ? nearChef(wk.washerAt, 9) : 0;
-      if (loud > 0 && !hum){
+      if (document.hidden) loud = 0;
+      if (loud > 0 && !hum && !humFailed){
         var A = sound();
         if (A) try {
           var n = A.sampleRate * 2, buf = A.createBuffer(1, n, A.sampleRate), d = buf.getChannelData(0), last = 0;
@@ -2277,7 +2279,7 @@
           var gn = A.createGain(); gn.gain.value = 0;
           src.connect(flt); flt.connect(gn); gn.connect(A.destination); src.start();
           hum = { src: src, gain: gn };
-        } catch (e) { hum = null; }
+        } catch (e) { hum = null; humFailed = true; }
       }
       if (hum){
         hum.gain.gain.value += (0.22 * loud - hum.gain.gain.value) * Math.min(1, dt * 4);
@@ -3381,7 +3383,10 @@
           var left = cjob.kind === 'sweep' ? !!(play.cleanStain && play.cleanStain(cjob.x, cjob.z, dt / RULES.cleaner.sweep))
                                            : act('staffWipe', { id: cjob.id, amount: dt / RULES.cleaner.wipe }) && state.spills.some(function(s){ return s.id === cjob.id; });
           if (cjob.kind === 'wipe' && guestNear(cjob.x, cjob.z)) left = false;   // (somebody sat down there: later)
-          if (!left){ C.work(null); if (cjob.kind === 'sweep' ? !(play.cleanStain && play.cleanStain(cjob.x, cjob.z, 0)) : !state.spills.some(function(s){ return s.id === cjob.id; })) state.day.cleaned = (state.day.cleaned || 0) + 1; cjob = null; }   // (counted when it is really gone)
+          cjob.t = (cjob.t || 0) + dt;
+          if (!left){ C.work(null); var gone = cjob.kind === 'sweep' ? !(play.cleanStain && play.cleanStain(cjob.x, cjob.z, 0)) : !state.spills.some(function(s){ return s.id === cjob.id; });
+            if (gone && cjob.t > 0.7 * (cjob.kind === 'sweep' ? RULES.cleaner.sweep : RULES.cleaner.wipe)) state.day.cleaned = (state.day.cleaned || 0) + 1;   // (his work: not what the chef did meanwhile)
+            cjob = null; }
           return;
         }
         if (cjob.phase === 'home'){ if (!C.walking()){ C.face(0); cjob = null; } else if (clock < cLook) return; }
@@ -3493,8 +3498,8 @@
       machineSounds(dt);
       if (escHint > 0 && !hold && place.pot){ escHint -= dt; if (escHint <= 0) say('Esc pauses the game and shows the controls', 6); }
       var wk = ctx.getKitchen && ctx.getKitchen(), wm = wk && wk.washer && wk.washer.children[0];
-      if (wk && wk.ragFollow && wk.ragFollow()){ wk.homesMoved = true; if (place.home && place.home.rag && wk.ragTurn !== undefined) place.home.rag.rot = 0.3 + wk.ragTurn; }   // (the table with the cloth's place moved)
-      if (wk && wk.homesMoved){ wk.homesMoved = false; Object.keys(state.items).forEach(function(id){ if (state.items[id].at === 'home' && objs[id]) objs[id].placed = false; }); }   // (a tool's place moved)
+      if (wk && wk.ragFollow && wk.ragFollow()) wk.homesMoved = true;   // (the table with the cloth's place moved)
+      if (wk && wk.homesMoved){ if (place.home && place.home.rag && wk.ragTurn !== undefined) place.home.rag.rot = 0.3 + wk.ragTurn; wk.homesMoved = false; Object.keys(state.items).forEach(function(id){ if (state.items[id].at === 'home' && objs[id]) objs[id].placed = false; }); }   // (a tool's place moved)
       if (wk && !wk.surfaceBusy) wk.surfaceBusy = function(sf){   // (something of the chef's lying on a work surface: it is not moved)
         function on(p){ return !!p && p.x > sf.minX - 0.15 && p.x < sf.maxX + 0.15 && p.z > sf.minZ - 0.15 && p.z < sf.maxZ + 0.15; }
         return on(place.board && place.board.pos) || on(place.stacks && place.stacks.pos) ||
