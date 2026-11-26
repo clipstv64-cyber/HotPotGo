@@ -3425,6 +3425,7 @@
       clock += dt; frameNo++;
       if (escHint > 0 && !hold && place.pot){ escHint -= dt; if (escHint <= 0) say('Esc pauses the game and shows the controls', 6); }
       var wk = ctx.getKitchen && ctx.getKitchen(), wm = wk && wk.washer && wk.washer.children[0];
+      if (wk && wk.ragFollow && wk.ragFollow()){ wk.homesMoved = true; if (place.home && place.home.rag && wk.ragTurn !== undefined) place.home.rag.rot = 0.3 + wk.ragTurn; }   // (the table with the cloth's place moved)
       if (wk && wk.homesMoved){ wk.homesMoved = false; Object.keys(state.items).forEach(function(id){ if (state.items[id].at === 'home' && objs[id]) objs[id].placed = false; }); }   // (a tool's place moved)
       if (wk && !wk.surfaceBusy) wk.surfaceBusy = function(sf){   // (something of the chef's lying on a work surface: it is not moved)
         function on(p){ return !!p && p.x > sf.minX - 0.15 && p.x < sf.maxX + 0.15 && p.z > sf.minZ - 0.15 && p.z < sf.maxZ + 0.15; }

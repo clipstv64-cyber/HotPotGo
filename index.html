@@ -1008,7 +1008,9 @@
           var i2surf = kitchen.surfaces[kitchen.surfaces.length - 1];
           var on2 = [];   // (what stands on it: { h, taken })
           i2.h.updateMatrixWorld(true);
-          var ragLocal = i2.h.worldToLocal(kitchen.ragAt.clone());
+          var ragLocal = i2.h.worldToLocal(kitchen.ragAt.clone()), ragYaw0 = i2.h.rotation.y;
+          // (the cloth's place follows the table, also while it is carried: true when it moved)
+          kitchen.ragFollow = function(){ var p = i2.h.localToWorld(ragLocal.clone()); kitchen.ragTurn = i2.h.rotation.y - ragYaw0; if (p.distanceToSquared(kitchen.ragAt) < 1e-6) return false; kitchen.ragAt.copy(p); return true; };
           if (bl && b2){ i2.h.attach(b2.h); on2.push({ h: b2.h, taken: kitchen.taken[kitchen.taken.length - (sp ? 2 : 1)] }); }
           if (sp && p2){ i2.h.attach(p2.h); on2.push({ h: p2.h, taken: kitchen.taken[kitchen.taken.length - 1] }); }
           if (i2box && decor && decor.movables) decor.movables.push({ key: 'k_island2', name: 'prep table', holder: i2.h, box: i2box, big: true, boxOff: { x: 0, z: 0 },
@@ -1019,7 +1021,7 @@
               i2surf.minX = p.x - hx + 0.12; i2surf.maxX = p.x + hx - 0.12; i2surf.minZ = p.z - hz + 0.12; i2surf.maxZ = p.z + hz - 0.12;
               i2.h.updateMatrixWorld(true);
               on2.forEach(function(o){ if (!o.taken) return; var w = o.h.getWorldPosition(new THREE.Vector3()); o.taken.x = w.x; o.taken.z = w.z; });
-              kitchen.ragAt.copy(i2.h.localToWorld(ragLocal.clone())); kitchen.homesMoved = true;   // (restaurant.js puts the cloth there again)
+              kitchen.ragFollow(); kitchen.homesMoved = true;   // (restaurant.js puts the cloth there again)
             } });
         }
         // paper lanterns hanging from the long beam, each with its own warm light
