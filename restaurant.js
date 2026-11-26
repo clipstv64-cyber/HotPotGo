@@ -793,7 +793,12 @@
           g = guest(arg); if (!g || g.phase !== 'ready') return false;
           var m = menu(), smelt = state.pots.filter(function(p){ return p.dish && m.indexOf(p.dish) >= 0 && p.phase !== 'burnt'; }),
               cooking = smelt.length ? smelt[Math.floor(Math.random() * smelt.length)].dish : null;
-          g.want = cooking && Math.random() < 0.7 ? cooking : m[Math.floor(Math.random() * m.length)] || 'stew';   // (most like what they can smell)
+          var pick = m[Math.floor(Math.random() * m.length)] || 'stew', way = GUEST_TYPE[g.id];
+          if (m.length > 1 && (way === 'picky' || way === 'thrifty') && Math.random() < 0.6){   // (a picky eater likes the dearest dish, a thrifty one the cheapest)
+            var byPrice = m.slice().sort(function(a, b){ return dishPrice(a) - dishPrice(b); });
+            pick = way === 'picky' ? byPrice[byPrice.length - 1] : byPrice[0];
+          }
+          g.want = cooking && Math.random() < 0.7 ? cooking : pick;   // (most like what they can smell)
           g.phase = 'waiting'; g.patience = Math.min(1, g.patience + 0.25); return true;   // (glad somebody came)
         case 'left':       // ... has gone out of the door
           g = guest(arg); if (!g || g.phase !== 'leaving') return false;
