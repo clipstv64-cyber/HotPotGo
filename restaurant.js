@@ -1356,10 +1356,29 @@
       });
     }
     // a guest's order: a bowl of the dish (in its colour) and a bar that runs out with the guest's patience
-    function drawOrder(s, patience, want){
-      var key = 'o' + Math.round(patience * 40) + (want || '');
+    // a guest's way (GUEST_TYPE), as a small sign in the bubble's upper corner
+    function typeSign(g, kind){
+      if (kind !== 'hurry' && kind !== 'picky' && kind !== 'thrifty') return;
+      g.save(); g.translate(22, 47); g.scale(0.95, 0.95);   // (inside the bubble, left of the picture)
+      g.fillStyle = '#efe2c2'; g.strokeStyle = 'rgba(74,54,38,.55)'; g.lineWidth = 2;
+      g.beginPath(); g.arc(0, 0, 13, 0, Math.PI * 2); g.fill(); g.stroke();
+      if (kind === 'hurry'){   // an hourglass
+        g.fillStyle = '#6b513a'; g.fillRect(-7, -9, 14, 2.5); g.fillRect(-7, 6.5, 14, 2.5);
+        g.fillStyle = '#c98a3a'; g.beginPath(); g.moveTo(-6, -6.5); g.lineTo(6, -6.5); g.lineTo(0, 0); g.lineTo(6, 6.5); g.lineTo(-6, 6.5); g.lineTo(0, 0); g.closePath(); g.fill();
+      } else if (kind === 'picky'){   // a star
+        g.fillStyle = '#d9a21f'; g.beginPath();
+        for (var i = 0; i < 10; i++){ var a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? 4 : 9.5; g.lineTo(Math.cos(a) * rr, Math.sin(a) * rr); }
+        g.closePath(); g.fill();
+      } else {   // a coin
+        g.fillStyle = '#d9a21f'; g.beginPath(); g.arc(0, 0, 8.5, 0, Math.PI * 2); g.fill();
+        g.fillStyle = '#8a5a14'; g.font = 'bold 12px Georgia, serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('\u20ac', 0, 1);
+      }
+      g.restore();
+    }
+    function drawOrder(s, patience, want, kind){
+      var key = 'o' + Math.round(patience * 40) + (want || '') + (kind || '');
       if (s.drawn === key) return; s.drawn = key;
-      var g = s.g; bubbleShape(g, 'rgba(255,252,244,.96)'); bowlIcon(g, 64, 50, 1, dishOf(want).dot);
+      var g = s.g; bubbleShape(g, 'rgba(255,252,244,.96)'); bowlIcon(g, 64, 50, 1, dishOf(want).dot); typeSign(g, kind);
       g.fillStyle = 'rgba(60,45,35,.18)'; g.fillRect(28, 80, 72, 9);
       g.fillStyle = patience > 0.5 ? '#5aa046' : patience > 0.25 ? '#d9a21f' : '#cf4a32';
       g.fillRect(28, 80, 72 * clamp(patience), 9);
@@ -1372,10 +1391,10 @@
       [40, 64, 88].forEach(function(x){ g.beginPath(); g.arc(x, 54, 8, 0, Math.PI * 2); g.fill(); });
       s.tex.needsUpdate = true;
     }
-    function drawReady(s, patience){
-      var key = 'r' + Math.round(patience * 40);
+    function drawReady(s, patience, kind){
+      var key = 'r' + Math.round(patience * 40) + (kind || '');
       if (s.drawn === key) return; s.drawn = key;
-      var g = s.g; bubbleShape(g, 'rgba(255,252,244,.96)');
+      var g = s.g; bubbleShape(g, 'rgba(255,252,244,.96)'); typeSign(g, kind);
       g.fillStyle = '#f3e7c4'; g.strokeStyle = 'rgba(70,52,40,.8)'; g.lineWidth = 3;
       g.fillRect(40, 20, 40, 52); g.strokeRect(40, 20, 40, 52);                                   // the pad
       g.fillStyle = 'rgba(70,52,40,.55)'; [32, 42, 52, 62].forEach(function(y){ g.fillRect(46, y, 28, 3); });
@@ -3545,11 +3564,11 @@
           s.sp.position.set(headPos.x, headPos.y + 0.78 + Math.sin(clock * 2 + headPos.z) * 0.015, headPos.z);
           var size = 0.62;
           if (g.phase === 'waiting'){
-            drawOrder(s, g.patience, g.want);
+            drawOrder(s, g.patience, g.want, GUEST_TYPE[g.id]);
             if (g.patience < 0.25) size *= 1 + Math.sin(clock * 9) * 0.05;   // getting impatient
           } else if (g.phase === 'eating'){ drawEating(s, g.t / RULES.eatTime); size = 0.36; }
           else if (g.phase === 'deciding'){ drawDeciding(s); size = 0.46; }
-          else if (g.phase === 'ready'){ drawReady(s, g.patience); size = 0.56; if (g.patience < 0.25) size *= 1 + Math.sin(clock * 9) * 0.05; }
+          else if (g.phase === 'ready'){ drawReady(s, g.patience, GUEST_TYPE[g.id]); size = 0.56; if (g.patience < 0.25) size *= 1 + Math.sin(clock * 9) * 0.05; }
           else drawAngry(s);
           s.sp.scale.set(size, size, 1);
         }
@@ -3874,7 +3893,8 @@
           sum += '<div class="big">' + avg.toFixed(1) + ' ' + starRow(Math.round(avg)) + '</div><p class="muted small">from the last ' + latest.length + (latest.length === 1 ? ' review' : ' reviews') + '</p>';
           [5, 4, 3, 2, 1].forEach(function(n){ sum += '<div class="row"><span>' + starRow(n) + '</span><b>' + count[n] + '</b></div>'; });
         } else sum += '<p class="muted">Nobody has written a review yet.</p>';
-        sum += '<p class="muted small" style="margin-top:9px">Good food, quick service and a clean floor make good reviews. More stars bring more guests.</p></div>';
+        sum += '<p class="muted small" style="margin-top:9px">Good food, quick service and a clean floor make good reviews. More stars bring more guests.</p>' +
+          '<p class="muted small" style="margin-top:6px">The sign in a guest’s bubble tells their way: an hourglass – in a hurry, a star – a picky eater, a coin – counts every euro.</p></div>';
         var said = '';
         latest.slice(-4).reverse().forEach(function(r){
           said += '<div class="card rev">' + starRow(r.stars) + '<p class="quote">\u201c' + esc(r.text) + '\u201d</p><p class="muted small">\u2013 ' + esc(GUEST_NAMES.hasOwnProperty(r.who) ? GUEST_NAMES[r.who] + (guestType(r.who).label ? ' (' + guestType(r.who).label + ')' : '') : 'A guest') + ', day ' + r.day + '</p></div>';
