@@ -3143,7 +3143,7 @@
   // The cleaner (staff, hired in the shop): walks anywhere in the guest room (findWay) with a broom in
   // his right hand; while he works (cleaner.work: 'sweep' or 'wipe') he stands and sways the broom.
   var CLEANER_GLB_URL = 'models/cleaner.glb';
-  var CLEANER = { height: 2.2, speed: 1.25, turn: 8, stride: 1.5,
+  var CLEANER = { height: 2.2, speed: 1.25, turn: 8, stride: 1.5, curl: 1.1, thumb: 0.5,
                   home: new THREE.Vector3(0.35, 0, -9.1) };   // (at the back wall between the slot machine and the old fridge: off the guests' and the waiter's ways)
   var cleaner = null, staffLoader = null, cleanerLoading = false;
   function loadCleaner(loader){
@@ -3158,6 +3158,10 @@
         w.broom = holder; scene.add(holder); holder.visible = w.group.visible;
       });
       w.hand = hand;
+      // the right hand's fingers: how each joint bends to close round the broom's handle (CLEANER.curl)
+      w.fingers = [];
+      ['Index', 'Middle', 'Ring', 'Pinky'].forEach(function(f){ [1, 2, 3].forEach(function(j){ var b = w.bone('RightHand' + f + j); if (b) w.fingers.push({ b: b, axis: new THREE.Vector3(1, 0, 0), angle: CLEANER.curl * (j === 1 ? 1.0 : 0.9) }); }); });
+      [1, 2].forEach(function(j){ var b = w.bone('RightHandThumb' + j); if (b) w.fingers.push({ b: b, axis: new THREE.Vector3(1, 0, 0), angle: CLEANER.thumb }); });
       cleaner = w;
     });
   }
@@ -3181,6 +3185,7 @@
     work: function(kind){ if (cleaner){ cleaner.work = kind || null; cleaner.workT = 0; } },   // 'sweep', 'wipe' or nothing
     freeze: function(on){ if (cleaner) cleaner.frozen = !!on; }
   };
+  window.__hotpotCleanerCurl = function(fs, ts, axis){ if (!cleaner) return 0; cleaner.fingers.forEach(function(f){ var th = /Thumb/.test(f.b.name); f.angle = Math.abs(f.angle) * (th ? ts : fs); if (axis && !th) f.axis.set(axis[0], axis[1], axis[2]); }); return cleaner.fingers.length; };   // (for tests: which way the fingers bend)
   window.__hotpotCleaner = function(){ return cleaner ? { pos: cleaner.group.position.toArray().map(function(v){ return +v.toFixed(2); }), shown: cleaner.group.visible, path: cleaner.path.length, work: cleaner.work } : null; };   // (for tests)
   function stepCleaner(dt){
     if (!cleaner || !cleaner.group.visible || cleaner.frozen) return;
@@ -3202,6 +3207,11 @@
       aimWaiterBone(a[0], a[1], cv3.set(0, -0.45, 0).addScaledVector(fwd, 0.9 + 0.12 * sweep).addScaledVector(right, 0.1).normalize());
       aimWaiterBone(a[1], a[2], cv3.set(0, -0.3, 0).addScaledVector(fwd, 0.9).addScaledVector(right, -0.1 + 0.18 * sweep).normalize());
     }
+    // his right hand closed round the handle (the fingers bent at each joint; the thumb across)
+    if (cleaner.broom && cleaner.fingers){
+      cleaner.fingers.forEach(function(f){ cleaner.saved.push([f.b, f.b.quaternion.clone()]); f.b.quaternion.multiply(cq2.setFromAxisAngle(f.axis, f.angle)); });
+      g.updateMatrixWorld(true);
+    }
     if (cleaner.broom){
       var b = cleaner.broom; b.visible = g.visible;
       var hand = cleaner.hand ? cleaner.hand.getWorldPosition(cv4) : cv4.copy(g.position).addScaledVector(right, 0.35).setY(1.0);
@@ -3212,7 +3222,7 @@
       b.quaternion.setFromUnitVectors(cv5.set(0, 1, 0), cv3.set(hand.x - bx, hand.y - by, hand.z - bz).normalize()).multiply(cq1.setFromAxisAngle(cv5, g.rotation.y));
     }
   }
-  var cv1 = new THREE.Vector3(), cv2 = new THREE.Vector3(), cv3 = new THREE.Vector3(), cv4 = new THREE.Vector3(), cv5 = new THREE.Vector3(), cq1 = new THREE.Quaternion();
+  var cv1 = new THREE.Vector3(), cv2 = new THREE.Vector3(), cv3 = new THREE.Vector3(), cv4 = new THREE.Vector3(), cv5 = new THREE.Vector3(), cq1 = new THREE.Quaternion(), cq2 = new THREE.Quaternion();
   // the waiter (and the cleaner) as the guests see them: someone walking (who goes first), or standing in the way
   var cleanerWalker = { state: 'walk', group: null, still: false };
   function cleanerAsWalker(){
