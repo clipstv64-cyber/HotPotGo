@@ -2264,9 +2264,9 @@
     function brushSound(loud){
       var A = sound(); if (!A || loud <= 0) return;
       try {
-        var t = A.currentTime, n = Math.floor(A.sampleRate * 0.22), buf = A.createBuffer(1, n, A.sampleRate), d = buf.getChannelData(0);
-        for (var i = 0; i < n; i++){ var u = i / n; d[i] = (Math.random() * 2 - 1) * Math.sin(Math.PI * u); }
-        var src = A.createBufferSource(); src.buffer = buf;
+        var t = A.currentTime;
+        if (!brushSound.buf){ var n = Math.floor(A.sampleRate * 0.22), d; brushSound.buf = A.createBuffer(1, n, A.sampleRate); d = brushSound.buf.getChannelData(0); for (var i = 0; i < n; i++){ var u = i / n; d[i] = (Math.random() * 2 - 1) * Math.sin(Math.PI * u); } }
+        var src = A.createBufferSource(); src.buffer = brushSound.buf;
         var flt = A.createBiquadFilter(); flt.type = 'bandpass'; flt.frequency.value = 3200; flt.Q.value = 0.7;
         var gn = A.createGain(); gn.gain.value = 0.2 * loud;
         src.connect(flt); flt.connect(gn); gn.connect(A.destination); src.start(t);
@@ -2281,9 +2281,9 @@
       if (loud > 0 && !hum && !humFailed){
         var A = sound();
         if (A) try {
-          var n = A.sampleRate * 2, buf = A.createBuffer(1, n, A.sampleRate), d = buf.getChannelData(0), last = 0;
-          for (var i = 0; i < n; i++){ last = last * 0.97 + (Math.random() * 2 - 1) * 0.03; d[i] = last * 6 + Math.sin(i / A.sampleRate * 2 * Math.PI * 95) * 0.25; }
-          var src = A.createBufferSource(); src.buffer = buf; src.loop = true;
+          if (!machineSounds.buf){ var n = A.sampleRate * 2, d, last = 0; machineSounds.buf = A.createBuffer(1, n, A.sampleRate); d = machineSounds.buf.getChannelData(0);
+            for (var i = 0; i < n; i++){ last = last * 0.97 + (Math.random() * 2 - 1) * 0.03; d[i] = last * 6 + Math.sin(i / A.sampleRate * 2 * Math.PI * 95) * 0.25; } }
+          var src = A.createBufferSource(); src.buffer = machineSounds.buf; src.loop = true;
           var flt = A.createBiquadFilter(); flt.type = 'lowpass'; flt.frequency.value = 700;
           var gn = A.createGain(); gn.gain.value = 0;
           src.connect(flt); flt.connect(gn); gn.connect(A.destination); src.start();
@@ -3381,7 +3381,8 @@
       var me = C.pos();
       if (movingTable || movingChair || movingProp){ if (cjob && cjob.phase !== 'work'){ C.walk([]); cjob = null; } cLook = clock + 0.5; return; }
       if (cjob){
-        if (cjob.phase === 'go' && C.replan && C.replan()){
+        if (cjob.phase === 'go' && clock >= (cjob.replanAt || 0) && C.replan && C.replan()){
+          cjob.replanAt = clock + 0.5;
           var again = ctx.findWay && ctx.findWay(me, V(cjob.x, 0, cjob.z), 0.32);
           if (again && again.length) C.walk(again); else { C.walk([]); cSkip[cjob.key] = clock + 30; cjob = null; return; }
         }

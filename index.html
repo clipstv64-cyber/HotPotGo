@@ -659,8 +659,13 @@
       var x0 = mapBounds.x0 + 0.1, x1 = PARTITION.x - 0.35, z0 = -GROUND_HALF + 0.1, z1 = GROUND_HALF - 0.1;
       var nx = Math.ceil((x1 - x0) / WAY_CELL), nz = Math.ceil((z1 - z0) / WAY_CELL), n = nx * nz, key = wayKey(r);
       if (!wayGrid || wayGrid.key !== key || wayGrid.n !== n){
-        var fr = new Uint8Array(n);
-        for (var i = 0; i < nx; i++) for (var j = 0; j < nz; j++){ var cx = x0 + (i + 0.5) * WAY_CELL, cz = z0 + (j + 0.5) * WAY_CELL; fr[i * nz + j] = floorFree(cx, cz, r) ? 1 : 0; }
+        var fr = new Uint8Array(n).fill(1);
+        obstacles.forEach(function(b){   // (a cell is blocked when its middle is within r of the box, as floorFree)
+          var i0 = Math.max(0, Math.floor((b.minX - r - x0) / WAY_CELL - 0.5)), i1 = Math.min(nx - 1, Math.ceil((b.maxX + r - x0) / WAY_CELL - 0.5));
+          var j0 = Math.max(0, Math.floor((b.minZ - r - z0) / WAY_CELL - 0.5)), j1 = Math.min(nz - 1, Math.ceil((b.maxZ + r - z0) / WAY_CELL - 0.5));
+          for (var i = i0; i <= i1; i++){ var cx = x0 + (i + 0.5) * WAY_CELL; if (!(cx > b.minX - r && cx < b.maxX + r)) continue;
+            for (var j = j0; j <= j1; j++){ var cz = z0 + (j + 0.5) * WAY_CELL; if (cz > b.minZ - r && cz < b.maxZ + r) fr[i * nz + j] = 0; } }
+        });
         wayGrid = { key: key, n: n, free: fr, g: new Float32Array(n), came: new Int32Array(n), shut: new Uint8Array(n) };
       }
       var free = wayGrid.free;
@@ -1008,9 +1013,9 @@
           var i2surf = kitchen.surfaces[kitchen.surfaces.length - 1];
           var on2 = [];   // (what stands on it: { h, taken })
           i2.h.updateMatrixWorld(true);
-          var ragLocal = i2.h.worldToLocal(kitchen.ragAt.clone()), yawOf = function(){ return new THREE.Euler().setFromQuaternion(i2.h.quaternion, 'YXZ').y; }, ragYaw0 = yawOf();
+          var ragLocal = i2.h.worldToLocal(kitchen.ragAt.clone()), ragTmp = new THREE.Vector3(), ragEuler = new THREE.Euler(), yawOf = function(){ return ragEuler.setFromQuaternion(i2.h.quaternion, 'YXZ').y; }, ragYaw0 = yawOf();
           // (the cloth's place follows the table, also while it is carried: true when it moved)
-          kitchen.ragFollow = function(){ var p = i2.h.localToWorld(ragLocal.clone()); kitchen.ragTurn = yawOf() - ragYaw0; if (p.distanceToSquared(kitchen.ragAt) < 1e-6) return false; kitchen.ragAt.copy(p); return true; };
+          kitchen.ragFollow = function(){ var p = i2.h.localToWorld(ragTmp.copy(ragLocal)); kitchen.ragTurn = yawOf() - ragYaw0; if (p.distanceToSquared(kitchen.ragAt) < 1e-6) return false; kitchen.ragAt.copy(p); return true; };
           if (bl && b2){ i2.h.attach(b2.h); on2.push({ h: b2.h, taken: kitchen.taken[kitchen.taken.length - (sp ? 2 : 1)] }); }
           if (sp && p2){ i2.h.attach(p2.h); on2.push({ h: p2.h, taken: kitchen.taken[kitchen.taken.length - 1] }); }
           if (i2box && decor && decor.movables) decor.movables.push({ key: 'k_island2', name: 'prep table', holder: i2.h, box: i2box, big: true, boxOff: { x: 0, z: 0 },
@@ -3186,6 +3191,8 @@
       w.fingers = [];
       ['Index', 'Middle', 'Ring', 'Pinky'].forEach(function(f){ [1, 2, 3].forEach(function(j){ var b = w.bone('RightHand' + f + j); if (b) w.fingers.push({ b: b, axis: new THREE.Vector3(1, 0, 0), angle: CLEANER.curl * (j === 1 ? 1.0 : 0.9) }); }); });
       [1, 2].forEach(function(j){ var b = w.bone('RightHandThumb' + j); if (b) w.fingers.push({ b: b, axis: new THREE.Vector3(1, 0, 0), angle: CLEANER.thumb }); });
+      // what is posed by hand each frame (the right arm, the fingers): its pose from the walk cycle kept here
+      w.keep = [w.arms[1][0], w.arms[1][1]].concat(w.fingers.map(function(f){ return f.b; })).map(function(b){ return { b: b, q0: new THREE.Quaternion(), on: false }; });
       cleaner = w;
     });
   }
@@ -3231,7 +3238,7 @@
     }
     var moving = walkStaff(cleaner, CLEANER, dt);
     // (the arm was reached forward last frame: back as the walk cycle has it, before the mixer)
-    cleaner.saved.forEach(function(e){ e[0].quaternion.copy(e[1]); }); cleaner.saved.length = 0;
+    if (cleaner.keep) cleaner.keep.forEach(function(e){ if (e.on && e.b){ e.b.quaternion.copy(e.q0); e.on = false; } });
     if (cleaner.walk){
       cleaner.walk.paused = !moving; cleaner.walk.timeScale = CLEANER.speed * (cleaner.pace || 1) / CLEANER.stride;
       if (!moving) cleaner.walk.time = cleaner.stand;
@@ -3239,17 +3246,17 @@
     cleaner.mixer.update(moving ? dt : 0);
     var working = !moving && !!cleaner.work;
     cleaner.workT += dt;
-    g.updateMatrixWorld(true);
+    function keepPose(i){ var e = cleaner.keep && cleaner.keep[i]; if (e && e.b && !e.on){ e.q0.copy(e.b.quaternion); e.on = true; } }
     var fwd = cv1.set(0, 0, 1).applyQuaternion(g.quaternion), right = cv2.set(-1, 0, 0).applyQuaternion(g.quaternion), a = cleaner.arms[1];
     var sweep = working ? Math.sin(cleaner.workT * (cleaner.work === 'wipe' ? 9 : 6)) : 0;
     if (working && a[0] && a[1] && a[2]){   // the right arm forward and down, the hand round the handle
-      cleaner.saved.push([a[0], a[0].quaternion.clone()], [a[1], a[1].quaternion.clone()]);
+      keepPose(0); keepPose(1);
       aimWaiterBone(a[0], a[1], cv3.set(0, -0.45, 0).addScaledVector(fwd, 0.9 + 0.12 * sweep).addScaledVector(right, 0.1).normalize());
       aimWaiterBone(a[1], a[2], cv3.set(0, -0.3, 0).addScaledVector(fwd, 0.9).addScaledVector(right, -0.1 + 0.18 * sweep).normalize());
     }
     // his right hand closed round the handle (the fingers bent at each joint; the thumb across)
     if (cleaner.broom && cleaner.fingers){
-      cleaner.fingers.forEach(function(f){ cleaner.saved.push([f.b, f.b.quaternion.clone()]); f.b.quaternion.multiply(cq2.setFromAxisAngle(f.axis, f.angle)); });
+      cleaner.fingers.forEach(function(f, i){ keepPose(2 + i); f.b.quaternion.multiply(cq2.setFromAxisAngle(f.axis, f.angle)); });
       g.updateMatrixWorld(true);
     }
     if (cleaner.broom){
