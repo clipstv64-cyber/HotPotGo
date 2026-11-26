@@ -3391,6 +3391,9 @@
       clock += dt; frameNo++;
       if (escHint > 0 && !hold && place.pot){ escHint -= dt; if (escHint <= 0) say('Esc pauses the game and shows the controls', 6); }
       var wk = ctx.getKitchen && ctx.getKitchen(), wm = wk && wk.washer && wk.washer.children[0];
+      if (wk && !wk.surfaceBusy) wk.surfaceBusy = function(sf){   // (something of the chef's lying on a work surface: it is not moved)
+        return Object.keys(state.items).some(function(id){ var o = state.items[id]; return o.at === 'surface' && o.x > sf.minX - 0.15 && o.x < sf.maxX + 0.15 && o.z > sf.minZ - 0.15 && o.z < sf.maxZ + 0.15 && o.y > 0.3; });
+      };
       if (wm) wm.rotation.z = state.washer.left > 0 ? Math.sin(clock * 47) * 0.0025 : 0;
       buildPlaces();
       showSpills();

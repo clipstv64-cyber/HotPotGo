@@ -1002,6 +1002,23 @@
           addBox(ix, jz, il.s.z, il.s.x, il.s.y);
           if (bl){ var b2 = copy(bl), bz2 = jz + il.s.x * 0.22; b2.h.position.set(ix, surfaceY(i2.h, ix, bz2), bz2); b2.h.rotation.y = -0.4; scene.add(b2.h); kitchen.taken.push({ x: ix, z: bz2, r: 0.36 }); }
           if (sp){ var p2 = copy(sp), pz2 = jz - il.s.x * 0.22; p2.h.position.set(ix, surfaceY(i2.h, ix, pz2), pz2); p2.h.rotation.y = 2.2; scene.add(p2.h); kitchen.taken.push({ x: ix, z: pz2, r: 0.5 }); }
+          // the second table can be moved (held mouse button, as the decor's big things): its block and stock
+          // pot go with it, and so do its work surface and the places they take on it
+          var i2surf = kitchen.surfaces[kitchen.surfaces.length - 1];
+          var i2box = obstacles.filter(function(b){ return Math.abs((b.minX + b.maxX) / 2 - ix) < 0.01 && Math.abs((b.minZ + b.maxZ) / 2 - jz) < 0.01; })[0];
+          var on2 = [];   // (what stands on it: { h, taken })
+          i2.h.updateMatrixWorld(true);
+          if (bl && b2){ i2.h.attach(b2.h); on2.push({ h: b2.h, taken: kitchen.taken[kitchen.taken.length - (sp ? 2 : 1)] }); }
+          if (sp && p2){ i2.h.attach(p2.h); on2.push({ h: p2.h, taken: kitchen.taken[kitchen.taken.length - 1] }); }
+          if (i2box && decor && decor.movables) decor.movables.push({ key: 'k_island2', name: 'prep table', holder: i2.h, box: i2box, big: true, boxOff: { x: 0, z: 0 },
+            half: { x: (i2box.maxX - i2box.minX) / 2, z: (i2box.maxZ - i2box.minZ) / 2, yaw: i2.h.rotation.y },
+            canMove: function(){ return !(kitchen.surfaceBusy && kitchen.surfaceBusy(i2surf)); },   // (nothing of the chef's lying on it)
+            onPut: function(){
+              var p = i2.h.position, turned = Math.abs(Math.sin(i2.h.rotation.y - Math.PI / 2)) > 0.7, hx = (turned ? il.s.x : il.s.z) / 2, hz = (turned ? il.s.z : il.s.x) / 2;
+              i2surf.minX = p.x - hx + 0.12; i2surf.maxX = p.x + hx - 0.12; i2surf.minZ = p.z - hz + 0.12; i2surf.maxZ = p.z + hz - 0.12;
+              i2.h.updateMatrixWorld(true);
+              on2.forEach(function(o){ if (!o.taken) return; var w = o.h.getWorldPosition(new THREE.Vector3()); o.taken.x = w.x; o.taken.z = w.z; });
+            } });
         }
         // paper lanterns hanging from the long beam, each with its own warm light
         if (ln){
