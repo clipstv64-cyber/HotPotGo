@@ -3386,8 +3386,10 @@
         });
       }
     }
+    var escHint = 0;   // (a new restaurant: seconds until the hint where the controls are)
     function update(dt){
       clock += dt; frameNo++;
+      if (escHint > 0 && !hold && place.pot){ escHint -= dt; if (escHint <= 0) say('Esc pauses the game and shows the controls', 6); }
       var wk = ctx.getKitchen && ctx.getKitchen(), wm = wk && wk.washer && wk.washer.children[0];
       if (wm) wm.rotation.z = state.washer.left > 0 ? Math.sin(clock * 47) * 0.0025 : 0;
       buildPlaces();
@@ -4279,6 +4281,7 @@
     });
     // 'continue' with the saved restaurant, or a 'new' one (the saved one stays as the backup)
     function begin(what){
+      if (what === 'new') escHint = 4;   // (a new restaurant: after a few seconds, where the controls are)
       if (!hold || pauseEl) return false;
       if (what === 'continue') applySave(saved.data);
       hold = false;
@@ -4294,7 +4297,8 @@
       function first(){
         card('<h2>Hot Pot Go</h2><p>Your restaurant \u00b7 day ' + st.day.n + ' \u00b7 ' + signed(Math.round(st.money)) + ' in the till</p>' +
              (saved.backup ? '<p class="warn">The last save could not be read. This is the one from before.</p>' : '') +
-             '<button data-do="continue">Continue</button><button class="quiet" data-do="ask">New restaurant</button>');
+             '<button data-do="continue">Continue</button><button class="quiet" data-do="ask">New restaurant</button>' +
+             '<p class="sub" style="margin-top:14px;font-size:14px">Esc pauses the game and shows the controls</p>');
       }
       el.addEventListener('click', function(e){
         var what = e.target && e.target.getAttribute && e.target.getAttribute('data-do');
@@ -4323,6 +4327,7 @@
       window.addEventListener('keydown', function(e){ if (hold && startEl && e.key === 'Enter') begin('continue'); });
       window.addEventListener('beforeunload', function(){ if (pauseEl) savePaused(); else saveNow(false); });
     }
+    if (!saved) escHint = 4;
 
     return {
       update: update, mouse: mouse,
