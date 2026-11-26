@@ -856,7 +856,7 @@
       // the dishwasher: when the wash is over, its bowls are back on the stack
       if (state.washer.left > 0){
         state.washer.left -= dt;
-        if (state.washer.left <= 0){ state.washer.left = 0; state.bowls += state.washer.bowls; state.washer.bowls = 0; }
+        if (state.washer.left <= 0){ state.washer.left = 0; state.bowls += state.washer.bowls; state.washer.bowls = 0; var wk0 = ctx.getKitchen && ctx.getKitchen(); if (wk0 && wk0.washerAt) dingSound(nearChef(wk0.washerAt, 14)); }
       }
       // orders arrive in the storeroom: a box (what comes while a box still stands there goes into that one)
       for (var oi = state.orders.length - 1; oi >= 0; oi--){
@@ -2222,6 +2222,67 @@
         laying = null;
       }
     }
+    // ---------- sounds of the kitchen machines and the staff ------------------------------------------
+    function sound(){ try { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); return audio; } catch (e){ return null; } }
+    function nearChef(p, far){ var me = ctx.getChef && ctx.getChef(); return me && p ? Math.max(0, 1 - Math.hypot(me.position.x - p.x, me.position.z - p.z) / far) : 0; }
+    function splashSound(loud){
+      var A = sound(); if (!A || loud <= 0) return;
+      try {
+        var t = A.currentTime, n = Math.floor(A.sampleRate * 0.35), buf = A.createBuffer(1, n, A.sampleRate), d = buf.getChannelData(0);
+        for (var i = 0; i < n; i++){ var u = i / n; d[i] = (Math.random() * 2 - 1) * Math.pow(1 - u, 2.2) * (u < 0.04 ? u / 0.04 : 1); }
+        var src = A.createBufferSource(); src.buffer = buf;
+        var flt = A.createBiquadFilter(); flt.type = 'lowpass'; flt.frequency.setValueAtTime(2600, t); flt.frequency.exponentialRampToValueAtTime(500, t + 0.3);
+        var gn = A.createGain(); gn.gain.value = 0.55 * loud;
+        src.connect(flt); flt.connect(gn); gn.connect(A.destination); src.start(t);
+      } catch (e) { /* no sound then */ }
+    }
+    function dingSound(loud){
+      var A = sound(); if (!A || loud <= 0) return;
+      try {
+        var t = A.currentTime;
+        [1320, 1760].forEach(function(f, k){
+          var o = A.createOscillator(), g = A.createGain(); o.type = 'sine'; o.frequency.value = f;
+          g.gain.setValueAtTime(0.0001, t + k * 0.16); g.gain.exponentialRampToValueAtTime(0.16 * loud, t + k * 0.16 + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + k * 0.16 + 0.9);
+          o.connect(g); g.connect(A.destination); o.start(t + k * 0.16); o.stop(t + k * 0.16 + 0.95);
+        });
+      } catch (e) { /* no sound then */ }
+    }
+    function brushSound(loud){
+      var A = sound(); if (!A || loud <= 0) return;
+      try {
+        var t = A.currentTime, n = Math.floor(A.sampleRate * 0.22), buf = A.createBuffer(1, n, A.sampleRate), d = buf.getChannelData(0);
+        for (var i = 0; i < n; i++){ var u = i / n; d[i] = (Math.random() * 2 - 1) * Math.sin(Math.PI * u); }
+        var src = A.createBufferSource(); src.buffer = buf;
+        var flt = A.createBiquadFilter(); flt.type = 'bandpass'; flt.frequency.value = 3200; flt.Q.value = 0.7;
+        var gn = A.createGain(); gn.gain.value = 0.2 * loud;
+        src.connect(flt); flt.connect(gn); gn.connect(A.destination); src.start(t);
+      } catch (e) { /* no sound then */ }
+    }
+    // the dishwasher's hum: a looped low noise, as loud as the chef is near while it washes
+    var hum = null, brushT = 0;
+    function machineSounds(dt){
+      var wk = ctx.getKitchen && ctx.getKitchen(), loud = state.washer.left > 0 && wk && wk.washerAt && !hold ? nearChef(wk.washerAt, 9) : 0;
+      if (loud > 0 && !hum){
+        var A = sound();
+        if (A) try {
+          var n = A.sampleRate * 2, buf = A.createBuffer(1, n, A.sampleRate), d = buf.getChannelData(0), last = 0;
+          for (var i = 0; i < n; i++){ last = last * 0.97 + (Math.random() * 2 - 1) * 0.03; d[i] = last * 6 + Math.sin(i / A.sampleRate * 2 * Math.PI * 95) * 0.25; }
+          var src = A.createBufferSource(); src.buffer = buf; src.loop = true;
+          var flt = A.createBiquadFilter(); flt.type = 'lowpass'; flt.frequency.value = 700;
+          var gn = A.createGain(); gn.gain.value = 0;
+          src.connect(flt); flt.connect(gn); gn.connect(A.destination); src.start();
+          hum = { src: src, gain: gn };
+        } catch (e) { hum = null; }
+      }
+      if (hum){
+        hum.gain.gain.value += (0.22 * loud - hum.gain.gain.value) * Math.min(1, dt * 4);
+        if (loud <= 0 && hum.gain.gain.value < 0.003){ try { hum.src.stop(); } catch (e){} hum = null; }
+      }
+      // the cleaner sweeping near the chef: a stroke of the broom now and then
+      var C = ctx.getCleaner && ctx.getCleaner(), cp = C && C.ready() && C.shown() && cjob && cjob.phase === 'work' && cjob.kind === 'sweep' ? C.pos() : null;
+      brushT -= dt;
+      if (cp && brushT <= 0 && !hold){ brushT = 0.55 + Math.random() * 0.15; brushSound(nearChef(cp, 8)); }
+    }
     function knockSound(){
       try {
         audio = audio || new (window.AudioContext || window.webkitAudioContext)();
@@ -3184,6 +3245,7 @@
       if (it.kind === 'stew' && (it.y < 0.15 || 1 - 2 * (q.x * q.x + q.z * q.z) < 0.6)){
         it.kind = 'dirty'; delete it.dish; delete it.q; delete it.batch;
         if (it.y < 0.15 && play.spill) play.spill(it.x, it.z);
+        splashSound(Math.max(0.3, nearChef(it, 10)));
         say('Spilt \u2013 that bowl needs washing now');
         return;
       }
@@ -3423,6 +3485,7 @@
     var escHint = 0;   // (a new restaurant: seconds until the hint where the controls are)
     function update(dt){
       clock += dt; frameNo++;
+      machineSounds(dt);
       if (escHint > 0 && !hold && place.pot){ escHint -= dt; if (escHint <= 0) say('Esc pauses the game and shows the controls', 6); }
       var wk = ctx.getKitchen && ctx.getKitchen(), wm = wk && wk.washer && wk.washer.children[0];
       if (wk && wk.ragFollow && wk.ragFollow()){ wk.homesMoved = true; if (place.home && place.home.rag && wk.ragTurn !== undefined) place.home.rag.rot = 0.3 + wk.ragTurn; }   // (the table with the cloth's place moved)
