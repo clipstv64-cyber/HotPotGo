@@ -26,6 +26,7 @@
       "restaurant.js",
       "models/**/*",
       "textures/**/*",
+      "audio/**/*",
       "vendor/**/*"
     ],
     "asar": true,

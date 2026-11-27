@@ -119,7 +119,8 @@ function createWindow() {
     win.on('page-title-updated', (event) => event.preventDefault());
     win.showInactive();
   }
-  win.loadURL('app://game/index.html' + (process.env.HOTPOT_QUERY || ''));   // query: test settings only
+  const query = (process.env.HOTPOT_QUERY || '') + (process.env.HOTPOT_SELFTEST ? (process.env.HOTPOT_QUERY ? '&' : '?') + 'selftest=1' : '');   // (a self-test skips the title screen)
+  win.loadURL('app://game/index.html' + query);   // query: test settings only
 
   // F11 = full screen, F12 = developer tools (development only)
   win.webContents.on('before-input-event', (event, input) => {

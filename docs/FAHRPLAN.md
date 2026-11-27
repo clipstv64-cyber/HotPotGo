@@ -90,6 +90,10 @@ Phase 1 ist vollständig (der Kühlschrank hat seit dem 25.11.2026 eine Aufgabe:
 | 1 | Mitarbeiter | fertig in der ersten Fassung (Kellner und Putzhilfe): ein Kellner (neues Meshy-Modell mit Laufanimation), am Computer unter „Staff“ eingestellt (150 €, danach 30 € Lohn am Ende jedes Tages). Der Koch stellt volle Schüsseln auf die Theke (F, drei Plätze), der Kellner bringt sie dem Gast, der dieses Gericht bestellt hat, und nimmt an den Tischen die Bestellungen auf; er geht dabei den Weg der Gäste (an der Theke entlang, an der Vorderwand, dann den Gang bei den Tischen) und von Tisch zu Tisch, solange keine Schüssel auf ihn wartet. Hat er nichts zu tun, räumt er schmutzige Schüsseln von den Tischen ab und stellt sie auf die Theke (links und rechts neben die vollen Schüsseln), wo der Koch sie zum Spülen holt. Der Koch kann weiter selbst bedienen. Dazu (26.11.2026) eine Putzhilfe (neues Meshy-Modell mit Laufanimation, „Staff“, 120 €, 25 € Lohn am Tag): er sucht sich selbst den Weg zwischen den Möbeln, kehrt die Flecken im Gastraum mit seinem Besen weg und wischt verschüttete Reste von Tischen, an denen niemand sitzt; hat er nichts zu tun, wartet er an der Rückwand zwischen Spielautomat und altem Kühlschrank. Kellner, Putzhilfe und Gäste weichen einander aus, die beiden bleiben vor dem Koch kurz stehen. Unter „Staff“ kann man beide wieder entlassen („Let him go“, dann kein Lohn mehr; wieder einstellen kostet den Preis erneut); auf dem Tageszettel steht der Lohn in einer eigenen Zeile |
 | 2 | Mehrspieler | offen |
 
+## Startbildschirm (27.11.2026)
+
+Beim Start erscheint der Titelbildschirm (Bild und Musik „Order Up!“ von der Nutzerin): Play, Settings (Lautstärke für Musik und Geräusche), Credits, Quit. Die Titelmusik spielt nur dort und wird bei Play ausgeblendet. Gibt es einen Spielstand, folgt danach die Karte „Continue / New restaurant“.
+
 ## Absprachen
 
 - **Nicht vom Konzept abweichen** (Wunsch vom 20.11.2026). Wo das Konzept etwas offen

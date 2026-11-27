@@ -2003,7 +2003,7 @@
           var src = audio.createBufferSource(); src.buffer = buf;
           var flt = audio.createBiquadFilter(); flt.type = 'highpass'; flt.frequency.value = 4200;
           var gn = audio.createGain(); gn.gain.value = 0.22;
-          src.connect(flt); flt.connect(gn); gn.connect(audio.destination); src.start(t);
+          src.connect(flt); flt.connect(gn); gn.connect(sfxOut()); src.start(t);
         }
       } catch (e) { /* no sound then */ }
     }
@@ -2018,11 +2018,11 @@
         var src = audio.createBufferSource(); src.buffer = buf;
         var flt = audio.createBiquadFilter(); flt.type = 'bandpass'; flt.frequency.value = ok ? 1700 : 520; flt.Q.value = 0.8;
         var gn = audio.createGain(); gn.gain.value = ok ? 0.5 : 0.28;
-        src.connect(flt); flt.connect(gn); gn.connect(audio.destination); src.start(t);
+        src.connect(flt); flt.connect(gn); gn.connect(sfxOut()); src.start(t);
         var osc = audio.createOscillator(), og = audio.createGain();
         osc.frequency.setValueAtTime(150, t); osc.frequency.exponentialRampToValueAtTime(60, t + 0.08);
         og.gain.setValueAtTime(0.32, t); og.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
-        osc.connect(og); og.connect(audio.destination); osc.start(t); osc.stop(t + 0.11);
+        osc.connect(og); og.connect(sfxOut()); osc.start(t); osc.stop(t + 0.11);
       } catch (e) { /* no sound then */ }
     }
 
@@ -2236,6 +2236,14 @@
         laying = null;
       }
     }
+    // the game's sounds all go through one gain (its volume: the title screen's settings)
+    var sfxGain = null;
+    function sfxOut(){
+      if (!sfxGain){ sfxGain = audio.createGain(); sfxGain.gain.value = setting('sfx', 0.9); sfxGain.connect(audio.destination); }
+      return sfxGain;
+    }
+    function setting(k, dflt){ try { var v = parseFloat(localStorage.getItem('hotpot.' + k)); return isFinite(v) ? Math.max(0, Math.min(1, v)) : dflt; } catch (e){ return dflt; } }
+    function setSetting(k, v){ try { localStorage.setItem('hotpot.' + k, String(v)); } catch (e){} }
     // ---------- sounds of the kitchen machines and the staff ------------------------------------------
     function sound(){ try { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); return audio; } catch (e){ return null; } }
     function nearChef(p, far){ var me = ctx.getChef && ctx.getChef(); return me && p ? Math.max(0, 1 - Math.hypot(me.position.x - p.x, me.position.z - p.z) / far) : 0; }
@@ -2247,7 +2255,7 @@
         var src = A.createBufferSource(); src.buffer = buf;
         var flt = A.createBiquadFilter(); flt.type = 'lowpass'; flt.frequency.setValueAtTime(2600, t); flt.frequency.exponentialRampToValueAtTime(500, t + 0.3);
         var gn = A.createGain(); gn.gain.value = 0.55 * loud;
-        src.connect(flt); flt.connect(gn); gn.connect(A.destination); src.start(t);
+        src.connect(flt); flt.connect(gn); gn.connect(sfxOut()); src.start(t);
       } catch (e) { /* no sound then */ }
     }
     function dingSound(loud){
@@ -2257,7 +2265,7 @@
         [1320, 1760].forEach(function(f, k){
           var o = A.createOscillator(), g = A.createGain(); o.type = 'sine'; o.frequency.value = f;
           g.gain.setValueAtTime(0.0001, t + k * 0.16); g.gain.exponentialRampToValueAtTime(0.16 * loud, t + k * 0.16 + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + k * 0.16 + 0.9);
-          o.connect(g); g.connect(A.destination); o.start(t + k * 0.16); o.stop(t + k * 0.16 + 0.95);
+          o.connect(g); g.connect(sfxOut()); o.start(t + k * 0.16); o.stop(t + k * 0.16 + 0.95);
         });
       } catch (e) { /* no sound then */ }
     }
@@ -2269,7 +2277,7 @@
         var src = A.createBufferSource(); src.buffer = brushSound.buf;
         var flt = A.createBiquadFilter(); flt.type = 'bandpass'; flt.frequency.value = 3200; flt.Q.value = 0.7;
         var gn = A.createGain(); gn.gain.value = 0.2 * loud;
-        src.connect(flt); flt.connect(gn); gn.connect(A.destination); src.start(t);
+        src.connect(flt); flt.connect(gn); gn.connect(sfxOut()); src.start(t);
       } catch (e) { /* no sound then */ }
     }
     // the dishwasher's hum: a looped low noise, as loud as the chef is near while it washes
@@ -2286,7 +2294,7 @@
           var src = A.createBufferSource(); src.buffer = machineSounds.buf; src.loop = true;
           var flt = A.createBiquadFilter(); flt.type = 'lowpass'; flt.frequency.value = 700;
           var gn = A.createGain(); gn.gain.value = 0;
-          src.connect(flt); flt.connect(gn); gn.connect(A.destination); src.start();
+          src.connect(flt); flt.connect(gn); gn.connect(sfxOut()); src.start();
           hum = { src: src, gain: gn };
         } catch (e) { hum = null; humFailed = true; }
       }
@@ -2307,7 +2315,7 @@
         var src = audio.createBufferSource(); src.buffer = buf;
         var flt = audio.createBiquadFilter(); flt.type = 'lowpass'; flt.frequency.value = 900;
         var gn = audio.createGain(); gn.gain.value = 0.5;
-        src.connect(flt); flt.connect(gn); gn.connect(audio.destination); src.start(t);
+        src.connect(flt); flt.connect(gn); gn.connect(sfxOut()); src.start(t);
       } catch (e) { /* no sound then */ }
     }
     // the mouse while rolling or knocking (see mouse())
@@ -4432,6 +4440,89 @@
       if (what !== 'continue') saveNow(true);
       return true;
     }
+    // ---------- the title screen: the picture with its buttons (Play, Settings, Credits, Quit) ----------
+    // The buttons are drawn on the picture; clickable areas lie over them (in shares of the picture,
+    // which is shown like 'cover': it fills the window and keeps its shape). The title music plays only here.
+    var titleEl = null, titleMusic = null, TITLE_W = 1672, TITLE_H = 941;
+    var TITLE_BTNS = [['play', 1056, 488, 1440, 582], ['settings', 1068, 598, 1428, 672], ['credits', 1076, 687, 1424, 760], ['quit', 1084, 776, 1416, 850]];
+    function titleCss(){
+      if (document.getElementById('hp-title-css')) return;
+      var st = document.createElement('style'); st.id = 'hp-title-css';
+      st.textContent =
+        '.hp-title{position:fixed;inset:0;z-index:30;background:#2a1a10;overflow:hidden;user-select:none;transition:opacity .6s}' +
+        '.hp-title.out{opacity:0;pointer-events:none}' +
+        '.hp-title .pic{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:max(100vw,calc(100vh * ' + (TITLE_W / TITLE_H).toFixed(5) + '));aspect-ratio:' + TITLE_W + '/' + TITLE_H + ';background:url(textures/title.webp) center/100% 100% no-repeat}' +
+        '.hp-title .btn{position:absolute;border-radius:10px;cursor:pointer;transition:background .15s,box-shadow .15s,transform .15s}' +
+        '.hp-title .btn:hover{background:rgba(255,236,190,.16);box-shadow:0 0 0 3px rgba(255,230,170,.55),0 0 18px rgba(255,200,120,.45);transform:scale(1.03)}' +
+        '.hp-title .btn:active{transform:scale(.98)}' +
+        '.hp-title .cards{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}' +
+        '.hp-title .card{display:none;pointer-events:auto;transform:rotate(-1deg);text-align:center}' +
+        '.hp-title .card p{margin:6px 0 0;font-style:italic;color:#6b513a}' +
+        '.hp-title .card button{display:block;width:100%;margin-top:20px;padding:10px 12px;border:2px solid #4a3626;border-radius:3px;background:#4a3626;color:#f4ead2;font:600 17px/1.2 Georgia,"Times New Roman",serif;cursor:pointer}' +
+        '.hp-title .card button:hover{background:#6b513a}' +
+        '.hp-title .card.on{display:block}' +
+        '.hp-title .card label{display:flex;justify-content:space-between;align-items:center;gap:16px;margin:12px 0 0;font-style:italic}' +
+        '.hp-title .card input[type=range]{width:170px;accent-color:#6b513a}';
+      document.head.appendChild(st);
+    }
+    function startTitleMusic(){
+      try {
+        var A = audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+        fetch('audio/title.mp3').then(function(res){ return res.arrayBuffer(); }).then(function(buf){ return new Promise(function(ok, no){ A.decodeAudioData(buf, ok, no); }); }).then(function(data){
+          if (!titleEl) return;   // (already gone)
+          var src = A.createBufferSource(), g = A.createGain(); src.buffer = data; src.loop = true;
+          g.gain.value = 0; g.gain.linearRampToValueAtTime(setting('music', 0.7), A.currentTime + 1.2);
+          src.connect(g); g.connect(A.destination); src.start();
+          titleMusic = { src: src, gain: g };
+          if (A.state === 'suspended'){   // (no sound before the first click on some machines: then it starts with it)
+            var wake = function(){ A.resume(); window.removeEventListener('pointerdown', wake, true); window.removeEventListener('keydown', wake, true); };
+            window.addEventListener('pointerdown', wake, true); window.addEventListener('keydown', wake, true);
+          }
+        }).catch(function(e){ console.error('The title music could not be played:', e); });
+      } catch (e){ /* no music then */ }
+    }
+    function stopTitleMusic(){
+      var m = titleMusic; titleMusic = null; if (!m || !audio) return;
+      try { var t = audio.currentTime; m.gain.gain.cancelScheduledValues(t); m.gain.gain.setValueAtTime(m.gain.gain.value, t); m.gain.gain.linearRampToValueAtTime(0, t + 0.8); m.src.stop(t + 0.85); } catch (e){}
+    }
+    function showTitle(after){
+      titleCss();
+      hold = true; document.body.classList.add('hp-hold');
+      var el = titleEl = document.createElement('div'); el.className = 'hp-title';
+      var pic = '<div class="pic">' + TITLE_BTNS.map(function(b){
+        return '<div class="btn" data-do="' + b[0] + '" style="left:' + (b[1] / TITLE_W * 100).toFixed(3) + '%;top:' + (b[2] / TITLE_H * 100).toFixed(3) + '%;width:' + ((b[3] - b[1]) / TITLE_W * 100).toFixed(3) + '%;height:' + ((b[4] - b[2]) / TITLE_H * 100).toFixed(3) + '%" title="' + b[0] + '"></div>';
+      }).join('') + '</div>';
+      var settings = '<div class="card hp-paper" data-card="settings"><h2>Settings</h2>' +
+        '<label>Music <input type="range" min="0" max="1" step="0.05" data-set="music" value="' + setting('music', 0.7) + '"></label>' +
+        '<label>Sounds <input type="range" min="0" max="1" step="0.05" data-set="sfx" value="' + setting('sfx', 0.9) + '"></label>' +
+        '<button data-do="back">Back</button></div>';
+      var credits = '<div class="card hp-paper" data-card="credits"><h2>Credits</h2>' +
+        '<p class="sub">Hot Pot Go</p><p>Made with love in a small, shabby kitchen</p><p>3D models made with Meshy</p><p>Title music: \u201cOrder Up!\u201d</p>' +
+        '<button data-do="back">Back</button></div>';
+      el.innerHTML = pic + '<div class="cards">' + settings + credits + '</div>';
+      function card(name){ el.querySelectorAll('.card').forEach(function(c){ c.classList.toggle('on', c.getAttribute('data-card') === name); }); el.querySelector('.pic').style.filter = name ? 'brightness(.55)' : ''; }
+      el.addEventListener('input', function(e){
+        var k = e.target && e.target.getAttribute && e.target.getAttribute('data-set'); if (!k) return;
+        var v = +e.target.value; setSetting(k, v);
+        if (k === 'music' && titleMusic) titleMusic.gain.gain.value = v;
+        if (k === 'sfx' && sfxGain) sfxGain.gain.value = v;
+      });
+      el.addEventListener('click', function(e){
+        var what = e.target && e.target.getAttribute && e.target.getAttribute('data-do');
+        if (!what) return;
+        if (what === 'settings' || what === 'credits') card(what);
+        else if (what === 'back') card(null);
+        else if (what === 'quit') window.close();
+        else if (what === 'play'){
+          stopTitleMusic();
+          el.classList.add('out'); setTimeout(function(){ if (el.parentNode) el.parentNode.removeChild(el); }, 650);
+          titleEl = null;
+          after();
+        }
+      });
+      document.body.appendChild(el);
+      startTitleMusic();
+    }
     function showStart(){
       var el = startEl = document.createElement('div'), st = saved.data.state;
       el.className = 'hp-start';
@@ -4465,7 +4556,14 @@
           if (store.setAside) store.setAside();
         }
       } catch (e){ console.error('Loading the saved game failed:', e); }
-      if (saved){ hold = true; showStart(); }
+      var selfTest = /[?&]selftest=1/.test(location.search) && !/[?&]title=1/.test(location.search);   // (a test may ask for it: title=1)
+      if (!selfTest) showTitle(function(){
+        if (saved){ showStart(); return; }
+        hold = false; document.body.classList.remove('hp-hold');
+        var cv = document.querySelector('canvas');   // straight into the game
+        try { var lock = cv && cv.requestPointerLock && cv.requestPointerLock(); if (lock && lock.catch) lock.catch(function(){}); } catch (err){}
+      });
+      else if (saved){ hold = true; showStart(); }
       window.addEventListener('keydown', function(e){ if (hold && startEl && e.key === 'Enter') begin('continue'); });
       window.addEventListener('beforeunload', function(){ if (pauseEl) savePaused(); else saveNow(false); });
     }
