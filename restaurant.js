@@ -4794,7 +4794,7 @@
       var picEl = el.querySelector('.pic'), cv = el.querySelector('.fx'), g = cv.getContext('2d');
       var mouse = { x: 0.5, y: 0.5, sx: 0.5, sy: 0.5, px: -1e4, py: -1e4 }, t0 = performance.now(), last = t0;
       var LAMPS = [[380, 50, 150, 1.0], [1540, 110, 160, 1.0], [166, 390, 60, 0.7], [22, 372, 45, 0.6]];   // x, y, glow radius, strength
-      var POT = { x0: 1085, x1: 1225, y: 142 };
+      var POT = { x0: 1095, x1: 1190, y: 108 };   // (just above the rim)
       var steam = [], dust = [];
       for (var i = 0; i < 46; i++){ var L = LAMPS[i % 2]; dust.push({ x: L[0] + (Math.random() - 0.5) * 420, y: L[1] + 40 + Math.random() * 360, vx: 0, vy: 0, s: 1.2 + Math.random() * 2.0, ph: Math.random() * 6.28, home: i % 2 }); }
       el.addEventListener('mousemove', function(e){
