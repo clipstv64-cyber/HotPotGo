@@ -4379,7 +4379,7 @@
       pendingChef = d.chef && num(d.chef.x) && num(d.chef.z) ? d.chef : null;
     }
     // the pause card: the game stands still behind it (as behind the start card)
-    var pauseEl = null, pauseAt = 0;
+    var pauseEl = null, pauseAt = 0, leaving = false;   // (leaving: saved already, the page goes back to the title screen)
     function showPause(){
       if (hold || pc || pauseEl || (ctx.seat && ctx.seat.active())) return;
       hold = true; document.body.classList.add('hp-hold');
@@ -4404,7 +4404,7 @@
       function card(note){
         el.innerHTML = '<div class="hp-paper"><h2>Paused</h2><p>Day ' + st.day.n + ' \u00b7 ' + signed(Math.round(st.money)) + ' in the till</p>' +
           (note ? '<p class="sub">' + note + '</p>' : '') +
-          '<button data-do="resume">Back to the game</button><button class="quiet" data-do="keys">Controls</button>' + (store ? '<button class="quiet" data-do="save">Save now</button><button class="quiet" data-do="quit">Save and quit</button>' : '') + '</div>';
+          '<button data-do="resume">Back to the game</button><button class="quiet" data-do="keys">Controls</button>' + (store ? '<button class="quiet" data-do="save">Save now</button>' : '') + '<button class="quiet" data-do="menu">' + (store ? 'Save and go to the main menu' : 'Main menu') + '</button>' + (store ? '<button class="quiet" data-do="quit">Save and quit</button>' : '') + '</div>';
       }
       el.addEventListener('click', function(e){
         var what = e.target && e.target.getAttribute && e.target.getAttribute('data-do');
@@ -4413,6 +4413,7 @@
         else if (what === 'back') card('');
         else if (what === 'save') card(savePaused() ? 'Saved.' : 'It could not be saved.');
         else if (what === 'quit'){ if (savePaused()) window.close(); else card('It could not be saved.'); }
+        else if (what === 'menu'){ if (!store || savePaused()){ leaving = true; if (window.hotpotApp && window.hotpotApp.restart) window.hotpotApp.restart(); else location.reload(); } else card('It could not be saved.'); }   // (the game starts again from the title screen)
       });
       card(''); document.body.appendChild(el);
     }
@@ -4573,7 +4574,7 @@
       if (!selfTest) showTitle();
       else if (saved){ hold = true; showStart(); }
       window.addEventListener('keydown', function(e){ if (hold && startEl && e.key === 'Enter') begin('continue'); });
-      window.addEventListener('beforeunload', function(){ if (pauseEl) savePaused(); else saveNow(false); });
+      window.addEventListener('beforeunload', function(){ if (leaving) return; if (pauseEl) savePaused(); else saveNow(false); });
     }
     if (!saved) escHint = 4;
 

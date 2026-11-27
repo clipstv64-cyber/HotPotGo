@@ -137,6 +137,9 @@ function createWindow() {
   // Never open external pages in the game window
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('will-navigate', (event) => event.preventDefault());
+  // back to the title screen (the pause card's main menu): the game page loaded again, from here
+  ipcMain.removeAllListeners('app:restart');
+  ipcMain.on('app:restart', (event) => { if (event.sender === win.webContents) win.webContents.reload(); });
 
   // In development: show errors from the game in the terminal
   if (!app.isPackaged) {
