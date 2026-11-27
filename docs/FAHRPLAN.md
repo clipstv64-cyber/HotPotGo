@@ -94,6 +94,10 @@ Phase 1 ist vollständig (der Kühlschrank hat seit dem 25.11.2026 eine Aufgabe:
 
 Beim Start erscheint der Titelbildschirm (Bild und Musik „Order Up!“ von der Nutzerin): Continue (der gespeicherte Stand; ohne Spielstand abgedunkelt), New Game (mit Spielstand: erst nachfragen), Settings (Lautstärke für Musik und Geräusche), Quit. Die Titelmusik spielt nur dort und wird beim Losspielen ausgeblendet. Im Pausenmenü (Esc) führt „Save and go to the main menu“ zurück zum Startbildschirm. Der Startbildschirm lebt: das Bild neigt und verschiebt sich leicht mit der Maus und atmet langsam, aus dem Topf steigt Dampf (neigt sich zur Maus), die Laternen flackern, Staub schwebt im Licht und weicht dem Mauszeiger aus, die Knöpfe federn beim Überfahren.
 
+## Werfen (27.11.2026)
+
+Was man mit der linken Maustaste hält (kleine Dinge und kleine Deko), kann man werfen: die rechte Maustaste dazu drücken und halten, ein Ring in der Bildmitte lädt den Wurf auf (knapp eine Sekunde bis voll), eine Markierung auf Boden oder Tisch zeigt, wo es landet (orange-rot, wenn es einen Gast treffen wird), ein paar Punkte zeigen den Anfang der Flugbahn; rechte Taste loslassen wirft in Blickrichtung, je länger geladen, desto weiter. Lässt man zuerst die linke Taste los, wird nicht geworfen, das Ding fällt wie bisher. Gegenstände bleiben im Raum (Wände, Decke, Vorderwand halten sie), liegen aufeinander (auch auf herumliegender Deko) und gehen nicht durch Tische. Ein getroffener Gast ist verärgert: wartet er auf Bestellung oder Essen, verliert er etwas Geduld (ein Fünftel des Balkens), das Ding prallt von ihm ab. Neue Geräusche: Aufheben (leises Klacken), Wurf (Wusch), Landen (Schüsseln und Porzellan klirren, anderes poltert, lauter je härter und näher). Das Gewicht bremst die Laufgeschwindigkeit nicht (auf Wunsch weggelassen).
+
 ## Absprachen
 
 - **Nicht vom Konzept abweichen** (Wunsch vom 20.11.2026). Wo das Konzept etwas offen

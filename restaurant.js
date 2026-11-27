@@ -2850,7 +2850,7 @@
       });
       if (!it && shown.carry !== null && shown.carry !== 'tool' && !heldProp){ shown.carry = null; play.setCarry(null); }   // ('tool': the ladle while stirring)
       // the line above the hint: cutting, a short message, or what he carries
-      var label = it ? 'Carrying ' + nameOf(it, 'a') + (it.kind === 'parcel' ? ': ' + goodsText(it.goods) : thingNote(it)) : '', ob = state.board && state.items[state.board];
+      var label = it ? 'Carrying ' + nameOf(it, 'a') + (it.kind === 'parcel' ? ': ' + goodsText(it.goods) : thingNote(it)) + (!HOME[it.kind] && it.at === 'hand' ? '   \u00b7   right mouse button: throw' : '') : '', ob = state.board && state.items[state.board];
       if (cutting && ob && cutAxis(ob)){
         var pl = CUTS[ob.kind];
         label = 'Slide the mouse sideways, pull it down to cut   \u00b7   cut ' + (cutCount(ob) + 1) + ' of ' + (pl.a + pl.b);
@@ -2877,7 +2877,9 @@
       // (the plain broadphase: the sweep-and-prune one let things fall through tables here)
       w.allowSleep = true; w.defaultContactMaterial.friction = 0.45; w.defaultContactMaterial.restitution = 0.12;
       var ground = new C.Body({ mass: 0, shape: new C.Plane() }); ground.quaternion.setFromEuler(-Math.PI / 2, 0, 0); w.addBody(ground);
-      phys = { C: C, world: w, statics: [], sig: '' };
+      var ceiling = new C.Body({ mass: 0, shape: new C.Plane() }); ceiling.quaternion.setFromEuler(Math.PI / 2, 0, 0); ceiling.position.set(0, 3.97, 0); w.addBody(ceiling);
+      var front = new C.Body({ mass: 0, shape: new C.Plane() }); front.quaternion.setFromEuler(0, Math.PI, 0); front.position.set(0, 0, 9.96); w.addBody(front);
+      phys = { C: C, world: w, statics: [], sig: '', loose: {}, looseAt: -1 };
       return phys;
     }
     function syncStatics(){   // the furniture's boxes, built again whenever they change (furniture moved, the room grown)
@@ -2928,12 +2930,14 @@
         if (!inX && c1.position.z > o.minZ && c1.position.z < o.maxZ) sz = 0;
         mid.x += sx; mid.z += sz; wp.x += sx; wp.z += sz;
       });
+      onTopOfLoose(mid, size, wp);
       body.position.set(mid.x, mid.y, mid.z); body.sleepSpeedLimit = 0.12; body.sleepTimeLimit = 0.35;
+      knockSounds(body, it.kind); if (P.looseAt !== undefined) P.looseAt = -1;
       var ch = ctx.getChef();   // (a little of his walking goes along)
       if (ch && ctx.isMoving()){ body.velocity.set(Math.sin(ch.rotation.y) * 0.8, 0, Math.cos(ch.rotation.y) * 0.8); }
       P.world.addBody(body);
       state.carry = null; it.at = 'falling'; it.x = wp.x; it.y = wp.y; it.z = wp.z;
-      falling[it.id] = { body: body, off: wp.clone().sub(mid), q: wq.clone(), t: 0 };
+      falling[it.id] = { body: body, off: wp.clone().sub(mid), q: wq.clone(), t: 0, safe: mid.clone() };
       delete it.tilt;
     }
     // a decor thing let fall the same way (props: key -> the same as falling, for the decor)
@@ -2947,19 +2951,27 @@
       syncStatics();
       var box = new T.Box3().setFromObject(obj), size = box.getSize(V()), mid = box.getCenter(V()), C = P.C;
       var body = new C.Body({ mass: 1, shape: new C.Box(new C.Vec3(Math.max(0.02, size.x / 2), Math.max(0.02, size.y / 2), Math.max(0.02, size.z / 2))), linearDamping: 0.05, angularDamping: 0.25, fixedRotation: !!m.upright });
+      var y0 = wp.y; onTopOfLoose(mid, size, wp); obj.position.y += wp.y - y0;
       body.position.set(mid.x, mid.y, mid.z); body.sleepSpeedLimit = 0.12; body.sleepTimeLimit = 0.35;
+      knockSounds(body, m.name); P.looseAt = -1;
       P.world.addBody(body);
-      propFalling[m.key] = { m: m, body: body, off: wp.clone().sub(mid), q: wq.clone(), t: 0 };
+      propFalling[m.key] = { m: m, body: body, off: wp.clone().sub(mid), q: wq.clone(), t: 0, safe: mid.clone() };
     }
     function stepPropFalling(dt){
       var keys = Object.keys(propFalling); if (!keys.length || !phys) return;
-      if (!Object.keys(falling).length) phys.world.step(1 / 60, dt, 4);   // (stepFalling steps it otherwise)
+      if (!Object.keys(falling).length){ syncLoose(); phys.world.step(1 / 120, dt, 8); }   // (stepFalling steps it otherwise)
       keys.forEach(function(k){
-        var f = propFalling[k], b = f.body, iq = b.interpolatedQuaternion, ip = b.interpolatedPosition, bq = new T.Quaternion(iq.x, iq.y, iq.z, iq.w);
+        var f = propFalling[k], b = f.body;
+        keepInRoom(f); throwHits(f);
+        var iq = b.interpolatedQuaternion, ip = b.interpolatedPosition, bq = new T.Quaternion(iq.x, iq.y, iq.z, iq.w);
         var p = V(ip.x, ip.y, ip.z).add(f.off.clone().applyQuaternion(bq)), q = bq.clone().multiply(f.q);
         f.m.holder.position.copy(p); f.m.holder.quaternion.copy(q);
         f.t += dt;
-        if (b.sleepState === phys.C.Body.SLEEPING || f.t > 5 || p.y < -2){ phys.world.removeBody(b); delete propFalling[k]; putProp(f.m, V(p.x, Math.max(0, p.y), p.z), q); }
+        if (b.sleepState === phys.C.Body.SLEEPING || f.t > 5 || p.y < -2){
+          phys.world.removeBody(b); delete propFalling[k];
+          if (p.y > 1.9){ var down = inFrontOf(p.x, p.z); p.set(down.x, 0, down.z); q = new T.Quaternion().setFromAxisAngle(V(0, 1, 0), new T.Euler().setFromQuaternion(q, 'YXZ').y); say('It landed up high – it fell down in front'); }
+          putProp(f.m, V(p.x, Math.max(0, p.y), p.z), q);
+        }
       });
     }
     function propHome(){ var ms = ctx.getMovables(); return ms.length && ms[0].holder.parent && ms[0].holder.parent !== play.root ? ms[0].holder.parent : (propHome.g || (propHome.g = ms.length ? ms[0].home : root)); }
@@ -2974,6 +2986,7 @@
       state.props[m.key] = { x: +p.x.toFixed(3), y: +p.y.toFixed(3), z: +p.z.toFixed(3), q: [q.x, q.y, q.z, q.w].map(function(n){ return +n.toFixed(4); }) };
       boxAlong(m);
       m.lastGood = { p: p.clone(), q: q.clone() };
+      if (phys) phys.looseAt = -1;
       if (m.onPut) m.onPut();   // (what it is used for: there now)
     }
     function boxAlong(m){
@@ -3247,10 +3260,12 @@
     var spillTex = null, spillMeshes = {};
     function stepFalling(dt){
       var ids = Object.keys(falling); if (!ids.length || !phys) return;
-      phys.world.step(1 / 60, dt, 4);
+      syncLoose();
+      phys.world.step(1 / 120, dt, 8);
       ids.forEach(function(id){
         var f = falling[id], it = state.items[id], v = objs[id];
         if (!it || it.at !== 'falling'){ phys.world.removeBody(f.body); delete falling[id]; return; }
+        keepInRoom(f); throwHits(f);
         var b = f.body, iq = b.interpolatedQuaternion, ip = b.interpolatedPosition, bq = new T.Quaternion(iq.x, iq.y, iq.z, iq.w);   // (between two physics steps: smooth on any screen)
         var p = V(ip.x, ip.y, ip.z).add(f.off.clone().applyQuaternion(bq)), q = bq.clone().multiply(f.q);
         if (v){ v.obj.position.copy(p); v.obj.quaternion.copy(q); }
@@ -3268,6 +3283,9 @@
       it.rot = +Math.atan2(2 * (q.w * q.y + q.x * q.z), 1 - 2 * (q.y * q.y + q.x * q.x)).toFixed(3);
       it.tilt = [q.x, q.y, q.z, q.w].map(function(n){ return +n.toFixed(4); });
       if (objs[it.id]) objs[it.id].placed = false;
+      if (phys) phys.looseAt = -1;
+      if (it.y > 1.9){ var down = inFrontOf(it.x, it.z); it.x = +down.x.toFixed(3); it.z = +down.z.toFixed(3); it.y = 0; it.rot = 0; delete it.tilt; say('It landed up high – it fell down in front'); }
+      it.fell = [it.x, it.y, it.z];
       // a full bowl on the floor or on its side: spilt (an empty dirty bowl; on the floor a stain to sweep up)
       if (it.kind === 'stew' && (it.y < 0.15 || 1 - 2 * (q.x * q.x + q.z * q.z) < 0.6)){
         it.kind = 'dirty'; delete it.dish; delete it.q; delete it.batch;
@@ -3292,6 +3310,286 @@
           var had2 = state.carry; state.carry = it.id; delete it.tilt; if (act('serve', g.id)){ state.carry = had2; return; } state.carry = had2;
         }
       }
+    }
+    // ---------- throwing ----------------------------------------------------------------------
+    // Holding something with the left mouse button, the right one charges a throw (the ring fills); letting
+    // the right one go throws it where he looks, the harder the longer it was charged. A mark on the floor
+    // or the table shows where it will land. Letting go of the left one first: it is just let go.
+    var THROW = { charge: 0.9, min: 2.5, max: 9.5, lift: 1.0, hitPatience: 0.2 };
+    var throwing = null, aimMark = null, aimDots = [], aimVel = V(), aimFrom = V(), aimPos = V(), aimLast = V();
+    var throwRing = document.createElement('div'); throwRing.className = 'hp-ring hp-throw'; document.body.appendChild(throwRing);
+    (function(){ var st = document.createElement('style'); st.textContent = '.hp-ring.hp-throw{width:50px;height:50px;margin:-25px 0 0 -25px;-webkit-mask:radial-gradient(circle,transparent 17px,#000 18px);mask:radial-gradient(circle,transparent 17px,#000 18px)}'; document.head.appendChild(st); })();
+    function throwable(){
+      if (hold || pc || movingProp || movingTable || movingChair || ghost || cutting || pouring || stirring) return null;
+      if (heldProp) return heldProp.holder;
+      var it = carried(); return it && !HOME[it.kind] && it.at === 'hand' && objs[it.id] ? objs[it.id].obj : null;
+    }
+    window.addEventListener('contextmenu', function(e){ e.preventDefault(); });
+    window.addEventListener('mousedown', function(e){
+      if (e.button !== 2 || !document.pointerLockElement || !(e.buttons & 1) || throwing) return;
+      var o = throwable(); if (o) throwing = { t: 0, what: o };
+    });
+    window.addEventListener('mouseup', function(e){
+      if (!throwing) return;
+      if (e.button === 0){ throwing = null; return; }   // (the left one first: just let go)
+      if (e.button === 2){ var p = Math.min(1, throwing.t / THROW.charge), same = throwable() === throwing.what; throwing = null; if (same) doThrow(p); }
+    });
+    window.addEventListener('blur', function(){ throwing = null; });
+    // how it leaves his hand: along the view, a little upward, as hard as charged
+    function throwVelocity(p, out){
+      camera.getWorldDirection(out);
+      var speed = THROW.min + (THROW.max - THROW.min) * p;
+      out.multiplyScalar(speed); out.y += THROW.lift * (0.5 + p);
+      return out;
+    }
+    var heldBox = new T.Box3();
+    function heldMiddle(obj, out){ obj.updateMatrixWorld(true); return heldBox.setFromObject(obj).getCenter(out); }
+    function doThrow(p){
+      var obj = throwable(); if (!obj) return;
+      var vel = throwVelocity(p, V()), f = null, name = null;
+      if (heldProp){ var m = heldProp; dropProp(); f = propFalling[m.key]; name = m.name; }
+      else { var it = carried(); letFall(it); f = falling[it.id]; name = it.kind; }
+      if (!f) return;
+      f.body.velocity.set(vel.x, vel.y, vel.z);
+      if (!f.body.fixedRotation) f.body.angularVelocity.set((Math.random() - 0.5) * 8 * p, (Math.random() - 0.5) * 4, (Math.random() - 0.5) * 8 * p);
+      f.body.wakeUp();
+      f.thrown = { hit: {} };
+      throwSound(0.35 + 0.65 * p);
+      hpLog('throw', name, p.toFixed(2));
+    }
+    // the highest top (furniture or floor) under a point, below the given height
+    function topBelow(x, z, y){
+      var top = 0;
+      (ctx.getObstacles ? ctx.getObstacles() : []).forEach(function(o){ var t = o.top || 0; if (x > o.minX && x < o.maxX && z > o.minZ && z < o.maxZ && t <= y + 0.001 && t > top) top = t; });
+      return top;
+    }
+    // where a guest stands or sits (null: not in the room)
+    function guestAt(g){ var gv = views[g.id]; return gv && gv.info && gv.info.group && gv.info.where() !== 'away' ? gv.info.group.position : null; }
+    function nearGuest(x, y, z, list){
+      if (y <= 0.2 || y >= 1.9) return null;
+      for (var i = 0; i < state.guests.length; i++){ var gp = list ? list[i] : guestAt(state.guests[i]); if (gp && (x - gp.x) * (x - gp.x) + (z - gp.z) * (z - gp.z) < 0.1444) return state.guests[i]; }
+      return null;
+    }
+    var aimGuests = [];
+    // the way it will fly, worked out ahead: where it first comes down (on a table, the floor, at a wall's foot)
+    function aimLanding(from, vel, out){
+      aimGuests.length = 0; for (var gi = 0; gi < state.guests.length; gi++) aimGuests.push(guestAt(state.guests[gi]));
+      var h = 1 / 90, x = from.x, y = from.y, z = from.z, vx = vel.x, vy = vel.y, vz = vel.z, obs = ctx.getObstacles ? ctx.getObstacles() : [], who = null;
+      for (var s = 0; s < 300; s++){
+        var px = x, py = y, pz = z;
+        vy -= 9.82 * h; x += vx * h; y += vy * h; z += vz * h;
+        if (y > 3.9){ y = 3.9; vy = -Math.abs(vy) * 0.1; }
+        if (!who && (who = nearGuest(x, y, z, aimGuests))){ out.set(x, topBelow(x, z, y), z); return who; }   // (it will hit this guest: the mark at his feet)
+        if (y <= 0){ out.set(x, 0, z); return who; }
+        for (var i = 0; i < obs.length; i++){
+          var o = obs[i], t = o.top || 0;
+          if (!(t > 0.02) || x <= o.minX || x >= o.maxX || z <= o.minZ || z >= o.maxZ || y >= t) continue;
+          if (py >= t){ out.set(x, t, z); return who; }   // (onto its top)
+          out.set(px, topBelow(px, pz, py), pz); return who;   // (against its side: down at its foot)
+        }
+        if (z > 9.9 || !roomHas(x, z)){ out.set(px, topBelow(px, pz, py), pz); return who; }
+      }
+      out.set(x, topBelow(x, z, y), z); return who;
+    }
+    function roomHas(x, z){
+      return (x > -10 && x < 10 && z > -10 && z < 10) || (x > 3.9 && x < 11.6 && z > -16.2 && z <= -10) || (x > -15.5 && x <= -10 && z > -1 && z < 6);
+    }
+    function stepThrow(dt){
+      var obj = throwing && throwable();
+      if (throwing && (!obj || (throwing.what && obj !== throwing.what))) throwing = null;
+      throwRing.classList.toggle('on', !!throwing);
+      if (!aimMark){
+        var mg = new T.RingGeometry(0.15, 0.22, 40); mg.rotateX(-Math.PI / 2);
+        aimMark = new T.Mesh(mg, new T.MeshBasicMaterial({ color: 0xffc46e, transparent: true, opacity: 0.95, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }));
+        var dg = new T.RingGeometry(0.22, 0.25, 40); dg.rotateX(-Math.PI / 2);   // (a dark edge: seen on light tiles too)
+        aimMark.add(new T.Mesh(dg, new T.MeshBasicMaterial({ color: 0x2d1c10, transparent: true, opacity: 0.5, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 })));
+        aimMark.renderOrder = 5; aimMark.visible = false; root.add(aimMark);
+        var dotG = new T.SphereGeometry(0.025, 8, 6), dotM = new T.MeshBasicMaterial({ color: 0xffc46e, transparent: true, opacity: 0.75, depthWrite: false });
+        for (var i = 0; i < 9; i++){ var d = new T.Mesh(dotG, dotM); d.visible = false; root.add(d); aimDots.push(d); }
+      }
+      aimMark.visible = !!throwing;
+      aimDots.forEach(function(d){ d.visible = !!throwing; });
+      if (!throwing) return;
+      throwing.t += dt;
+      var p = Math.min(1, throwing.t / THROW.charge);
+      var deg = Math.round(p * 90) * 4;
+      if (deg !== throwRing.deg){ throwRing.deg = deg; throwRing.style.background = 'conic-gradient(rgba(255,196,110,.98) ' + deg + 'deg, rgba(45,28,16,.45) 0)'; }
+      heldMiddle(obj, aimFrom); throwVelocity(p, aimVel);
+      var who = aimLanding(aimFrom, aimVel, aimPos);
+      aimMark.position.set(aimPos.x, aimPos.y + 0.012, aimPos.z);
+      aimMark.material.color.setHex(who ? 0xff6a3d : 0xffc46e);   // (orange-red: it will hit a guest)
+      aimMark.scale.setScalar(1 + Math.sin(clock * 6) * 0.06);
+      // a few dots along the first part of the way
+      var tt = 0, step = 0.07;
+      for (var k = 0; k < aimDots.length; k++){
+        tt += step;
+        aimLast.set(aimFrom.x + aimVel.x * tt, aimFrom.y + aimVel.y * tt - 4.91 * tt * tt, aimFrom.z + aimVel.z * tt);
+        aimDots[k].position.copy(aimLast);
+        aimDots[k].visible = aimLast.y > aimPos.y && roomHas(aimLast.x, aimLast.z) && aimLast.distanceTo(aimFrom) < aimPos.distanceTo(aimFrom);
+      }
+    }
+    // the things lying about (and the small decor) are solid for what falls: boxes their size, built again when they change
+    function syncLoose(){
+      if (clock - phys.looseAt < 0.3 && phys.looseAt >= 0) return;   // (a few times a second is enough)
+      phys.looseAt = clock;
+      var seen = {}, C = phys.C;
+      function one(key, obj){
+        var e = obj.matrixWorld.elements, sig = (e[12] * 50 | 0) + ',' + (e[13] * 50 | 0) + ',' + (e[14] * 50 | 0), had = phys.loose[key];
+        seen[key] = true;
+        if (had && had.sig === sig) return;
+        if (had && had.body) phys.world.removeBody(had.body);
+        phys.loose[key] = { sig: sig, body: null };
+        looseBox.setFromObject(obj); if (looseBox.isEmpty()) return;
+        looseBox.getSize(looseSize); looseBox.getCenter(looseMid);
+        if (looseSize.x > 1.5 || looseSize.z > 1.5 || looseSize.y > 1.5) return;   // (nothing big: that has its own box)
+        var b = new C.Body({ mass: 0, shape: new C.Box(new C.Vec3(Math.max(0.015, looseSize.x / 2), Math.max(0.015, looseSize.y / 2), Math.max(0.015, looseSize.z / 2))) });
+        b.position.set(looseMid.x, looseMid.y, looseMid.z); phys.world.addBody(b); phys.loose[key].body = b;
+      }
+      for (var id in state.items){
+        var o = state.items[id], v = objs[id];
+        if (!v || !v.placed || !v.obj.visible || !v.obj.parent || o.at === 'hand' || o.at === 'falling' || o.at === 'waiter') continue;
+        one('i' + id, v.obj);
+      }
+      var ms = ctx.getMovables ? ctx.getMovables() : [];
+      for (var i = 0; i < ms.length; i++){
+        var m = ms[i];
+        if (m.big || m.box || m === heldProp || propFalling[m.key] || !m.holder.parent || !m.holder.visible) continue;
+        var shown = true; for (var a = m.holder.parent; a; a = a.parent) if (!a.visible){ shown = false; break; }
+        if (shown) one('p' + m.key, m.holder);
+      }
+      for (var k in phys.loose) if (!seen[k]){ if (phys.loose[k].body) phys.world.removeBody(phys.loose[k].body); delete phys.loose[k]; }
+    }
+    var looseBox = new T.Box3(), looseSize = V(), looseMid = V();
+    // let go where something lies already: it starts on top of it (not inside it, from where it would shoot away)
+    function onTopOfLoose(mid, size, wp){
+      if (!phys) return;
+      for (var k in phys.loose){
+        var b = phys.loose[k].body; if (!b) continue;
+        var h = b.shapes[0].halfExtents, top = b.position.y + h.y;
+        if (Math.abs(mid.x - b.position.x) < h.x + size.x / 2 && Math.abs(mid.z - b.position.z) < h.z + size.z / 2 && mid.y - size.y / 2 < top && mid.y > b.position.y - h.y){
+          var dy = top + size.y / 2 + 0.01 - mid.y; mid.y += dy; wp.y += dy;
+        }
+      }
+    }
+    // up on something tall (out of his reach): the floor in front of it, on the chef's side
+    function inFrontOf(x, z){
+      var me = ctx.getChef(), out = { x: x, z: z };
+      (ctx.getObstacles ? ctx.getObstacles() : []).forEach(function(o){
+        if (!(x > o.minX - 0.05 && x < o.maxX + 0.05 && z > o.minZ - 0.05 && z < o.maxZ + 0.05)) return;
+        var c = [[o.minX - 0.25, me.position.z], [o.maxX + 0.25, me.position.z], [me.position.x, o.minZ - 0.25], [me.position.x, o.maxZ + 0.25]].map(function(e, k){
+          var ex = k < 2 ? e[0] : Math.max(o.minX, Math.min(o.maxX, x)), ez = k < 2 ? Math.max(o.minZ, Math.min(o.maxZ, z)) : e[1];
+          return { x: ex, z: ez, d: Math.hypot(ex - me.position.x, ez - me.position.z) };
+        }).sort(function(a, b){ return a.d - b.d; })[0];
+        out = { x: c.x, z: c.z };
+      });
+      return out;
+    }
+    // what fell onto something that was taken away since: it falls again (looked at twice a second)
+    var supportAt = 0;
+    function checkSupport(){
+      if (!phys || clock < supportAt) return;
+      supportAt = clock + 0.5;
+      var obs = null;
+      for (var id in state.items){
+        var it = state.items[id];
+        if (it.at !== 'surface' || !it.fell || it.y < 0.08 || it.refall || it.fell[0] !== it.x || it.fell[1] !== it.y || it.fell[2] !== it.z) continue;
+        if (!obs){ obs = ctx.getObstacles ? ctx.getObstacles() : []; phys.looseAt = -1; syncLoose(); }
+        var held = obs.some(function(o){ return it.x > o.minX - 0.05 && it.x < o.maxX + 0.05 && it.z > o.minZ - 0.05 && it.z < o.maxZ + 0.05 && Math.abs((o.top || 0) - it.y) < 0.1; });
+        if (!held) for (var k in phys.loose){
+          var b = phys.loose[k].body; if (!b || k === 'i' + id) continue;
+          var h = b.shapes[0].halfExtents;
+          if (Math.abs(it.x - b.position.x) < h.x + 0.04 && Math.abs(it.z - b.position.z) < h.z + 0.04 && Math.abs(b.position.y + h.y - it.y) < 0.1){ held = true; break; }
+        }
+        if (!held){ it.refall = true; hpLog('nothing under it any more:', it.kind); }
+      }
+    }
+    // out of the room after all (through a door, over a wall): back where it last was inside, slowed down
+    function keepInRoom(f){
+      var b = f.body, q = b.position;
+      if (roomHas(q.x, q.z) && q.y < 3.98 && q.y > -0.3){ f.safe.set(q.x, q.y, q.z); return; }
+      b.position.set(f.safe.x, Math.max(0.05, f.safe.y), f.safe.z); b.previousPosition.copy(b.position); b.interpolatedPosition.copy(b.position);
+      b.velocity.set(-b.velocity.x * 0.2, Math.min(0, b.velocity.y), -b.velocity.z * 0.2);
+    }
+    // a thrown thing flying into a guest: it bounces off, the guest is cross (a waiting one loses some patience)
+    function throwHits(f){
+      if (!f.thrown) return;
+      var b = f.body, q = b.position;
+      if (b.velocity.length() < 1.5) return;
+      var g = nearGuest(q.x, q.y, q.z); if (!g || f.thrown.hit[g.id]) return;
+      f.thrown.hit[g.id] = true;
+      var waits = g.phase === 'waiting' || g.phase === 'ready';
+      if (waits) g.patience = Math.max(0.05, g.patience - THROW.hitPatience);
+      b.velocity.set(-b.velocity.x * 0.25, Math.min(b.velocity.y, 0.5), -b.velocity.z * 0.25);
+      knockSound('hit', 4, q);
+      say('Ouch! ' + (GUEST_NAMES[g.id] || 'A guest') + ' was hit' + (waits ? ' – and is a little less patient now' : ''), 3.5);
+      hpLog('hit guest', g.id, g.phase, waits ? g.patience.toFixed(2) : '');
+    }
+    // ---------- the sounds of picking up, throwing and things landing ----------
+    function noiseBuf(A, secs){
+      noiseBuf.c = noiseBuf.c || {};
+      var key = secs + '/' + A.sampleRate;
+      if (!noiseBuf.c[key]){ var n = Math.floor(A.sampleRate * secs), b = A.createBuffer(1, n, A.sampleRate), d = b.getChannelData(0); for (var i = 0; i < n; i++) d[i] = Math.random() * 2 - 1; noiseBuf.c[key] = b; }
+      return noiseBuf.c[key];
+    }
+    function pickupSound(){   // a soft lift: a short muffled tock
+      var A = sound(); if (!A) return;
+      try {
+        var t = A.currentTime, src = A.createBufferSource(); src.buffer = noiseBuf(A, 0.08);
+        var flt = A.createBiquadFilter(); flt.type = 'bandpass'; flt.frequency.value = 900; flt.Q.value = 1.2;
+        var gn = A.createGain(); gn.gain.setValueAtTime(0.0001, t); gn.gain.exponentialRampToValueAtTime(0.22, t + 0.006); gn.gain.exponentialRampToValueAtTime(0.0001, t + 0.07);
+        src.connect(flt); flt.connect(gn); gn.connect(sfxOut()); src.start(t);
+        var o = A.createOscillator(), og = A.createGain(); o.type = 'sine'; o.frequency.setValueAtTime(420, t); o.frequency.exponentialRampToValueAtTime(520, t + 0.06);
+        og.gain.setValueAtTime(0.0001, t); og.gain.exponentialRampToValueAtTime(0.06, t + 0.008); og.gain.exponentialRampToValueAtTime(0.0001, t + 0.08);
+        o.connect(og); og.connect(sfxOut()); o.start(t); o.stop(t + 0.1);
+      } catch (e) { /* no sound then */ }
+    }
+    function throwSound(loud){   // a whoosh, higher as it goes
+      var A = sound(); if (!A) return;
+      try {
+        var t = A.currentTime, src = A.createBufferSource(); src.buffer = noiseBuf(A, 0.4);
+        var flt = A.createBiquadFilter(); flt.type = 'bandpass'; flt.Q.value = 1.6; flt.frequency.setValueAtTime(500, t); flt.frequency.exponentialRampToValueAtTime(2400, t + 0.3);
+        var gn = A.createGain(); gn.gain.setValueAtTime(0.0001, t); gn.gain.exponentialRampToValueAtTime(0.3 * loud, t + 0.1); gn.gain.exponentialRampToValueAtTime(0.0001, t + 0.36);
+        src.connect(flt); flt.connect(gn); gn.connect(sfxOut()); src.start(t);
+      } catch (e) { /* no sound then */ }
+    }
+    var CLINK = { bowl: true, stew: true, dirty: true, register: true, trophies: true, dogfigure: true, condiments: true, candlebottle: true };
+    function knockSound(kind, speed, at){   // landing: bowls and china clink, everything else thuds; louder when harder and nearer
+      var A = sound(); if (!A) return;
+      var loud = Math.min(1, speed / 5) * Math.max(0.15, nearChef(at, 12)); if (loud < 0.03) return;
+      try {
+        var t = A.currentTime, src = A.createBufferSource(); src.buffer = noiseBuf(A, 0.16);
+        var flt = A.createBiquadFilter(), gn = A.createGain();
+        if (CLINK[kind]){
+          flt.type = 'highpass'; flt.frequency.value = 2500;
+          [2150, 3070].forEach(function(fq, k){
+            var o = A.createOscillator(), og = A.createGain(); o.type = 'sine'; o.frequency.value = fq * (0.97 + Math.random() * 0.06);
+            og.gain.setValueAtTime(0.0001, t); og.gain.exponentialRampToValueAtTime(0.09 * loud / (k + 1), t + 0.004); og.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+            o.connect(og); og.connect(sfxOut()); o.start(t); o.stop(t + 0.25);
+          });
+          gn.gain.setValueAtTime(0.12 * loud, t); gn.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
+        } else {
+          flt.type = 'lowpass'; flt.frequency.value = kind === 'hit' ? 700 : 420;
+          gn.gain.setValueAtTime(0.0001, t); gn.gain.exponentialRampToValueAtTime(0.55 * loud, t + 0.005); gn.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
+          var o2 = A.createOscillator(), og2 = A.createGain(); o2.type = 'sine'; o2.frequency.setValueAtTime(kind === 'hit' ? 180 : 120, t); o2.frequency.exponentialRampToValueAtTime(60, t + 0.12);
+          og2.gain.setValueAtTime(0.0001, t); og2.gain.exponentialRampToValueAtTime(0.25 * loud, t + 0.006); og2.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
+          o2.connect(og2); og2.connect(sfxOut()); o2.start(t); o2.stop(t + 0.16);
+        }
+        src.connect(flt); flt.connect(gn); gn.connect(sfxOut()); src.start(t);
+      } catch (e) { /* no sound then */ }
+    }
+    function knockSounds(body, kind){
+      body.addEventListener('collide', function(e){
+        var v = Math.abs(e.contact.getImpactVelocityAlongNormal()); if (v < 0.6) return;
+        if (clock - (body.knocked || -1) < 0.09) return;   // (not a rattle of sounds while it settles)
+        body.knocked = clock; knockSound(kind, v, body.position);
+      });
+    }
+    // picking something up: the little sound (not for what is in his hands when the game is loaded)
+    var heldWas;
+    function pickupCheck(){
+      var now = state.carry || (heldProp && heldProp.key) || null;
+      if (heldWas !== undefined && now && now !== heldWas){ pickupSound(); if (phys) phys.looseAt = -1; }
+      heldWas = now;
     }
     // the mouse button let go: put there if he looks at a place for it, else let it fall
     window.addEventListener('wheel', function(e){
@@ -3539,6 +3837,8 @@
       if (!hold){ refall(); stepFalling(dt); stepPropFalling(dt); }
       showProps(); stepMoving(); showTables(); stepTable(); stepChair();
       if (heldProp){ var hp0 = heldProp; if (hp0.home && hp0.holder.parent !== hp0.home) hp0.home.add(hp0.holder); floatAt(hp0.holder, dt, hp0.floatJump); hp0.floatJump = false; }
+      stepThrow(dt); if (place.pot) pickupCheck();
+      if (!hold) checkSupport();
       if (!phys && window.CANNON && place.pot && clock > 3){ physics(); syncStatics(); }   // (ready before anything is first let go)
       if (ctx.getWaiter && ctx.getWaiter().ready()) ctx.getWaiter().freeze(!!hold);
       if (ctx.getCleaner && ctx.getCleaner().ready()) ctx.getCleaner().freeze(!!hold);
@@ -4693,6 +4993,12 @@
       debugLetGo: letGo, debugTables: function(){ return ctx.tables ? ctx.tables.list().map(function(t){ return [t.x, t.z]; }) : null; },
       debugMoveTable: function(i){ var t = ctx.tables.list()[i]; if (t) startTable(t); return !!movingTable; }, debugPutTable: function(){ putTable(false); return !movingTable; }, debugProps: function(){ return { props: state.props, held: heldProp && heldProp.key, moving: movingProp && movingProp.key, movables: (ctx.getMovables ? ctx.getMovables() : []).map(function(m){ return m.key; }) }; },
       debugGrabProp: function(k){ var m = (ctx.getMovables() || []).filter(function(x){ return x.key === k; })[0]; if (m){ if (m.big) startMoving(m); else grabProp(m); } return !!m; }, debugPutMoving: function(){ putMoving(); return !movingProp; }, debugFalling: function(){ return Object.keys(falling).length; },
+      debugThrow: function(p){ doThrow(p); return Object.keys(falling).length + Object.keys(propFalling).length; },
+      debugCharge: function(p){ if (p === null){ throwing = null; return null; } throwing = { t: p * THROW.charge }; return null; },
+      debugAimAt: function(){ return aimMark && aimMark.visible ? [+aimPos.x.toFixed(2), +aimPos.y.toFixed(2), +aimPos.z.toFixed(2)] : { throwing: !!throwing, obj: !!throwable(), mark: !!aimMark }; },
+      debugRing: function(){ var cs = getComputedStyle(throwRing); return [throwRing.className, cs.opacity, cs.width, throwRing.style.background.slice(0, 60)]; },
+      debugLoose: function(){ return phys ? Object.keys(phys.loose).length : -1; },
+      debugGuestAt: function(id){ var g = guest(id), p = g && guestAt(g); return p ? [+p.x.toFixed(2), +p.y.toFixed(2), +p.z.toFixed(2), g.phase, +(g.patience || 0).toFixed(2)] : null; },
       debugAct: act, debugPot: function(){ return state.pot; }, debugPots: function(){ return state.pots.map(function(p){ return p.phase + ' ' + p.dish + ' x' + p.portions + ' has ' + FOOD.map(function(k){ return p.has[k]; }).join('') + ' heat ' + p.heat + ' ' + Math.round(p.temp); }).join(' / ') + ' at ' + state.potAt; }, debugCookRules: COOK,
       debugTools: function(){ return { ids: state.tools, jug: MODELS.broth.tool, home: place.home, left: state.items[state.tools.broth].left }; },
       debugCut: { start: startCutting, stop: stopCutting, limits: function(){ var o = state.items[state.board]; return o && cutAxis(o) ? cutLimits(o, cutAxis(o)) : null; },
