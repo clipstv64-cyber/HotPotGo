@@ -66,12 +66,16 @@
       '.hp-dot{position:fixed;left:50%;top:50%;width:4px;height:4px;margin:-2px 0 0 -2px;border-radius:50%;background:rgba(255,255,255,.55);' +
       'box-shadow:0 0 2px rgba(0,0,0,.6);opacity:0;transition:opacity .15s;pointer-events:none}' +
       '.hp-dot.on{opacity:1}.hp-dot.hit{background:rgba(255,255,255,.9);width:6px;height:6px;margin:-3px 0 0 -3px}' +
+      '.hp-hand{position:fixed;left:50%;top:50%;width:30px;height:30px;margin:-1px 0 0 -2px;pointer-events:none;opacity:0;transition:opacity .15s,transform .12s;transform-origin:2px 1px;' +
+      'background:url(textures/cursor.png) 0 0/100% 100% no-repeat;filter:drop-shadow(0 1px 2px rgba(0,0,0,.45))}' +
+      '.hp-hand.on{opacity:.9}.hp-hand.hit{opacity:1;transform:scale(1.18);filter:drop-shadow(0 0 4px rgba(255,236,180,.95)) drop-shadow(0 1px 2px rgba(0,0,0,.45))}' +
       '.hp-ring{position:fixed;left:50%;top:50%;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;pointer-events:none;opacity:0;transition:opacity .12s;' +
       '-webkit-mask:radial-gradient(circle,transparent 11px,#000 12px);mask:radial-gradient(circle,transparent 11px,#000 12px)}' +
       '.hp-ring.on{opacity:1}';
     document.head.appendChild(css);
     var hint = document.createElement('div'); hint.className = 'hp-hint'; document.body.appendChild(hint);
     var dot = document.createElement('div'); dot.className = 'hp-dot'; document.body.appendChild(dot);
+    var hand = document.createElement('div'); hand.className = 'hp-hand'; document.body.appendChild(hand);   // (the pointing hand in the middle of the view: its fingertip is what is aimed at)
     var ring = document.createElement('div'); ring.className = 'hp-ring'; document.body.appendChild(ring);   // (filling while a big thing is being lifted)
     var MOUSE_SVG = '<svg class="hp-mouse" viewBox="0 0 14 20" fill="none" stroke="rgba(255,255,255,.75)" stroke-width="1.3">' +
       '<rect x="1" y="1" width="12" height="18" rx="6"/><line x1="7" y1="1" x2="7" y2="8"/>' +
@@ -1194,8 +1198,10 @@
       var tooClose = !!aimed && stainDist(aimed) < STAIN.near;
       focus = busy() ? { E: null, F: null, LMB: null, HOLD: null } : findFocus();
       var locked = document.pointerLockElement === canvas;
-      dot.classList.toggle('on', holding && locked);
-      dot.classList.toggle('hit', !!(holding && aimed && !tooClose));
+      dot.classList.remove('on');   // (the hand shows it now)
+      var canUse = !!(focus.E || focus.F || focus.LMB || focus.HOLD) || !!(holding && aimed && !tooClose);
+      if (hand.on !== locked){ hand.on = locked; hand.classList.toggle('on', locked); }
+      if (hand.hit !== (locked && canUse)){ hand.hit = locked && canUse; hand.classList.toggle('hit', hand.hit); }   // (bigger and glowing over something that can be used)
       // what can be done right now, one entry per key; else a note; else what the broom offers
       var parts = [], notes = [], glow = [];
       var holdingMouse = holdInfo();
