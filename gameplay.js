@@ -75,7 +75,7 @@
     document.head.appendChild(css);
     var hint = document.createElement('div'); hint.className = 'hp-hint'; document.body.appendChild(hint);
     var dot = document.createElement('div'); dot.className = 'hp-dot'; document.body.appendChild(dot);
-    var hand = document.createElement('div'); hand.className = 'hp-hand'; document.body.appendChild(hand);   // (the pointing hand in the middle of the view: its fingertip is what is aimed at)
+    var hand = document.createElement('div'); hand.className = 'hp-hand'; document.body.appendChild(hand);   // (the pointing hand in the middle of the view, shown over something that can be used: its fingertip is on it)
     var ring = document.createElement('div'); ring.className = 'hp-ring'; document.body.appendChild(ring);   // (filling while a big thing is being lifted)
     var MOUSE_SVG = '<svg class="hp-mouse" viewBox="0 0 14 20" fill="none" stroke="rgba(255,255,255,.75)" stroke-width="1.3">' +
       '<rect x="1" y="1" width="12" height="18" rx="6"/><line x1="7" y1="1" x2="7" y2="8"/>' +
@@ -1200,8 +1200,7 @@
       var locked = document.pointerLockElement === canvas;
       dot.classList.remove('on');   // (the hand shows it now)
       var canUse = !!(focus.E || focus.F || focus.LMB || focus.HOLD) || !!(holding && aimed && !tooClose);
-      if (hand.on !== locked){ hand.on = locked; hand.classList.toggle('on', locked); }
-      if (hand.hit !== (locked && canUse)){ hand.hit = locked && canUse; hand.classList.toggle('hit', hand.hit); }   // (bigger and glowing over something that can be used)
+      if (hand.hit !== (locked && canUse)){ hand.hit = locked && canUse; hand.classList.toggle('on', hand.hit); hand.classList.toggle('hit', hand.hit); }   // (only over something that can be used)
       // what can be done right now, one entry per key; else a note; else what the broom offers
       var parts = [], notes = [], glow = [];
       var holdingMouse = holdInfo();
