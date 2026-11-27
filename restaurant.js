@@ -4440,11 +4440,11 @@
       if (what !== 'continue') saveNow(true);
       return true;
     }
-    // ---------- the title screen: the picture with its buttons (Play, Settings, Credits, Quit) ----------
+    // ---------- the title screen: the picture with its buttons (Continue, New Game, Settings, Quit) ----------
     // The buttons are drawn on the picture; clickable areas lie over them (in shares of the picture,
     // which is shown like 'cover': it fills the window and keeps its shape). The title music plays only here.
     var titleEl = null, titleMusic = null, TITLE_W = 1672, TITLE_H = 941;
-    var TITLE_BTNS = [['play', 1056, 488, 1440, 582], ['settings', 1068, 598, 1428, 672], ['credits', 1076, 687, 1424, 760], ['quit', 1084, 776, 1416, 850]];
+    var TITLE_BTNS = [['continue', 956, 488, 1378, 575], ['new', 981, 596, 1350, 666], ['settings', 998, 684, 1335, 752], ['quit', 1009, 770, 1322, 838]];
     function titleCss(){
       if (document.getElementById('hp-title-css')) return;
       var st = document.createElement('style'); st.id = 'hp-title-css';
@@ -4455,6 +4455,8 @@
         '.hp-title .btn{position:absolute;border-radius:10px;cursor:pointer;transition:background .15s,box-shadow .15s,transform .15s}' +
         '.hp-title .btn:hover{background:rgba(255,236,190,.16);box-shadow:0 0 0 3px rgba(255,230,170,.55),0 0 18px rgba(255,200,120,.45);transform:scale(1.03)}' +
         '.hp-title .btn:active{transform:scale(.98)}' +
+        '.hp-title .btn.off{background:rgba(30,20,12,.55);cursor:default}.hp-title .btn.off:hover{box-shadow:none;transform:none;background:rgba(30,20,12,.55)}' +
+        '.hp-title .card .small{font-size:13.5px;margin-top:14px}' +
         '.hp-title .cards{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}' +
         '.hp-title .card{display:none;pointer-events:auto;transform:rotate(-1deg);text-align:center}' +
         '.hp-title .card p{margin:6px 0 0;font-style:italic;color:#6b513a}' +
@@ -4485,7 +4487,7 @@
       var m = titleMusic; titleMusic = null; if (!m || !audio) return;
       try { var t = audio.currentTime; m.gain.gain.cancelScheduledValues(t); m.gain.gain.setValueAtTime(m.gain.gain.value, t); m.gain.gain.linearRampToValueAtTime(0, t + 0.8); m.src.stop(t + 0.85); } catch (e){}
     }
-    function showTitle(after){
+    function showTitle(){
       titleCss();
       hold = true; document.body.classList.add('hp-hold');
       var el = titleEl = document.createElement('div'); el.className = 'hp-title';
@@ -4495,11 +4497,16 @@
       var settings = '<div class="card hp-paper" data-card="settings"><h2>Settings</h2>' +
         '<label>Music <input type="range" min="0" max="1" step="0.05" data-set="music" value="' + setting('music', 0.7) + '"></label>' +
         '<label>Sounds <input type="range" min="0" max="1" step="0.05" data-set="sfx" value="' + setting('sfx', 0.9) + '"></label>' +
+        '<p class="small">Hot Pot Go \u00b7 3D models made with Meshy \u00b7 title music \u201cOrder Up!\u201d</p>' +
         '<button data-do="back">Back</button></div>';
-      var credits = '<div class="card hp-paper" data-card="credits"><h2>Credits</h2>' +
-        '<p class="sub">Hot Pot Go</p><p>Made with love in a small, shabby kitchen</p><p>3D models made with Meshy</p><p>Title music: \u201cOrder Up!\u201d</p>' +
-        '<button data-do="back">Back</button></div>';
-      el.innerHTML = pic + '<div class="cards">' + settings + credits + '</div>';
+      var st0 = saved && saved.data && saved.data.state;
+      var confirm = '<div class="card hp-paper" data-card="confirm"><h2>Start over?</h2>' +
+        (st0 ? '<p>Your restaurant \u00b7 day ' + st0.day.n + ' \u00b7 ' + signed(Math.round(st0.money)) + ' in the till</p>' : '') +
+        '<p>A new restaurant takes the place of the saved one.</p>' +
+        '<button data-do="yes">Yes, start over</button><button data-do="back">Back</button></div>';
+      var warn = saved && saved.backup ? '<div class="card hp-paper on-warn" data-card="warn"><h2>Note</h2><p>The last save could not be read. Continue uses the one from before.</p><button data-do="back">OK</button></div>' : '';
+      el.innerHTML = pic + '<div class="cards">' + settings + confirm + warn + '</div>';
+      if (!saved){ var cb = el.querySelector('[data-do=continue]'); cb.classList.add('off'); cb.title = 'No saved restaurant yet'; }
       function card(name){ el.querySelectorAll('.card').forEach(function(c){ c.classList.toggle('on', c.getAttribute('data-card') === name); }); el.querySelector('.pic').style.filter = name ? 'brightness(.55)' : ''; }
       el.addEventListener('input', function(e){
         var k = e.target && e.target.getAttribute && e.target.getAttribute('data-set'); if (!k) return;
@@ -4510,17 +4517,23 @@
       el.addEventListener('click', function(e){
         var what = e.target && e.target.getAttribute && e.target.getAttribute('data-do');
         if (!what) return;
-        if (what === 'settings' || what === 'credits') card(what);
-        else if (what === 'back') card(null);
-        else if (what === 'quit') window.close();
-        else if (what === 'play'){
+        function go(how){   // into the game: the saved restaurant, or a new one (the saved one stays as the backup)
           stopTitleMusic();
           el.classList.add('out'); setTimeout(function(){ if (el.parentNode) el.parentNode.removeChild(el); }, 650);
           titleEl = null;
-          after();
+          begin(how);
+          var cv = document.querySelector('canvas');
+          try { var lock = cv && cv.requestPointerLock && cv.requestPointerLock(); if (lock && lock.catch) lock.catch(function(){}); } catch (err){}
         }
+        if (what === 'settings') card(what);
+        else if (what === 'back') card(null);
+        else if (what === 'quit') window.close();
+        else if (what === 'continue'){ if (saved) go('continue'); }
+        else if (what === 'new'){ if (saved) card('confirm'); else go('new'); }
+        else if (what === 'yes') go('new');
       });
       document.body.appendChild(el);
+      if (saved && saved.backup) card('warn');
       startTitleMusic();
     }
     function showStart(){
@@ -4557,12 +4570,7 @@
         }
       } catch (e){ console.error('Loading the saved game failed:', e); }
       var selfTest = /[?&]selftest=1/.test(location.search) && !/[?&]title=1/.test(location.search);   // (a test may ask for it: title=1)
-      if (!selfTest) showTitle(function(){
-        if (saved){ showStart(); return; }
-        hold = false; document.body.classList.remove('hp-hold');
-        var cv = document.querySelector('canvas');   // straight into the game
-        try { var lock = cv && cv.requestPointerLock && cv.requestPointerLock(); if (lock && lock.catch) lock.catch(function(){}); } catch (err){}
-      });
+      if (!selfTest) showTitle();
       else if (saved){ hold = true; showStart(); }
       window.addEventListener('keydown', function(e){ if (hold && startEl && e.key === 'Enter') begin('continue'); });
       window.addEventListener('beforeunload', function(){ if (pauseEl) savePaused(); else saveNow(false); });

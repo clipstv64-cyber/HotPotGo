@@ -92,7 +92,7 @@ Phase 1 ist vollständig (der Kühlschrank hat seit dem 25.11.2026 eine Aufgabe:
 
 ## Startbildschirm (27.11.2026)
 
-Beim Start erscheint der Titelbildschirm (Bild und Musik „Order Up!“ von der Nutzerin): Play, Settings (Lautstärke für Musik und Geräusche), Credits, Quit. Die Titelmusik spielt nur dort und wird bei Play ausgeblendet. Gibt es einen Spielstand, folgt danach die Karte „Continue / New restaurant“.
+Beim Start erscheint der Titelbildschirm (Bild und Musik „Order Up!“ von der Nutzerin): Continue (der gespeicherte Stand; ohne Spielstand abgedunkelt), New Game (mit Spielstand: erst nachfragen), Settings (Lautstärke für Musik und Geräusche), Quit. Die Titelmusik spielt nur dort und wird beim Losspielen ausgeblendet.
 
 ## Absprachen
 
