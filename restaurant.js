@@ -4456,6 +4456,10 @@
         '.hp-title .btn{position:absolute;border-radius:10px;cursor:pointer;transition:background .15s,box-shadow .15s,transform .15s}' +
         '.hp-title .btn:hover{background:rgba(255,236,190,.16);box-shadow:0 0 0 3px rgba(255,230,170,.55),0 0 18px rgba(255,200,120,.45);transform:scale(1.03)}' +
         '.hp-title .btn:active{transform:scale(.98)}' +
+        '.hp-title{perspective:1400px}.hp-title .pic{will-change:transform}' +
+        '.hp-title .fx{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}' +
+        '.hp-title .btn:hover{animation:hpSpring .45s ease-out}' +
+        '@keyframes hpSpring{0%{transform:scale(1)}35%{transform:scale(1.07)}65%{transform:scale(1.01)}100%{transform:scale(1.03)}}' +
         '.hp-title .btn.off{background:rgba(30,20,12,.55);cursor:default}.hp-title .btn.off:hover{box-shadow:none;transform:none;background:rgba(30,20,12,.55)}' +
         '.hp-title .card .small{font-size:13.5px;margin-top:14px}' +
         '.hp-title .cards{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}' +
@@ -4484,6 +4488,66 @@
         }).catch(function(e){ console.error('The title music could not be played:', e); });
       } catch (e){ /* no music then */ }
     }
+    // the moving parts over the picture (in the picture's own pixels, 1672 x 941)
+    function titleLife(el){
+      var picEl = el.querySelector('.pic'), cv = el.querySelector('.fx'), g = cv.getContext('2d');
+      var mouse = { x: 0.5, y: 0.5, sx: 0.5, sy: 0.5, px: -1e4, py: -1e4 }, t0 = performance.now(), last = t0;
+      var LAMPS = [[380, 50, 150, 1.0], [1540, 110, 160, 1.0], [166, 390, 60, 0.7], [22, 372, 45, 0.6]];   // x, y, glow radius, strength
+      var POT = { x0: 1085, x1: 1225, y: 142 };
+      var steam = [], dust = [];
+      for (var i = 0; i < 46; i++){ var L = LAMPS[i % 2]; dust.push({ x: L[0] + (Math.random() - 0.5) * 420, y: L[1] + 40 + Math.random() * 360, vx: 0, vy: 0, s: 1.2 + Math.random() * 2.0, ph: Math.random() * 6.28, home: i % 2 }); }
+      el.addEventListener('mousemove', function(e){
+        mouse.x = e.clientX / window.innerWidth; mouse.y = e.clientY / window.innerHeight;
+        var r0 = cv.getBoundingClientRect(); mouse.px = (e.clientX - r0.left) / r0.width * TITLE_W; mouse.py = (e.clientY - r0.top) / r0.height * TITLE_H;
+      });
+      el.addEventListener('mouseleave', function(){ mouse.x = 0.5; mouse.y = 0.5; mouse.px = mouse.py = -1e4; });
+      function frame(now){
+        if (!el.parentNode || el.classList.contains('out')) return;   // (the game has begun)
+        var dt = Math.min(0.05, (now - last) / 1000), t = (now - t0) / 1000; last = now;
+        // the picture: a slow breath, and a little tilt and shift toward the mouse
+        mouse.sx += (mouse.x - mouse.sx) * Math.min(1, dt * 3); mouse.sy += (mouse.y - mouse.sy) * Math.min(1, dt * 3);
+        var mx = mouse.sx - 0.5, my = mouse.sy - 0.5, zoom = 1.045 + Math.sin(t * 0.45) * 0.008;
+        picEl.style.transform = 'translate(-50%,-50%) translate(' + (-mx * 1.6).toFixed(3) + '%,' + (-my * 1.6).toFixed(3) + '%) rotateY(' + (mx * 3).toFixed(3) + 'deg) rotateX(' + (-my * 2.2).toFixed(3) + 'deg) scale(' + zoom.toFixed(4) + ')';
+        // the drawing surface: the picture's size on screen
+        var w = cv.clientWidth, h = cv.clientHeight, dpr = Math.min(2, window.devicePixelRatio || 1);
+        if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)){ cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+        g.setTransform(cv.width / TITLE_W, 0, 0, cv.height / TITLE_H, 0, 0);
+        g.clearRect(0, 0, TITLE_W, TITLE_H);
+        g.globalCompositeOperation = 'lighter';
+        // the lanterns' light flickering
+        LAMPS.forEach(function(L, k){
+          var f = 0.55 + 0.18 * Math.sin(t * 7.3 + k * 2) + 0.12 * Math.sin(t * 13.1 + k) + 0.08 * Math.sin(t * 2.1 + k * 3);
+          var rg = g.createRadialGradient(L[0], L[1], 0, L[0], L[1], L[2]);
+          rg.addColorStop(0, 'rgba(255,190,110,' + (0.5 * f * L[3]).toFixed(3) + ')'); rg.addColorStop(1, 'rgba(255,150,60,0)');
+          g.fillStyle = rg; g.beginPath(); g.arc(L[0], L[1], L[2], 0, Math.PI * 2); g.fill();
+        });
+        // dust in the light: drifting, pushed away by the mouse, pulled back toward its lantern
+        dust.forEach(function(d){
+          var L = LAMPS[d.home], ax = (L[0] - d.x) * 0.02, ay = (L[1] + 200 - d.y) * 0.02;
+          var dx = d.x - mouse.px, dy = d.y - mouse.py, dd = dx * dx + dy * dy;
+          if (dd < 160 * 160 && dd > 1){ var push = (1 - Math.sqrt(dd) / 160) * 900; ax += dx / Math.sqrt(dd) * push; ay += dy / Math.sqrt(dd) * push; }
+          d.vx = (d.vx + (ax + Math.sin(t * 0.7 + d.ph) * 6) * dt) * 0.96; d.vy = (d.vy + (ay + Math.cos(t * 0.5 + d.ph) * 6) * dt) * 0.96;
+          d.x += d.vx * dt * 4; d.y += d.vy * dt * 4;
+          var tw = 0.5 + 0.4 * Math.sin(t * 2 + d.ph);
+          g.fillStyle = 'rgba(255,226,170,' + tw.toFixed(3) + ')'; g.beginPath(); g.arc(d.x, d.y, d.s, 0, Math.PI * 2); g.fill();
+        });
+        // steam from the pot: soft puffs rising, swaying, leaning toward the mouse, fading
+        g.globalCompositeOperation = 'source-over';
+        if (Math.random() < dt * 14) steam.push({ x: POT.x0 + Math.random() * (POT.x1 - POT.x0), y: POT.y, r: 14 + Math.random() * 10, age: 0, life: 2.6 + Math.random() * 1.4, ph: Math.random() * 6.28 });
+        var lean = (mouse.sx - 0.5) * 60;
+        for (var s = steam.length - 1; s >= 0; s--){
+          var p = steam[s]; p.age += dt; if (p.age > p.life){ steam.splice(s, 1); continue; }
+          var u = p.age / p.life;
+          p.y -= dt * (38 + 22 * u); p.x += dt * (Math.sin(t * 1.4 + p.ph) * 14 + lean * u);
+          var a = Math.sin(Math.PI * Math.min(1, u * 1.3)) * 0.34, rad = p.r * (1 + u * 2.2);
+          var sg = g.createRadialGradient(p.x, p.y, 0, p.x, p.y, rad);
+          sg.addColorStop(0, 'rgba(255,250,240,' + a.toFixed(3) + ')'); sg.addColorStop(1, 'rgba(255,250,240,0)');
+          g.fillStyle = sg; g.beginPath(); g.arc(p.x, p.y, rad, 0, Math.PI * 2); g.fill();
+        }
+        requestAnimationFrame(frame);
+      }
+      requestAnimationFrame(frame);
+    }
     function stopTitleMusic(){
       var m = titleMusic; titleMusic = null; if (!m || !audio) return;
       try { var t = audio.currentTime; m.gain.gain.cancelScheduledValues(t); m.gain.gain.setValueAtTime(m.gain.gain.value, t); m.gain.gain.linearRampToValueAtTime(0, t + 0.8); m.src.stop(t + 0.85); } catch (e){}
@@ -4492,7 +4556,7 @@
       titleCss();
       hold = true; document.body.classList.add('hp-hold');
       var el = titleEl = document.createElement('div'); el.className = 'hp-title';
-      var pic = '<div class="pic">' + TITLE_BTNS.map(function(b){
+      var pic = '<div class="pic"><canvas class="fx"></canvas>' + TITLE_BTNS.map(function(b){
         return '<div class="btn" data-do="' + b[0] + '" style="left:' + (b[1] / TITLE_W * 100).toFixed(3) + '%;top:' + (b[2] / TITLE_H * 100).toFixed(3) + '%;width:' + ((b[3] - b[1]) / TITLE_W * 100).toFixed(3) + '%;height:' + ((b[4] - b[2]) / TITLE_H * 100).toFixed(3) + '%" title="' + b[0] + '"></div>';
       }).join('') + '</div>';
       var settings = '<div class="card hp-paper" data-card="settings"><h2>Settings</h2>' +
@@ -4536,6 +4600,7 @@
       document.body.appendChild(el);
       if (saved && saved.backup) card('warn');
       startTitleMusic();
+      titleLife(el);
     }
     function showStart(){
       var el = startEl = document.createElement('div'), st = saved.data.state;
