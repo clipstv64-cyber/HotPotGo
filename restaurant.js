@@ -3285,7 +3285,8 @@
       if (objs[it.id]) objs[it.id].placed = false;
       if (phys) phys.looseAt = -1;
       if (it.y > 1.9){ var down = inFrontOf(it.x, it.z); it.x = +down.x.toFixed(3); it.z = +down.z.toFixed(3); it.y = 0; it.rot = 0; delete it.tilt; say('It landed up high – it fell down in front'); }
-      it.fell = [it.x, it.y, it.z];
+      var bot = it.y; if (objs[it.id] && it.y === +p.y.toFixed(3)){ objs[it.id].obj.updateMatrixWorld(true); bot = new T.Box3().setFromObject(objs[it.id].obj).min.y; }
+      it.fell = [it.x, it.y, it.z, +Math.max(0, bot).toFixed(3)];   // (where it lies, and its underside: what it lies on)
       // a full bowl on the floor or on its side: spilt (an empty dirty bowl; on the floor a stain to sweep up)
       if (it.kind === 'stew' && (it.y < 0.15 || 1 - 2 * (q.x * q.x + q.z * q.z) < 0.6)){
         it.kind = 'dirty'; delete it.dish; delete it.q; delete it.batch;
@@ -3492,13 +3493,13 @@
       var obs = null;
       for (var id in state.items){
         var it = state.items[id];
-        if (it.at !== 'surface' || !it.fell || it.y < 0.08 || it.refall || it.fell[0] !== it.x || it.fell[1] !== it.y || it.fell[2] !== it.z) continue;
+        if (it.at !== 'surface' || !it.fell || !(it.fell[3] >= 0.06) || it.refall || it.fell[0] !== it.x || it.fell[1] !== it.y || it.fell[2] !== it.z) continue;
         if (!obs){ obs = ctx.getObstacles ? ctx.getObstacles() : []; phys.looseAt = -1; syncLoose(); }
-        var held = obs.some(function(o){ return it.x > o.minX - 0.05 && it.x < o.maxX + 0.05 && it.z > o.minZ - 0.05 && it.z < o.maxZ + 0.05 && Math.abs((o.top || 0) - it.y) < 0.1; });
+        var held = obs.some(function(o){ return it.x > o.minX - 0.05 && it.x < o.maxX + 0.05 && it.z > o.minZ - 0.05 && it.z < o.maxZ + 0.05 && Math.abs((o.top || 0) - it.fell[3]) < 0.1; });
         if (!held) for (var k in phys.loose){
           var b = phys.loose[k].body; if (!b || k === 'i' + id) continue;
           var h = b.shapes[0].halfExtents;
-          if (Math.abs(it.x - b.position.x) < h.x + 0.04 && Math.abs(it.z - b.position.z) < h.z + 0.04 && Math.abs(b.position.y + h.y - it.y) < 0.1){ held = true; break; }
+          if (Math.abs(it.x - b.position.x) < h.x + 0.04 && Math.abs(it.z - b.position.z) < h.z + 0.04 && Math.abs(b.position.y + h.y - it.fell[3]) < 0.1){ held = true; break; }
         }
         if (!held){ it.refall = true; hpLog('nothing under it any more:', it.kind); }
       }
